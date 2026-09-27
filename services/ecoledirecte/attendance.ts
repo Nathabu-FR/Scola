@@ -24,15 +24,29 @@ const FRENCH_MONTHS: Record<string, number> = {
 
 export async function fetchEDAttendance(session: Client, accountId: string, periodName?: string): Promise<Attendance> {
   try {
-    const attendance = await session.schoollife.getSchoolLife();
+    const attendanceResponse: unknown = await session.schoollife.getSchoolLife();
+    const attendanceEnvelope =
+      attendanceResponse && typeof attendanceResponse === "object"
+        ? attendanceResponse as Record<string, unknown>
+        : {};
+    const attendance =
+      attendanceEnvelope.data && typeof attendanceEnvelope.data === "object"
+        ? attendanceEnvelope.data as Record<string, unknown>
+        : attendanceEnvelope;
     const selectedPeriod = periodName
       ? await getSelectedPeriod(session, accountId, periodName)
       : undefined;
-    // Accounts without the school-life module (or a slow sync) can come back
-    // with these lists missing rather than empty, so default them explicitly
-    // before filtering.
-    const schoolLifeItems = filterAttendanceItemsByPeriod(attendance.absencesRetards ?? [], selectedPeriod);
-    const conductItems = filterConductItemsByPeriod(attendance.sanctionsEncouragements ?? [], selectedPeriod);
+    // EcoleDirecte can omit these lists, return null, or wrap a list in data.
+    // Normalize before filtering so one incomplete response cannot break the
+    // attendance capability.
+    const schoolLifeItems = filterAttendanceItemsByPeriod(
+      unwrapList<SchoolLifeAttendanceItem>(attendance.absencesRetards),
+      selectedPeriod
+    );
+    const conductItems = filterConductItemsByPeriod(
+      unwrapList<SchoolLifeConductItem>(attendance.sanctionsEncouragements),
+      selectedPeriod
+    );
 
     return {
       absences: mapEcoleDirecteAbsences(schoolLifeItems, accountId),
@@ -64,9 +78,33 @@ export async function fetchEDAttendancePeriods(session: Client, accountId: strin
   });
 }
 
+function unwrapList<T>(value: unknown): T[] {
+  if (Array.isArray(value)) {
+    return value as T[];
+  }
+
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    for (const key of ["data", "items", "result", "liste"]) {
+      const nested = record[key];
+      if (Array.isArray(nested)) {
+        return nested as T[];
+      }
+      if (nested && typeof nested === "object") {
+        const unwrapped = unwrapList<T>(nested);
+        if (unwrapped.length > 0) {
+          return unwrapped;
+        }
+      }
+    }
+  }
+
+  return [];
+}
+
 function mapEcoleDirecteAbsences(data: SchoolLifeAttendanceItem[], accountId: string): Absence[] {
   return data
-    .filter(item => item.typeElement === SchoolLifeAttendanceItemType.ABSENCE)
+    .filter(item => item && item.typeElement === SchoolLifeAttendanceItemType.ABSENCE)
     .flatMap(item => {
       try {
         const { start, end } = mapStringToDates(item.displayDate);
@@ -88,7 +126,7 @@ function mapEcoleDirecteAbsences(data: SchoolLifeAttendanceItem[], accountId: st
 
 function mapEcoleDirecteDelays(data: SchoolLifeAttendanceItem[], accountId: string): Delay[] {
   return data
-    .filter(item => item.typeElement === SchoolLifeAttendanceItemType.DELAY)
+    .filter(item => item && item.typeElement === SchoolLifeAttendanceItemType.DELAY)
     .flatMap(item => {
       try {
         const { start, end } = mapStringToDates(item.displayDate);
@@ -109,6 +147,10 @@ function mapEcoleDirecteDelays(data: SchoolLifeAttendanceItem[], accountId: stri
 
 function mapEcoleDirectePunishments(data: SchoolLifeConductItem[], accountId: string): Punishment[] {
   return data.flatMap(item => {
+    if (!item) {
+      return [];
+    }
+
     const givenAt = parseFlexibleDate(item.dateDeroulement);
 
     if (!givenAt) {
@@ -119,7 +161,7 @@ function mapEcoleDirectePunishments(data: SchoolLifeConductItem[], accountId: st
     return [{
       id: String(item.id),
       givenAt,
-      givenBy: [item.auteur.prenom, item.auteur.nom].join(" ").trim(),
+      givenBy: [item.auteur?.prenom, item.auteur?.nom].filter(Boolean).join(" ").trim(),
       exclusion: false,
       duringLesson: false,
       homework: {

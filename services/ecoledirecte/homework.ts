@@ -20,17 +20,31 @@ export async function fetchEDHomeworks(
     // throwing away every other day already collected for the week.
     try {
       const dayResponse = await session.homework.getHomeworksForDate(formattedDate);
-      const matieres = Array.isArray(dayResponse?.matieres) ? dayResponse.matieres : [];
+      const matieres = unwrapHomeworkSubjects(dayResponse);
 
       for (const subject of matieres) {
-        const homework = subject.aFaire
+        if (!subject || typeof subject !== "object") {
+          continue;
+        }
+        const homework = subject.aFaire;
+        if (!homework) {
+          continue;
+        }
+
+        const subjectName =
+          typeof subject.matiere === "string" && subject.matiere.trim()
+            ? subject.matiere.trim()
+            : typeof subject.entityLibelle === "string"
+              ? subject.entityLibelle.trim()
+              : "";
+
         response.push({
           attachments: [],
-          content: homework?.contenu ?? "",
-          isDone: homework?.effectue ?? false,
+          content: homework.contenu ?? "",
+          isDone: homework.effectue ?? false,
           dueDate: date,
-          id: String(homework?.idDevoir),
-          subject: subject.matiere.length > 0 ? subject.matiere : subject.entityLibelle,
+          id: String(homework.idDevoir ?? ""),
+          subject: subjectName,
           evaluation: false,
           custom: false,
           createdByAccount: accountId
@@ -42,6 +56,30 @@ export async function fetchEDHomeworks(
   }
 
   return response
+}
+
+type EcoleDirecteHomeworkResponse = Awaited<
+  ReturnType<Client["homework"]["getHomeworksForDate"]>
+>;
+type EcoleDirecteHomeworkSubject = NonNullable<
+  EcoleDirecteHomeworkResponse["matieres"]
+>[number];
+
+function unwrapHomeworkSubjects(value: unknown): EcoleDirecteHomeworkSubject[] {
+  if (!value || typeof value !== "object") {
+    return [];
+  }
+
+  const record = value as Record<string, unknown>;
+  if (Array.isArray(record.matieres)) {
+    return record.matieres as EcoleDirecteHomeworkSubject[];
+  }
+
+  if (record.data && typeof record.data === "object") {
+    return unwrapHomeworkSubjects(record.data);
+  }
+
+  return [];
 }
 
 export async function setEDHomeworkAsDone(session: Client, homework: Homework, state?: boolean): Promise<Homework> {

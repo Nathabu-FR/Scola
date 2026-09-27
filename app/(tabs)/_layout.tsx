@@ -98,8 +98,10 @@ function DesktopTabLayout() {
   // tab pushed past what that fixed width could fit. Sizing it off the
   // number of tabs actually shown keeps each item's width consistent
   // instead of squeezing them once more tabs are visible.
-  const visibleTabCount = 4 - disabledTabs.length;
-  const tabBarWidth = Math.max(300, visibleTabCount * 96);
+  const visibleTabCount = ["home", "calendar", "tasks", "grades"].filter(
+    tab => !disabledTabs.includes(tab)
+  ).length;
+  const tabBarWidth = Math.max(320, visibleTabCount * 112);
 
   return (
     <Tabs

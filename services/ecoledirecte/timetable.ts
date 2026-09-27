@@ -12,8 +12,10 @@ export async function fetchEDTimetable(session: Client, accountId: string, weekN
     // EcoleDirecte can answer an empty week (holidays, no timetable published
     // yet) with something other than an array, so this guards before filtering
     // instead of assuming `.filter` is always available on the response.
-    const rawTimetable = await session.timetable.getTimetableBetweenDates(start, end, false);
-    const timetable = (Array.isArray(rawTimetable) ? rawTimetable : []).filter(course => course.codeMatiere !== "");
+    const rawTimetable: unknown = await session.timetable.getTimetableBetweenDates(start, end, false);
+    const timetable = unwrapCourseList(rawTimetable).filter(course =>
+      typeof course?.codeMatiere === "string" && course.codeMatiere.length > 0
+    );
     const mappedCourses = mapEcoleDirecteCourses(timetable, accountId);
     const dayMap: Record<string, Course[]> = {};
 
@@ -35,6 +37,32 @@ export async function fetchEDTimetable(session: Client, accountId: string, weekN
     warn(String(error))
     return []
   }
+}
+
+function unwrapCourseList(value: unknown): TimetableCourse[] {
+  if (Array.isArray(value)) {
+    return value as TimetableCourse[];
+  }
+
+  if (!value || typeof value !== "object") {
+    return [];
+  }
+
+  const record = value as Record<string, unknown>;
+  for (const key of ["cours", "courses", "data", "items", "result"]) {
+    const nested = record[key];
+    if (Array.isArray(nested)) {
+      return nested as TimetableCourse[];
+    }
+    if (nested && typeof nested === "object") {
+      const unwrapped = unwrapCourseList(nested);
+      if (unwrapped.length > 0) {
+        return unwrapped;
+      }
+    }
+  }
+
+  return [];
 }
 
 function mapEcoleDirecteCourses(data: TimetableCourse[], accountId: string): Course[] {

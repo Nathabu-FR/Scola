@@ -1,5 +1,5 @@
 import { Period } from "@/services/shared/grade";
-import { error, warn } from "@/utils/logger/logger";
+import { warn } from "@/utils/logger/logger";
 
 export function getCurrentPeriod(periods: Period[]): Period | undefined {
   const now = new Date().getTime();
@@ -40,6 +40,6 @@ export function getCurrentPeriod(periods: Period[]): Period | undefined {
   // while the return type claimed a `Period` was always given back. Every
   // caller already treats a falsy result as "no current period", so this
   // just makes that contract honest.
-  error("Unable to find the current period and unable to fallback...");
+  warn("Unable to find the current period and unable to fallback...");
   return undefined;
 }

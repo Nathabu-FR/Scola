@@ -18,7 +18,7 @@ export default function Layout() {
     headerTransparent: runsIOS26,
     headerShadowVisible: false,
     ...androidHeaderProps,
-    headerBackVisible: Platform.OS === "ios",
+    headerBackVisible: true,
   }), [screenOptions, androidHeaderProps]);
 
   return (

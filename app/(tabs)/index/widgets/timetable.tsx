@@ -13,6 +13,7 @@ import i18n from "@/utils/i18n";
 import { useTimetableWidgetData } from "../hooks/useTimetableWidgetData";
 import { getStatusText } from '../../calendar/components/CalendarDay';
 import { getCourseRouteId } from '@/database/useTimetable';
+import Typography from "@/ui/components/Typography";
 
 function getRelativeDayStatus(date: Date): string | null {
   const days = differenceInCalendarDays(startOfDay(date), startOfDay(new Date()));
@@ -38,7 +39,11 @@ const HomeTimeTableWidget = React.memo(() => {
   const { courses } = useTimetableWidgetData();
 
   if (courses.length === 0) {
-    return null;
+    return (
+      <Typography variant="body2" color="textSecondary" style={{ paddingHorizontal: 16, paddingBottom: 14 }}>
+        {t("Home_Timetable_Empty", "Aucun cours à venir")}
+      </Typography>
+    );
   }
 
   return (

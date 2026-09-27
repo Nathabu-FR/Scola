@@ -3,10 +3,9 @@ import { useTheme } from "expo-router/react-navigation";
 import { router } from "expo-router";
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { Alert, View } from "react-native";
+import { Alert, Platform, View } from "react-native";
 
 import { useAccountStore } from "@/stores/account";
-import AnimatedPressable from "@/ui/components/AnimatedPressable";
 import Icon from "@/ui/components/Icon";
 import {
   NativeHeaderPressable,
@@ -16,6 +15,9 @@ import Stack from "@/ui/components/Stack";
 import List from "@/ui/new/List";
 import Typography from "@/ui/new/Typography";
 import { useSafeHorizontalPadding } from "@/ui/hooks/useSafeHorizontalPadding";
+import { useTimetableWidgetData } from "@/app/(tabs)/index/hooks/useTimetableWidgetData";
+import { cleanSubjectName, getSubjectFormat } from "@/utils/subjects/utils";
+import { Colors } from "@/utils/subjects/colors";
 
 export default function SubjectPersonalization() {
   const safePadding = useSafeHorizontalPadding(16);
@@ -26,14 +28,61 @@ export default function SubjectPersonalization() {
   const store = useAccountStore.getState();
 
   const account = accounts.find(a => a.id === lastUsedAccount);
-  const subjects = Object.entries(account?.customisation?.subjects ?? {})
-    .map(([key, value]) => ({
-      id: key,
-      ...value,
-    }))
-    .filter(item => item.name && item.emoji && item.color);
+  const savedSubjects = account?.customisation?.subjects ?? {};
+  const { upcomingDays } = useTimetableWidgetData();
+  const subjects = React.useMemo(() => {
+    const byId = new Map<string, { id: string; name: string; emoji: string; color: string }>();
+
+    for (const day of upcomingDays) {
+      for (const course of day.courses) {
+        const courseSubject = course.subject?.trim();
+        if (!courseSubject) {
+          continue;
+        }
+
+        const id = cleanSubjectName(courseSubject);
+        if (!id || byId.has(id)) {
+          continue;
+        }
+
+        const saved = savedSubjects[id];
+        const format = getSubjectFormat(courseSubject);
+        byId.set(id, {
+          id,
+          name: saved?.name || format?.pretty || courseSubject,
+          emoji: saved?.emoji || format?.emoji || "🤓",
+          color: saved?.color || Colors[byId.size % Colors.length],
+        });
+      }
+    }
+
+    // Keep saved entries visible even when the subject has no upcoming course.
+    for (const [id, saved] of Object.entries(savedSubjects)) {
+      if (byId.has(id) || !saved.name) {
+        continue;
+      }
+
+      byId.set(id, {
+        id,
+        name: saved.name,
+        emoji: saved.emoji || "🤓",
+        color: saved.color || Colors[byId.size % Colors.length],
+      });
+    }
+
+    return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name, "fr"));
+  }, [upcomingDays, savedSubjects]);
 
   const resetAllSubjects = () => {
+    if (Platform.OS === "web" && typeof window !== "undefined") {
+      if (window.confirm(
+        t("Settings_Subjects_Reset_Title") + " " + t("Settings_Subjects_Reset_Message")
+      )) {
+        useAccountStore.getState().setSubjects({});
+      }
+      return;
+    }
+
     Alert.alert(
       t("Settings_Subjects_Reset_Title"),
       t("Settings_Subjects_Reset_Message"),

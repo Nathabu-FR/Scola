@@ -4,10 +4,9 @@ import { useTheme } from "expo-router/react-navigation";
 import { RelativePathString, UnknownInputParams } from 'expo-router';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { Platform, StyleProp, ViewStyle } from 'react-native';
+import { StyleProp, ViewStyle } from 'react-native';
 
 import { Services } from '@/stores/account/types';
-import { useSettingsStore } from '@/stores/settings';
 import { openMockDataAccountChooser } from '@/services/mock/account';
 import { t } from 'i18next';
 export interface SupportedService {
@@ -28,10 +27,8 @@ export function GetSupportedServices(redirect: (path: { pathname: string, option
   const theme = useTheme();
   const { colors } = theme;
   const { t } = useTranslation()
-  const mockDataEnabled = useSettingsStore(state => state.personalization.mockDataEnabled ?? false);
-
   return [
-    ...(mockDataEnabled ? [{
+    {
       name: "mock-data",
       title: "Mock Data",
       type: ["school", "univ"],
@@ -39,7 +36,7 @@ export function GetSupportedServices(redirect: (path: { pathname: string, option
       onPress: openMockDataAccountChooser,
       variant: 'service' as const,
       color: 'light' as const,
-    }] : []),
+    },
     {
       name: "pronote",
       route: "pronote",
@@ -247,7 +244,7 @@ export function GetLoginMethods(redirect: (path: { pathname: RelativePathString 
       description: t("ONBOARDING_METHOD_QRCODE"),
       icon: <Papicons name={"QrCode"} />,
       onPress: () => {
-        redirect({ pathname: "/(onboarding)/pronote/qrcode" });
+        redirect({ pathname: "/(onboarding)/services/pronote/qrcode" });
       }
     },
     {
@@ -259,10 +256,8 @@ export function GetLoginMethods(redirect: (path: { pathname: RelativePathString 
         redirect({ pathname: '../pronote/url' });
       }
     }
-    // "qrcode" method filtered out below on web: it needs a phone camera to
-    // scan a PRONOTE QR code, which this build intentionally doesn't do —
-    // map/search/url stay available as the other ways to connect.
-  ].filter((method) => !(Platform.OS === "web" && method.id === "qrcode"))
+    // Desktop QR login uses the webcam through its web implementation.
+  ]
 }
 
 export interface SupportedRestaurant {

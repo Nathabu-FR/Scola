@@ -26,6 +26,9 @@
         },
         {
           "url": "https://data.geopf.fr/**"
+        },
+        {
+          "url": "https://data.education.gouv.fr/**"
         }
       ]
     }

@@ -8,13 +8,25 @@ import { Grade, GradeScore, Period, PeriodGrades, Subject, } from "../shared/gra
 import { SkillChipLevel } from "@/ui/components/SkillChip";
 import { SkillsColorsPalette } from "@/constants/SkillsColorsPalette";
 
+function unwrapEDData<T>(value: T): T {
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  const data = (value as unknown as { data?: unknown }).data;
+  return data && typeof data === "object" ? data as T : value;
+}
+
 export async function fetchEDGradePeriods(
   session: Client,
   accountId: string
 ): Promise<Period[]> {
   try {
-    const overview = await session.marks.getMark();
-    return (overview.periodes ?? []).map(period => ({
+    const overview = unwrapEDData(await session.marks.getMark());
+    const periods = Array.isArray(overview?.periodes)
+      ? overview.periodes.filter(period => period && typeof period === "object")
+      : [];
+    return periods.map(period => ({
       name: period.periode,
       id: period.codePeriode,
       start: new Date(period.dateDebut),
@@ -32,13 +44,21 @@ export async function fetchEDGrades(
   period: Period
 ): Promise<PeriodGrades> {
   try {
-    const overview = await session.marks.getMark();
-    const periodReport = (overview.periodes ?? []).find(
+    const overview = unwrapEDData(await session.marks.getMark());
+    const periods = Array.isArray(overview?.periodes)
+      ? overview.periodes.filter(period => period && typeof period === "object")
+      : [];
+    const periodReport = periods.find(
       item => item.codePeriode === period.id || item.idPeriode === period.id
     );
     // `notes` can be missing rather than an empty array when a period has no
     // published grades yet, which otherwise crashes the `.filter` below.
-    const grades = getGradesForPeriod(overview.notes ?? [], period);
+    const grades = getGradesForPeriod(
+      Array.isArray(overview?.notes)
+        ? overview.notes.filter(grade => grade && typeof grade === "object")
+        : [],
+      period
+    );
 
     if (!periodReport) {
       warn("Invalid grades data structure or period not found");
@@ -47,10 +67,10 @@ export async function fetchEDGrades(
 
     const subjects: Record<string, Subject> = {};
     const skillColors = {
-      insufficient: overview.parametrage.couleurEval1,
-      weak: overview.parametrage.couleurEval2,
-      almostProficient: overview.parametrage.couleurEval3,
-      satisfactory: overview.parametrage.couleurEval4,
+      insufficient: overview.parametrage?.couleurEval1 ?? "#D60046",
+      weak: overview.parametrage?.couleurEval2 ?? "#F5A623",
+      almostProficient: overview.parametrage?.couleurEval3 ?? "#7CB342",
+      satisfactory: overview.parametrage?.couleurEval4 ?? "#26B290",
     };
     const allMappedGrades: Grade[] = grades.map(g => ({
         id: String(g.id),
@@ -69,14 +89,17 @@ export async function fetchEDGrades(
         minScore: parseGradeValue(g.minClasse),
         maxScore: parseGradeValue(g.maxClasse),
         createdByAccount: accountId,
-        skills: g.elementsProgramme.map(s => ({
+        skills: (Array.isArray(g.elementsProgramme) ? g.elementsProgramme : []).map(s => ({
           name: s.libelleCompetence,
           description: s.descriptif,
           score: parseSkillLevel(parseInt(s.valeur), skillColors),
         })),
     }))
 
-    for (const subject of periodReport.ensembleMatieres?.disciplines ?? []) {
+    const disciplines = Array.isArray(periodReport.ensembleMatieres?.disciplines)
+      ? periodReport.ensembleMatieres.disciplines.filter(subject => subject && typeof subject === "object")
+      : [];
+    for (const subject of disciplines) {
       const parsedAverage = parseGradeValue(subject.moyenne)
       const parsedClassAverage = parseGradeValue(subject.moyenneClasse)
       const parsedMaximum = parseGradeValue(subject.moyenneMax)
@@ -126,8 +149,8 @@ export async function fetchEDGrades(
 function emptyPeriodGrades(accountId: string): PeriodGrades {
   return {
     createdByAccount: accountId,
-    classAverage: { value: 16.66, disabled: true },
-    studentOverall: { value: 16.66, disabled: true },
+    classAverage: { value: 0, disabled: true, status: "Inconnu" },
+    studentOverall: { value: 0, disabled: true, status: "Inconnu" },
     subjects: []
   }
 }

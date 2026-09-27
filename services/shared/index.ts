@@ -637,6 +637,14 @@ export class AccountManager {
           noteFailure(client, e);
           throw e;
         }
+        if (options?.multiple) {
+          if (!Array.isArray(result)) {
+            const malformedResult = new TypeError("Expected an array from a multi-result capability.");
+            noteFailure(client, malformedResult);
+            throw malformedResult;
+          }
+          result = result.filter(item => item !== null && item !== undefined);
+        }
         if (options.saveToCache) {
           await options.saveToCache(result);
         }
@@ -668,15 +676,25 @@ export class AccountManager {
           availableClients.map(client => callback(client) as Promise<T[]>)
         );
 
+        const combinedResult: T[] = [];
         settled.forEach((result, index) => {
           if (result.status === "rejected") {
             noteFailure(availableClients[index], result.reason);
+            return;
           }
-        });
 
-        const combinedResult = settled.flatMap(result =>
-          result.status === "fulfilled" ? result.value : []
-        );
+          if (!Array.isArray(result.value)) {
+            noteFailure(
+              availableClients[index],
+              new TypeError("Expected an array from a multi-result capability.")
+            );
+            return;
+          }
+
+          combinedResult.push(
+            ...result.value.filter(item => item !== null && item !== undefined)
+          );
+        });
 
         if (options?.saveToCache && failures.length === 0) {
           await options.saveToCache(combinedResult);

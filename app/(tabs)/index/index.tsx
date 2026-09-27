@@ -3,7 +3,7 @@ import { useIsFocused, useTheme } from "expo-router/react-navigation";
 import { useRouter } from 'expo-router';
 import { t } from 'i18next';
 import React from 'react';
-import { FlatList, Image, Platform, StatusBar, View } from 'react-native';
+import { FlatList, Image, Platform, StatusBar, useWindowDimensions, View } from 'react-native';
 import Reanimated, { LinearTransition } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -39,7 +39,9 @@ import { ListTouchable } from '@/ui/new/List';
 
 const HomeScreen = () => {
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
   const bottomTabBarHeight = insets.bottom + 76;
+  const homeColumns = Platform.OS === "web" && windowWidth >= 760 ? 2 : 1;
   const alert = useAlert();
   const focused = useIsFocused();
 
@@ -162,6 +164,18 @@ const HomeScreen = () => {
 
   const data: HomeWidgetItem[] = React.useMemo(() => [
     {
+      icon: <Papicons name={"Calendar"} />,
+      title: timetableTitle,
+      redirect: "(tabs)/calendar",
+      render: renderTimeTable
+    },
+    {
+      icon: <Papicons name={"List"} />,
+      title: "Devoirs à faire cette semaine",
+      redirect: "(tabs)/tasks",
+      render: () => <HomeHomeworkWidget homeworks={urgentHomeworks} setAsDone={setHomeworkAsDone} />
+    },
+    {
       icon: <Papicons name="User" />,
       title: "Derrière Papillon",
       hidden: !account?.teamModal?.shown || account.teamModal.widgetDismissed === true,
@@ -169,20 +183,6 @@ const HomeScreen = () => {
         ? () => dismissTeamWidget(account.id)
         : undefined,
       render: renderTeam,
-    },
-    {
-      icon: <Papicons name={"Calendar"} />,
-      title: timetableTitle,
-      redirect: "(tabs)/calendar",
-      hidden: courses.length === 0,
-      render: renderTimeTable
-    },
-    {
-      icon: <Papicons name={"List"} />,
-      title: "Devoirs à faire cette semaine",
-      redirect: "(tabs)/tasks",
-      hidden: urgentHomeworks.length === 0,
-      render: () => <HomeHomeworkWidget homeworks={urgentHomeworks} setAsDone={setHomeworkAsDone} />
     },
     {
       icon: <Papicons name={"Grades"} />,
@@ -215,8 +215,14 @@ const HomeScreen = () => {
       {focused && <StatusBar translucent animated barStyle={'light-content'} />}
       <HomeViewContainer key={"home"}>
         <FlatList
+          key={"home-widgets-" + homeColumns}
+          numColumns={homeColumns}
+          columnWrapperStyle={homeColumns === 2 ? { gap: 12 } : undefined}
           renderItem={({ item }) => (
-            <Reanimated.View layout={Animation(LinearTransition, "list")}>
+            <Reanimated.View
+              layout={Animation(LinearTransition, "list")}
+              style={{ flex: 1, minWidth: 0 }}
+            >
               <HomeWidget item={item} />
             </Reanimated.View>
           )}
@@ -229,7 +235,7 @@ const HomeScreen = () => {
             gap: 12,
             marginTop: 6,
             width: '100%',
-            maxWidth: 700,
+            maxWidth: 1100,
             marginHorizontal: 'auto',
             paddingHorizontal: 16,
           }}

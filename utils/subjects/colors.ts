@@ -3,6 +3,12 @@ import { useAccountStore } from "@/stores/account";
 import { cleanSubjectName } from "./utils";
 
 export function getSubjectColor(subject: string): string {
+  // See getSubjectEmoji: an empty/blank subject shouldn't be saved as a
+  // "matière" of its own, so this returns a color without registering it.
+  if (!subject || !subject.trim()) {
+    return getRandomColor();
+  }
+
   const cleanedName = cleanSubjectName(subject)
   const lastUsedAccount = useAccountStore.getState().lastUsedAccount;
   const subjectProperties = useAccountStore.getState().accounts.find(a => a.id === lastUsedAccount)?.customisation?.subjects[cleanedName]

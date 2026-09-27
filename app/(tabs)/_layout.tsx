@@ -93,6 +93,14 @@ function DesktopTabLayout() {
     ? personalization?.disabledTabsByAccount?.[lastUsedAccount]
     : personalization?.disabledTabs) || [];
 
+  // The bar's width used to be a flat 420px regardless of how many tabs it
+  // held, which clipped labels whenever an extra (or just longer-labelled)
+  // tab pushed past what that fixed width could fit. Sizing it off the
+  // number of tabs actually shown keeps each item's width consistent
+  // instead of squeezing them once more tabs are visible.
+  const visibleTabCount = 4 - disabledTabs.length;
+  const tabBarWidth = Math.max(300, visibleTabCount * 96);
+
   return (
     <Tabs
       screenOptions={{
@@ -104,8 +112,8 @@ function DesktopTabLayout() {
           position: 'absolute',
           bottom: 14,
           alignSelf: 'center',
-          width: 420,
-          maxWidth: '90%',
+          width: tabBarWidth,
+          maxWidth: '92%',
           height: 48,
           borderRadius: 24,
           borderTopWidth: 0,

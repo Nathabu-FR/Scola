@@ -2,6 +2,7 @@
 import { Client } from "@blockshub/blocksdirecte";
 
 import { Homework } from "../shared/homework";
+import { warn } from "@/utils/logger/logger";
 
 export async function fetchEDHomeworks(
   session: Client,
@@ -13,21 +14,30 @@ export async function fetchEDHomeworks(
   for (const date of weekdays) {
     const formattedDate = formatDate(date);
 
-    const { matieres } = await session.homework.getHomeworksForDate(formattedDate);
+    // A single day with no homework (weekends, holidays) can come back from
+    // EcoleDirecte without a `matieres` array at all. Isolating each day in
+    // its own try/catch means one such day only skips itself instead of
+    // throwing away every other day already collected for the week.
+    try {
+      const dayResponse = await session.homework.getHomeworksForDate(formattedDate);
+      const matieres = Array.isArray(dayResponse?.matieres) ? dayResponse.matieres : [];
 
-    for (const subject of matieres) {
-      const homework = subject.aFaire
-      response.push({
-        attachments: [],
-        content: homework?.contenu ?? "",
-        isDone: homework?.effectue ?? false,
-        dueDate: date,
-        id: String(homework?.idDevoir),
-        subject: subject.matiere.length > 0 ? subject.matiere : subject.entityLibelle,
-        evaluation: false,
-        custom: false,
-        createdByAccount: accountId
-      });
+      for (const subject of matieres) {
+        const homework = subject.aFaire
+        response.push({
+          attachments: [],
+          content: homework?.contenu ?? "",
+          isDone: homework?.effectue ?? false,
+          dueDate: date,
+          id: String(homework?.idDevoir),
+          subject: subject.matiere.length > 0 ? subject.matiere : subject.entityLibelle,
+          evaluation: false,
+          custom: false,
+          createdByAccount: accountId
+        });
+      }
+    } catch (error) {
+      warn(`Skipping ED homework for ${formattedDate}: ${String(error)}`, "fetchEDHomeworks");
     }
   }
 

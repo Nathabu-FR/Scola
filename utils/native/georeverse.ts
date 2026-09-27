@@ -158,3 +158,76 @@ export interface GeoSearchCityInfo {
   latitude: number;
   longitude: number;
 }
+
+export interface UAISchoolInfo {
+  uai: string;
+  name: string;
+  city: string;
+  postalCode: number;
+  latitude: number;
+  longitude: number;
+}
+
+const UAI_PATTERN = /^\d{7}[a-zA-Z]$/;
+
+export function isLikelyUAI(value: string): boolean {
+  return UAI_PATTERN.test(value.trim());
+}
+
+/**
+ * Resolves a French school from its UAI code (the official "numéro
+ * d'établissement", 7 digits followed by a letter) using the Ministry of
+ * Education's public "Annuaire de l'éducation" open data, so a school can be
+ * found directly instead of only by searching a city name.
+ *
+ * The dataset's geographic field isn't part of its documented, stable
+ * contract, so a couple of shapes are tried defensively instead of assuming
+ * one - if none of them are present, this throws rather than silently
+ * returning a wrong location.
+ */
+export async function GeographicSearchByUAI(uai: string): Promise<UAISchoolInfo> {
+  const cleanedUai = uai.trim().toUpperCase();
+
+  if (!isLikelyUAI(cleanedUai)) {
+    throw new Error(`"${cleanedUai}" doesn't look like a UAI code (7 digits + 1 letter)`);
+  }
+
+  const where = encodeURIComponent(`identifiant_de_l_etablissement="${cleanedUai}"`);
+  const url = `https://data.education.gouv.fr/api/explore/v2.1/catalog/datasets/fr-en-annuaire-education/records?where=${where}&limit=1`;
+
+  const res = await appFetch(url);
+  if (!res.ok) {
+    throw new Error(`Request rejected. Status: ${res.status}`);
+  }
+
+  const response = await res.json();
+  const record = response?.results?.[0];
+
+  if (!record) {
+    throw new Error(`No school found for UAI ${cleanedUai}`);
+  }
+
+  const latitude =
+    record.latitude ??
+    record.position?.lat ??
+    record.geo_point_2d?.lat ??
+    (Array.isArray(record.position) ? record.position[0] : undefined);
+  const longitude =
+    record.longitude ??
+    record.position?.lon ??
+    record.geo_point_2d?.lon ??
+    (Array.isArray(record.position) ? record.position[1] : undefined);
+
+  if (typeof latitude !== "number" || typeof longitude !== "number") {
+    throw new Error(`No known location for UAI ${cleanedUai}`);
+  }
+
+  return {
+    uai: cleanedUai,
+    name: record.nom_etablissement ?? cleanedUai,
+    city: record.nom_commune ?? record.nom_etablissement ?? cleanedUai,
+    postalCode: Number(record.code_postal) || 0,
+    latitude,
+    longitude,
+  };
+}

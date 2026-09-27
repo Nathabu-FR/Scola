@@ -9,7 +9,11 @@ export async function fetchEDTimetable(session: Client, accountId: string, weekN
   try {
     const { start, end } = getDateRangeOfWeek(weekNumber);
 
-    const timetable = (await session.timetable.getTimetableBetweenDates(start, end, false)).filter(course => course.codeMatiere !== "");
+    // EcoleDirecte can answer an empty week (holidays, no timetable published
+    // yet) with something other than an array, so this guards before filtering
+    // instead of assuming `.filter` is always available on the response.
+    const rawTimetable = await session.timetable.getTimetableBetweenDates(start, end, false);
+    const timetable = (Array.isArray(rawTimetable) ? rawTimetable : []).filter(course => course.codeMatiere !== "");
     const mappedCourses = mapEcoleDirecteCourses(timetable, accountId);
     const dayMap: Record<string, Course[]> = {};
 

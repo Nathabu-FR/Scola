@@ -14,7 +14,7 @@ export async function fetchEDGradePeriods(
 ): Promise<Period[]> {
   try {
     const overview = await session.marks.getMark();
-    return overview.periodes.map(period => ({
+    return (overview.periodes ?? []).map(period => ({
       name: period.periode,
       id: period.codePeriode,
       start: new Date(period.dateDebut),
@@ -33,10 +33,12 @@ export async function fetchEDGrades(
 ): Promise<PeriodGrades> {
   try {
     const overview = await session.marks.getMark();
-    const periodReport = overview.periodes.find(
+    const periodReport = (overview.periodes ?? []).find(
       item => item.codePeriode === period.id || item.idPeriode === period.id
     );
-    const grades = getGradesForPeriod(overview.notes, period);
+    // `notes` can be missing rather than an empty array when a period has no
+    // published grades yet, which otherwise crashes the `.filter` below.
+    const grades = getGradesForPeriod(overview.notes ?? [], period);
 
     if (!periodReport) {
       warn("Invalid grades data structure or period not found");

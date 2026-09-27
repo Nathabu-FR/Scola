@@ -28,8 +28,11 @@ export async function fetchEDAttendance(session: Client, accountId: string, peri
     const selectedPeriod = periodName
       ? await getSelectedPeriod(session, accountId, periodName)
       : undefined;
-    const schoolLifeItems = filterAttendanceItemsByPeriod(attendance.absencesRetards, selectedPeriod);
-    const conductItems = filterConductItemsByPeriod(attendance.sanctionsEncouragements, selectedPeriod);
+    // Accounts without the school-life module (or a slow sync) can come back
+    // with these lists missing rather than empty, so default them explicitly
+    // before filtering.
+    const schoolLifeItems = filterAttendanceItemsByPeriod(attendance.absencesRetards ?? [], selectedPeriod);
+    const conductItems = filterConductItemsByPeriod(attendance.sanctionsEncouragements ?? [], selectedPeriod);
 
     return {
       absences: mapEcoleDirecteAbsences(schoolLifeItems, accountId),

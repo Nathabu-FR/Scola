@@ -1,7 +1,7 @@
 import { Period } from "@/services/shared/grade";
 import { error, warn } from "@/utils/logger/logger";
 
-export function getCurrentPeriod(periods: Period[]): Period {
+export function getCurrentPeriod(periods: Period[]): Period | undefined {
   const now = new Date().getTime();
   const excludedNames = [
     "Bac blanc",
@@ -35,6 +35,11 @@ export function getCurrentPeriod(periods: Period[]): Period {
     return periods[0];
   }
 
+  // `periods` is guaranteed empty here (the branch above already handles a
+  // non-empty array), so `periods[0]` was silently returning `undefined`
+  // while the return type claimed a `Period` was always given back. Every
+  // caller already treats a falsy result as "no current period", so this
+  // just makes that contract honest.
   error("Unable to find the current period and unable to fallback...");
-  return periods[0];
+  return undefined;
 }

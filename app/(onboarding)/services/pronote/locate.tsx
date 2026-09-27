@@ -14,7 +14,7 @@ import Stack from "@/ui/components/Stack";
 import Divider from "@/ui/new/Divider";
 import List from "@/ui/new/List";
 import Typography from "@/ui/new/Typography";
-import { GeographicSearchCities } from "@/utils/native/georeverse";
+import { GeographicSearchByUAI, GeographicSearchCities, isLikelyUAI } from "@/utils/native/georeverse";
 import { useSafeHorizontalPadding } from "@/ui/hooks/useSafeHorizontalPadding";
 
 const convertPostalCode
@@ -78,6 +78,9 @@ export default function PronoteLoginMethod() {
   const [debouncedCity, setDebouncedCity] = useState<string>("");
   const [cities, setCities] = useState<Array<School>>([]);
   const [loading, setLoading] = useState<boolean>(false);
+  const [uaiStatus, setUaiStatus] = useState<"idle" | "loading" | "error">("idle");
+
+  const looksLikeUAI = isLikelyUAI(debouncedCity);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -88,6 +91,10 @@ export default function PronoteLoginMethod() {
       clearTimeout(timeout);
     };
   }, [city]);
+
+  useEffect(() => {
+    setUaiStatus("idle");
+  }, [debouncedCity]);
 
   useEffect(() => {
     if(!debouncedCity || debouncedCity.length < 3) {
@@ -121,6 +128,26 @@ export default function PronoteLoginMethod() {
     navigation.navigate(`select`, { city: city });
   }
 
+  const searchByUAI = async () => {
+    setUaiStatus("loading");
+    try {
+      const school = await GeographicSearchByUAI(debouncedCity);
+      setUaiStatus("idle");
+      navigation.navigate("select", {
+        city: {
+          id: school.uai,
+          city: school.city,
+          context: school.name,
+          postalCode: school.postalCode,
+          latitude: school.latitude,
+          longitude: school.longitude,
+        },
+      });
+    } catch {
+      setUaiStatus("error");
+    }
+  }
+
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.overground }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.select({ android: 0, default: 20 })}>
       <List
@@ -136,6 +163,22 @@ export default function PronoteLoginMethod() {
         style={{ flex: 1 }}
         animated
       >
+        {looksLikeUAI && (
+          <List.Item animated onPress={searchByUAI} disabled={uaiStatus === "loading"}>
+            <List.Leading>
+              <Icon size={26}>
+                {uaiStatus === "loading" ? <ActivityIndicator /> : <Papicons name="search" />}
+              </Icon>
+            </List.Leading>
+            <Typography variant='title'>{t("ONBOARDING_PRONOTE_LOGIN_UAI", { uai: debouncedCity.toUpperCase() })}</Typography>
+            <Typography variant='body1' color="textSecondary">
+              {uaiStatus === "error"
+                ? t("ONBOARDING_PRONOTE_LOGIN_UAI_ERROR")
+                : t("ONBOARDING_PRONOTE_LOGIN_UAI_DESCRIPTION")}
+            </Typography>
+          </List.Item>
+        )}
+
         {cities.length === 0 && !loading && Platform.OS !== 'web' && (
           <List.Item animated onPress={() => navigation.navigate("qrcode")}>
             <List.Leading>

@@ -4,7 +4,7 @@ import Typography from './Typography';
 import { formatHTML } from '@/utils/format/html';
 import { useTheme } from "expo-router/react-navigation";
 import adjust from '@/utils/adjustColor';
-import { Text } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { formatDistanceToNow, formatDistanceToNowStrict } from 'date-fns';
 import * as DateLocale from 'date-fns/locale';
@@ -29,6 +29,7 @@ interface TaskProps {
   date: Date;
   completed: boolean;
   hasAttachments: boolean;
+  custom?: boolean;
   magic?: string;
   onToggle: () => void;
   onPress?: () => void;
@@ -43,6 +44,7 @@ const Task: React.FC<TaskProps> = React.memo(({
   date,
   completed,
   hasAttachments,
+  custom = false,
   magic,
   onToggle,
   onPress
@@ -77,6 +79,13 @@ const Task: React.FC<TaskProps> = React.memo(({
             here would cost another offscreen pass per row, on every row the
             week pager moves across the screen. */}
         <Stack padding={[16, 14]} gap={12}>
+          {custom && (
+            <View style={{ alignSelf: "flex-start", borderRadius: 30, paddingHorizontal: 9, paddingVertical: 3, backgroundColor: "#7C3AED20" }}>
+              <Typography variant="caption" weight="semibold" style={{ color: "#7C3AED" }}>
+                Devoir perso
+              </Typography>
+            </View>
+          )}
           {Platform.OS !== "android" && (
             <LinearGradient
               colors={[color, theme.colors.card]}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { InteractionManager, ViewStyle } from 'react-native';
+import { InteractionManager, Platform, ViewStyle } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
@@ -100,7 +100,7 @@ const Ripple: React.FC<RippleProps> = ({
           width.value = e.nativeEvent.layout.width;
           height.value = e.nativeEvent.layout.height;
         }}
-        style={[style, containerAnimatedStyle, { overflow: 'hidden' }]}
+        style={[style, Platform.OS === "web" ? ({ userSelect: "none" } as any) : undefined, containerAnimatedStyle, { overflow: 'hidden' }]}
       >
         {children}
         <Animated.View style={rStyle} />

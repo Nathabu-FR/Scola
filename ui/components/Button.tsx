@@ -200,7 +200,7 @@ const Button: React.FC<ButtonProps> = React.memo(({
           </Reanimated.View>
         )}
         <Reanimated.View layout={Animation(LinearTransition)}>
-          <Typography variant="button" color={textColor}>
+          <Typography selectable={false} variant="button" color={textColor}>
             {title || "Button"}
           </Typography>
         </Reanimated.View>

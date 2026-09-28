@@ -80,7 +80,10 @@ export const useHomeworkData = (weeks: number[], alert: any) => {
     for (const [key, list] of Object.entries(cacheByWeek)) {
       const week = Number(key);
       const items = list
-        .filter(h => services.includes(h.createdByAccount))
+        .filter(h =>
+          services.includes(h.createdByAccount) ||
+          (h.custom && h.createdByAccount === account?.id)
+        )
         .map(cached => {
           const merged = (cached.id ? homework[cached.id] : undefined) ?? cached;
           const id = merged.id ?? homeworkKey(merged);
@@ -97,7 +100,7 @@ export const useHomeworkData = (weeks: number[], alert: any) => {
     itemCache.current = nextItems;
     weekCache.current = nextWeeks;
     return nextWeeks;
-  }, [cacheByWeek, homework, services]);
+  }, [cacheByWeek, homework, services, account?.id]);
 
   // A week is fetched from the service once per session; `inFlightWeeks` keeps a
   // swipe back and forth from queueing the same request twice.
@@ -200,11 +203,13 @@ export const useHomeworkData = (weeks: number[], alert: any) => {
 
   const setAsDone = useCallback(
     async (item: Homework, done: boolean) => {
-      const id = homeworkKey(item);
+      const id = item.custom && item.id ? item.id : homeworkKey(item);
 
       try {
-        const manager = getManager();
-        await manager.setHomeworkCompletion(item, done)
+        if (!item.custom) {
+          const manager = getManager();
+          await manager.setHomeworkCompletion(item, done);
+        }
 
         updateHomeworkIsDone(id, done);
 

@@ -11,7 +11,6 @@ import { Alert, Image, Platform, Pressable, View } from "react-native";
 import { ClearDatabaseForAccount } from "@/database/DatabaseProvider";
 import { useAccountStore } from "@/stores/account";
 import { openMockDataAccountChooser } from "@/services/mock/account";
-import { useSettingsStore } from "@/stores/settings";
 import AnimatedPressable from "@/ui/components/AnimatedPressable";
 import Avatar from "@/ui/components/Avatar";
 import Icon from "@/ui/components/Icon";
@@ -43,7 +42,6 @@ export default function SettingsIndex() {
   const accounts = useAccountStore((state) => state.accounts);
   const lastUsedAccount = useAccountStore((state) => state.lastUsedAccount);
 
-  const settingsStore = useSettingsStore(state => state.personalization);
   const currentVersion = packagejson.version;
   const releaseNotesUrl = `https://papillon.bzh/release-notes/${currentVersion}`;
 
@@ -193,27 +191,19 @@ export default function SettingsIndex() {
         },
       ],
     },
-    ...(settingsStore.showDevMode
-      ? [
+    {
+      title: t("Settings_Dev"),
+      content: [
         {
-          title: t("Settings_Dev"),
-          content: [
-            ...(settingsStore.showDevMode
-              ? [
-                {
-                  title: "Mode développeur",
-                  description: "Options avancées pour les développeurs.",
-                  papicon: <Papicons name={"Code"} />,
-                  icon: <InfoIcon />,
-                  color: "#FF6B35",
-                  onPress: () => router.navigate("/devmode"),
-                },
-              ]
-              : []),
-          ],
+          title: "Mode développeur",
+          description: "Options avancées pour les développeurs.",
+          papicon: <Papicons name={"Code"} />,
+          icon: <InfoIcon />,
+          color: "#FF6B35",
+          onPress: () => router.navigate("/devmode"),
         },
-      ]
-      : []),
+      ],
+    },
   ];
 
   const BigButtons: Array<{

@@ -1,10 +1,13 @@
 import { Stack } from 'expo-router';
 import { useHeaderHeight, useTheme } from 'expo-router/react-navigation';
 import { t } from 'i18next';
+import { Papicons } from "@getpapillon/papicons";
+import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { InteractionManager, Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Reanimated, {
   cancelAnimation,
   runOnJS,
@@ -22,6 +25,7 @@ import { useAlert } from "@/ui/components/AlertProvider";
 import Tip from '@/ui/components/Tip';
 import MainTabErrorBoundary from '@/ui/components/MainTabErrorBoundary';
 import Typography from '@/ui/new/Typography';
+import AnimatedPressable from '@/ui/components/AnimatedPressable';
 import { runsIOS26 } from '@/ui/utils/IsLiquidGlass';
 import i18n from '@/utils/i18n';
 
@@ -146,6 +150,8 @@ function TitleLayer({ offset, pageOffset, pageWidth, labels, slideDistance }: {
 
 const TasksView: React.FC = () => {
   const alert = useAlert();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
   const headerHeight = useHeaderHeight();
 
@@ -436,6 +442,31 @@ const TasksView: React.FC = () => {
         onClose={closeWeekPicker}
         anchor={weekPickerAnchor}
       />
+
+      <AnimatedPressable
+        accessibilityRole="button"
+        accessibilityLabel="Ajouter un devoir personnel"
+        onPress={() => router.push("/(modals)/tasks/create")}
+        style={{
+          position: "absolute",
+          right: 22,
+          bottom: Platform.OS === "web" ? 74 : insets.bottom + 18,
+          zIndex: 20,
+          width: 56,
+          height: 56,
+          borderRadius: 28,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: colors.primary,
+          shadowColor: "#000",
+          shadowOpacity: 0.25,
+          shadowRadius: 8,
+          shadowOffset: { width: 0, height: 3 },
+          elevation: 5,
+        }}
+      >
+        <Papicons name="Add" size={26} color="#FFFFFF" />
+      </AnimatedPressable>
 
       {/* Hangs off the same line as the week popover — just under the header —
           so its arrow points back up at the title. */}

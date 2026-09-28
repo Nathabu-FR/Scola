@@ -26,12 +26,14 @@ export default function TabOneScreen() {
   const [icalTitle, setIcalTitle] = useState("");
   const [intelligentParsing, setIntelligentParsing] = useState(false);
   const [refresh, setRefresh] = useState(0);
+  const [formError, setFormError] = useState("");
   const icals = useIcals(refresh);
   const addIcal = useAddIcal();
   const removeIcal = useRemoveIcal();
   const updateIcalParsing = useUpdateIcalParsing();
 
   const handleAdd = async () => {
+    setFormError("");
     if (!icalUrl.trim() || !icalTitle.trim()) {
       Alert.alert(t("Tab_Calendar_Icals_Add_Title"), t("Tab_Calendar_Icals_Add_Description"));
       return;
@@ -51,13 +53,28 @@ export default function TabOneScreen() {
       setIntelligentParsing(false);
       setRefresh(r => r + 1);
     } catch (error) {
-      Alert.alert("Erreur", "Impossible de traiter l'URL iCal. Vérifiez qu'elle est valide.");
+      const message = "Impossible de traiter l'URL iCal. Vérifie qu'elle est valide.";
+      if (Platform.OS === "web") setFormError(message);
+      else Alert.alert("Erreur", message);
     }
   };
 
   const handleRemove = async (id: string) => {
     await removeIcal(id);
     setRefresh(r => r + 1);
+  };
+
+  const confirmRemove = (title: string, id: string) => {
+    const promptTitle = t('Tab_Calendar_Icals_Manage_Title', { title });
+    const promptMessage = t('Tab_Calendar_Icals_Manage_Description');
+    if (Platform.OS === "web" && typeof window !== "undefined") {
+      if (window.confirm(`${promptTitle}\n\n${promptMessage}`)) void handleRemove(id);
+      return;
+    }
+    Alert.alert(promptTitle, promptMessage, [
+      { text: t('Context_Cancel'), style: 'cancel' },
+      { text: t('Context_Delete'), style: 'destructive', onPress: () => void handleRemove(id) },
+    ]);
   };
 
 
@@ -116,6 +133,11 @@ export default function TabOneScreen() {
           )}
         </Item>
       </List>
+      {formError ? (
+        <Typography variant="body2" color="#D60046" style={{ marginTop: 8, textAlign: "center" }}>
+          {formError}
+        </Typography>
+      ) : null}
 
       {icals.length > 0 && (
         <List>
@@ -126,23 +148,7 @@ export default function TabOneScreen() {
             const items = [
               <Item
                 key={`${ical.id}-main`}
-                onPress={() => {
-                  Alert.alert(
-                    t('Tab_Calendar_Icals_Manage_Title', { title: ical.title }),
-                    t('Tab_Calendar_Icals_Manage_Description'),
-                    [
-                      {
-                        text: t('Context_Cancel'),
-                        style: 'cancel',
-                      },
-                      {
-                        text: t('Context_Delete'),
-                        style: 'destructive',
-                        onPress: () => handleRemove(ical.id)
-                      }
-                    ]
-                  );
-                }}
+                onPress={() => confirmRemove(ical.title, ical.id)}
               >
                 <Icon>
                   <Calendar />

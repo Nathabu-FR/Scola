@@ -28,6 +28,7 @@ function mapHomeworkToShared(homework: Homework): SharedHomework {
 }
 
 export function getHomeworkRouteId(homework: SharedHomework): string {
+  if (homework.custom && homework.id) return homework.id;
   return generateId(
     homework.subject +
       homework.content +
@@ -84,41 +85,54 @@ export function useHomeworkForWeeks(weekNumbers: number[], refresh = 0) {
   const weeksKey = weekNumbers.join(",");
 
   useEffect(() => {
-    let cancelled = false;
     const weeks = weeksKey.length > 0 ? weeksKey.split(",").map(Number) : [];
+    if (weeks.length === 0) return;
 
-    const fetchHomeworks = async () => {
-      const entries = await Promise.all(
-        weeks.map(async week => [week, await getHomeworksFromCache(week)] as const)
-      );
-      if (cancelled) {
-        return;
-      }
-      setHomeworks(previous => {
-        const next: Record<number, SharedHomework[]> = {};
-        // Anything further than one window away is dropped: the map would grow
-        // for the whole session otherwise.
-        const keep = Math.max(...weeks.map(week => Math.abs(week - weeks[0]))) + 1;
-        for (const [key, value] of Object.entries(previous)) {
-          if (Math.abs(Number(key) - weeks[0]) <= keep) {
-            next[Number(key)] = value;
-          }
-        }
-        for (const [week, value] of entries) {
-          next[week] = value;
-        }
-        return next;
-      });
-    };
-
-    if (weeks.length > 0) {
-      fetchHomeworks();
-    }
+    let cancelled = false;
+    const subscriptions = weeks.map(week => {
+      const { start, end } = getDateRangeOfWeek(week);
+      return database
+        .get<Homework>("homework")
+        .query(Q.where("dueDate", Q.between(start.getTime(), end.getTime())))
+        .observe()
+        .subscribe(records => {
+          if (cancelled) return;
+          const list = records
+            .map(mapHomeworkToShared)
+            .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
+          setHomeworks(previous => ({ ...previous, [week]: list }));
+        });
+    });
 
     return () => {
       cancelled = true;
+      subscriptions.forEach(subscription => subscription.unsubscribe());
     };
   }, [weeksKey, refresh, database]);
+
+  return homeworks;
+}
+
+/** Observe every cached assignment so the home screen can rank open work across week boundaries. */
+export function useAllHomeworkFromCache() {
+  const database = useDatabase();
+  const [homeworks, setHomeworks] = useState<SharedHomework[]>([]);
+
+  useEffect(() => {
+    const subscription = database
+      .get<Homework>("homework")
+      .query()
+      .observe()
+      .subscribe(records => {
+        setHomeworks(
+          records
+            .map(mapHomeworkToShared)
+            .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())
+        );
+      });
+
+    return () => subscription.unsubscribe();
+  }, [database]);
 
   return homeworks;
 }
@@ -144,6 +158,7 @@ export async function getHomeworksFromCache(
 }
 
 export async function addHomeworkToDatabase(homeworks: SharedHomework[]) {
+  if (homeworks.length === 0) return;
   const db = getDatabaseInstance();
 
   const weekNumber = getWeekNumberFromDate(homeworks[0].dueDate);
@@ -242,6 +257,41 @@ export async function addHomeworkToDatabase(homeworks: SharedHomework[]) {
       );
     }
   }
+}
+
+export async function addCustomHomeworkToDatabase(homework: SharedHomework) {
+  const db = getDatabaseInstance();
+  const id = homework.id || getHomeworkRouteId(homework);
+  const existing = await db
+    .get<Homework>("homework")
+    .query(Q.where("homeworkId", id))
+    .fetch();
+
+  await safeWrite(db, async () => {
+    const assignHomework = (record: Model) => {
+      const row = record as Homework;
+      Object.assign(row, {
+        homeworkId: id,
+        subject: homework.subject,
+        content: homework.content,
+        dueDate: homework.dueDate.getTime(),
+        isDone: homework.isDone,
+        returnFormat: homework.returnFormat,
+        attachments: JSON.stringify(homework.attachments),
+        evaluation: false,
+        custom: true,
+        createdByAccount: homework.createdByAccount,
+        kidName: homework.kidName,
+        fromCache: true,
+      });
+    };
+
+    if (existing.length > 0) {
+      await existing[0].update(assignHomework);
+    } else {
+      await db.get("homework").create(assignHomework);
+    }
+  }, 10000, "addCustomHomeworkToDatabase");
 }
 
 export async function updateHomeworkIsDone(

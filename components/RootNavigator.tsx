@@ -76,17 +76,29 @@ function RootNavigatorContent() {
         <Stack.Screen
           name="(modals)/wallpaper"
           options={{
-            presentation: "formSheet",
-            sheetGrabberVisible: true,
-            sheetAllowedDetents: [0.5, 1],
+            presentation: Platform.OS === "web" ? "modal" : "formSheet",
+            ...(Platform.OS !== "web" ? {
+              sheetGrabberVisible: true,
+              sheetAllowedDetents: [0.5, 1],
+              sheetLargestUndimmedDetentIndex: 0,
+            } : {}),
             headerLargeTitle: false,
-            sheetLargestUndimmedDetentIndex: 0,
             headerTransparent: Platform.OS === "ios",
             headerTitle: t("Modal_Wallpaper_Title"),
             contentStyle: {
               backgroundColor: theme.colors.card,
             },
             ...androidHeaderProps,
+          }}
+        />
+
+        <Stack.Screen
+          name="(modals)/tasks/create"
+          options={{
+            headerShown: false,
+            presentation: Platform.OS === "web" ? "modal" : "formSheet",
+            sheetGrabberVisible: Platform.OS !== "web",
+            sheetAllowedDetents: [0.75, 1],
           }}
         />
 

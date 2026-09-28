@@ -37,10 +37,12 @@ import ChipButton from "@/ui/components/ChipButton";
 import ActivityIndicator from "@/ui/components/ActivityIndicator";
 import NativeSwitch from "@/ui/native/NativeSwitch";
 import { useSafeHorizontalPadding } from "@/ui/hooks/useSafeHorizontalPadding";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function QRCodeAndCardsPage() {
   const alert = useAlert();
   const safePadding = useSafeHorizontalPadding(15);
+  const insets = useSafeAreaInsets();
   const search = useLocalSearchParams();
   const serviceName = String(search.serviceName);
   const service = Number(search.service) as Services;
@@ -182,6 +184,15 @@ export default function QRCodeAndCardsPage() {
           />
         }
       />
+
+      <AnimatedPressable
+        accessibilityRole="button"
+        accessibilityLabel="Retour aux cartes"
+        onPress={() => router.back()}
+        style={{ position: "absolute", top: insets.top + 14, left: 18, zIndex: 110, width: 38, height: 38, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: "#8B5CF620" }}
+      >
+        <Papicons name="ArrowLeft" size={22} color="#8B5CF6" />
+      </AnimatedPressable>
 
       <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ paddingTop: headerHeight - 12 }}>
         <View style={{ padding: 15, ...safePadding, flex: 1, gap: 20 }}>

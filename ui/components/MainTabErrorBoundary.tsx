@@ -1,18 +1,28 @@
 import { ErrorBoundary } from '@/ui/components/ErrorBoundary';
 import React from 'react';
-import { Linking, StyleSheet, View, Text } from 'react-native';
+import { Linking, StyleSheet, View, Pressable } from 'react-native';
 import Typography from './Typography';
 import Button from '../new/Button';
 import Icon from './Icon';
 import { Papicons } from '@getpapillon/papicons';
+import { useRouter } from 'expo-router';
 
 type MainTabErrorBoundaryProps = {
   children: React.ReactNode;
 };
 
 const MainTabErrorFallback = () => {
+  const router = useRouter();
   return (
     <View style={styles.container}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Retour à l’accueil"
+        onPress={() => router.canGoBack() ? router.back() : router.replace("/")}
+        style={styles.backButton}
+      >
+        <Papicons name="ArrowLeft" size={24} color="#8B5CF6" />
+      </Pressable>
       <Icon size={52} fill='white'>
         <Papicons name='alertCircle' />
       </Icon>
@@ -53,5 +63,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 30,
     paddingVertical: 16,
     gap: 6,
+  },
+  backButton: {
+    position: 'absolute',
+    top: 18,
+    left: 18,
+    zIndex: 2,
+    width: 42,
+    height: 42,
+    borderRadius: 24,
+    backgroundColor: '#FFFFFF26',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

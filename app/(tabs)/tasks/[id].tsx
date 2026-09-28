@@ -63,9 +63,11 @@ const Task = () => {
   }
 
   const setAsDone = async (done: boolean) => {
-    const manager = getManager();
     if (!task) return;
-    await manager?.setHomeworkCompletion(task, done);
+    if (!task.custom) {
+      const manager = getManager();
+      await manager?.setHomeworkCompletion(task, done);
+    }
 
     updateHomeworkIsDone(id, done);
     setIsDone(done);
@@ -122,6 +124,7 @@ const Task = () => {
           <ModalOverhead
             emoji={subjectInfo.emoji}
             subject={subjectInfo.name}
+            overtitle={task.custom ? "Devoir perso" : undefined}
             subjectVariant="header"
             color={Platform.OS === "ios" ? subjectInfo.color : colors.primary}
             date={new Date(task.dueDate)}

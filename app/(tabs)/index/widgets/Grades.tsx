@@ -18,7 +18,12 @@ const GradesWidget = ({ history, averages }: GradesWidgetProps) => {
 
   return (
     <View style={{ width: "100%" }}>
-      <Averages compact history={history} realAverage={averages.student?.value} displayScale={displayScale} />
+      <Averages
+        compact
+        history={history}
+        realAverage={averages.student?.value ?? averages.class?.value}
+        displayScale={displayScale}
+      />
     </View>
   );
 };

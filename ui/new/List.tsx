@@ -708,6 +708,7 @@ export const ListTouchable = React.memo(({ ...props }) => {
           onPress={dragSafe.onPress}
           style={({ pressed }) => [
             props.style,
+            ({ userSelect: "none" } as any),
             pressed && { opacity: 0.78 },
           ]}
         >

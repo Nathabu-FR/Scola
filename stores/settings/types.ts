@@ -21,6 +21,7 @@ export interface Path {
 
 export interface Wallpaper {
   id: string;
+  dataUri?: string;
   url?: string;
   path?: Path;
   thumbnail?: string;

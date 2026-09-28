@@ -9,7 +9,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { useAccountStore } from '@/stores/account';
 import { useAlert } from '@/ui/components/AlertProvider';
-import { getWeekNumberFromDate } from '@/database/useHomework';
+import { getHomeworkRouteId, getWeekNumberFromDate, useAllHomeworkFromCache } from '@/database/useHomework';
 import { useSettingsStore } from '@/stores/settings';
 import { checkConsent } from '@/utils/logger/consent';
 import { Animation } from '@/ui/utils/Animation';
@@ -98,26 +98,38 @@ const HomeScreen = () => {
   const { courses } = useTimetableWidgetData();
   const timetableTitle = useTimetableWidgetTitle(courses);
 
-  const currentHomeworkWeek = getWeekNumberFromDate(new Date());
-  const { homeworkByWeek, setAsDone: setHomeworkAsDone } = useHomeworkData([currentHomeworkWeek], alert);
+  const homeworkWeeks = React.useMemo(() => {
+    const today = new Date();
+    const weeks = Array.from({ length: 8 }, (_, index) => {
+      const date = new Date(today);
+      date.setDate(today.getDate() + index * 7);
+      return getWeekNumberFromDate(date);
+    });
+    return [...new Set(weeks)];
+  }, []);
+  const { homeworkByWeek, setAsDone: setHomeworkAsDone } = useHomeworkData(homeworkWeeks, alert);
+  const allCachedHomeworks = useAllHomeworkFromCache();
   const urgentHomeworks = React.useMemo(() => {
-    const now = Date.now();
-    const endOfWeek = new Date();
-    endOfWeek.setHours(23, 59, 59, 999);
-    endOfWeek.setDate(endOfWeek.getDate() + (7 - (endOfWeek.getDay() || 7)));
-    return (homeworkByWeek[currentHomeworkWeek] ?? [])
-      .filter(homework => !homework.isDone)
-      .filter(homework => {
-        const due = new Date(homework.dueDate).getTime();
-        return due >= now && due <= endOfWeek.getTime();
-      })
-      .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
-      .slice(0, 4);
-  }, [homeworkByWeek, currentHomeworkWeek]);
+    const serviceIds = account?.services.map(service => service.id) ?? [];
+    const candidates = [...allCachedHomeworks, ...Object.values(homeworkByWeek).flat()];
+    const byId = new Map<string, (typeof candidates)[number]>();
+    for (const homework of candidates) {
+      if (homework.isDone) continue;
+      if (!serviceIds.includes(homework.createdByAccount) && !(homework.custom && homework.createdByAccount === account?.id)) continue;
+      byId.set(getHomeworkRouteId(homework), homework);
+    }
+    return [...byId.values()]
+      .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())
+      .slice(0, 3);
+  }, [account, allCachedHomeworks, homeworkByWeek]);
 
   const { currentPeriod } = usePeriodsData();
   const { grades, history, averages } = useGradesData(currentPeriod);
-  const gradesWidgetHidden = grades.length === 0;
+  const gradesWidgetHidden =
+    grades.length === 0 &&
+    !averages.student &&
+    !averages.class &&
+    history.length === 0;
 
   const renderTimeTable = React.useCallback(() => <HomeTimeTableWidget />, []);
   const renderGrades = React.useCallback(
@@ -171,7 +183,7 @@ const HomeScreen = () => {
     },
     {
       icon: <Papicons name={"List"} />,
-      title: "Devoirs à faire cette semaine",
+      title: "Devoirs les plus urgents",
       redirect: "(tabs)/tasks",
       render: () => <HomeHomeworkWidget homeworks={urgentHomeworks} setAsDone={setHomeworkAsDone} />
     },

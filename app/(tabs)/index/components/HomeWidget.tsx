@@ -59,14 +59,14 @@ const HomeWidgetContent: React.FC<HomeWidgetProps> = ({ item }) => {
         hAlign="center"
         padding={[10, 10]}
         gap={10}
-        style={{ marginTop: -1 }}
+        style={{ marginTop: -1, width: "100%", minWidth: 0 }}
       >
         <Icon papicon opacity={0.6} style={{ marginLeft: 4 }}>
           {item.icon}
         </Icon>
         <Typography
-          nowrap
-          style={{ flex: 1, opacity: 0.6 }}
+          numberOfLines={1}
+          style={{ flex: 1, minWidth: 0, flexShrink: 1, opacity: 0.6 }}
           variant="title"
           color="text"
         >
@@ -98,6 +98,7 @@ const HomeWidgetContent: React.FC<HomeWidgetProps> = ({ item }) => {
             radius={20}
             style={{
               overflow: Platform.OS === "android" ? "hidden" : "visible",
+              flexShrink: 0,
             }}
           >
             <Link asChild href={item.redirect ?? "/(features)/soon"}>

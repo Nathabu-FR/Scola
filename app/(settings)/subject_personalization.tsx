@@ -165,6 +165,25 @@ export default function SubjectPersonalization() {
         contentContainerStyle={{ padding: 16, ...safePadding }}
         contentInsetAdjustmentBehavior="automatic"
       >
+        <List.Item
+          onPress={() => {
+            router.push({
+              pathname: "/(settings)/edit_subject",
+              params: { mode: "create" },
+            });
+          }}
+        >
+          <List.Leading>
+            <Stack
+              backgroundColor={colors.primary + "20"}
+              style={{ width: 40, height: 40, borderRadius: 40, alignItems: "center", justifyContent: "center" }}
+            >
+              <Icon><Papicons name="Add" color={colors.primary} /></Icon>
+            </Stack>
+          </List.Leading>
+          <Typography variant="title">Ajouter une matière</Typography>
+          <List.Trailing><Icon><Papicons name="ChevronRight" opacity={0.7} /></Icon></List.Trailing>
+        </List.Item>
         {subjects.length > 0 ? (
           subjects.map(item =>
             renderItem(item.emoji, item.name, item.id, item.color)

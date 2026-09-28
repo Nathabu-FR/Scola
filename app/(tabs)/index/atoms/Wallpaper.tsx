@@ -14,6 +14,10 @@ const Wallpaper = ({ height = 400, dim = true }) => {
     const [image, setImage] = useState<string | null>(null);
 
     useEffect(() => {
+      if (currentWallpaper?.dataUri) {
+        setImage(currentWallpaper.dataUri);
+        return;
+      }
       if (currentWallpaper?.path?.name) {
         const file = new File(Paths.document, currentWallpaper.path.directory || '', currentWallpaper.path.name);
         if (file.exists) {
@@ -22,7 +26,9 @@ const Wallpaper = ({ height = 400, dim = true }) => {
           setImage(null);
         }
       }
-      else {
+      else if (currentWallpaper?.url) {
+        setImage(currentWallpaper.url);
+      } else {
         setImage(null);
       }
     }, [currentWallpaper]);

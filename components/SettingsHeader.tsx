@@ -42,6 +42,8 @@ export default function SettingsHeader({
     <Stack
       direction="vertical"
       style={{
+        width: "100%",
+        minWidth: 0,
         padding: 13,
         backgroundColor: color,
         borderRadius: 25,
@@ -71,6 +73,8 @@ export default function SettingsHeader({
         hAlign="center"
         vAlign="center"
         style={{
+          width: "100%",
+          minWidth: 0,
           backgroundColor: colors.item,
           gap: 10,
           padding: 18,
@@ -84,14 +88,14 @@ export default function SettingsHeader({
           </Icon>
         )}
 
-        <Stack flex style={{ flex: 1, gap: 0 }}>
-          <Typography variant="title">{title}</Typography>
-          <Typography variant="caption" color="secondary">
+        <Stack flex style={{ flex: 1, minWidth: 0, flexShrink: 1, gap: 0 }}>
+          <Typography variant="title" style={{ flexShrink: 1 }}>{title}</Typography>
+          <Typography variant="caption" color="secondary" style={{ flexShrink: 1 }}>
             {description}
           </Typography>
         </Stack>
         {showSwitch && (
-          <Stack direction="horizontal" style={{ alignItems: "center", gap: 8 }}>
+          <Stack inline direction="horizontal" style={{ alignItems: "center", gap: 8, flexShrink: 0 }}>
             {switchLabel && (
               <Typography variant="body2" style={{ flex: 1 }}>
                 {switchLabel}

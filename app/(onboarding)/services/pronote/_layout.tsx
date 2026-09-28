@@ -37,7 +37,7 @@ export default function OnboardingLayout() {
         />
         <Stack.Screen
           name="browser"
-          options={{ ...newScreenOptions, title: t("ONBOARDING_HEADER_ENT_LOGIN"), presentation: "modal", headerStyle: { backgroundColor: "transparent" } }}
+          options={{ ...newScreenOptions, title: t("ONBOARDING_HEADER_ENT_LOGIN"), presentation: "modal", headerShown: Platform.OS !== "web", headerStyle: { backgroundColor: "transparent" } }}
         />
         <Stack.Screen
           name="qrcode"

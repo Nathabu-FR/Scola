@@ -4,7 +4,7 @@ import { useTheme } from "expo-router/react-navigation";
 import { RelativePathString, UnknownInputParams } from 'expo-router';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { StyleProp, ViewStyle } from 'react-native';
+import { Platform, StyleProp, ViewStyle } from 'react-native';
 
 import { Services } from '@/stores/account/types';
 import { openMockDataAccountChooser } from '@/services/mock/account';
@@ -240,7 +240,7 @@ export function GetLoginMethods(redirect: (path: { pathname: RelativePathString 
     },
     {
       id: "qrcode",
-      availableFor: [Services.PRONOTE],
+      availableFor: Platform.OS === "web" ? [] : [Services.PRONOTE],
       description: t("ONBOARDING_METHOD_QRCODE"),
       icon: <Papicons name={"QrCode"} />,
       onPress: () => {
@@ -256,7 +256,6 @@ export function GetLoginMethods(redirect: (path: { pathname: RelativePathString 
         redirect({ pathname: '../pronote/url' });
       }
     }
-    // Desktop QR login uses the webcam through its web implementation.
   ]
 }
 

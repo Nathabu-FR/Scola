@@ -31,6 +31,7 @@ import { LegendList, LegendListRef } from "@legendapp/list";
 import { FlashList } from "@shopify/flash-list";
 import { trackAdvancedEvent } from "@/utils/logger/analytics";
 import { useSafeHorizontalPadding } from "@/ui/hooks/useSafeHorizontalPadding";
+import { cleanSubjectName, getSubjectFormat } from "@/utils/subjects/utils";
 
 const EmojiItem = memo(({ item, onPress, isSelected }: {item: string, onPress: (emoji: string) => void, isSelected: boolean}) => {
   const theme = useTheme();
@@ -271,10 +272,11 @@ export default function EditSubject() {
   const headerSafePadding = useSafeHorizontalPadding(15);
 
   const params = useLocalSearchParams();
+  const isCreating = params.mode === "create";
 
-  const [selectedName, setSelectedName] = useState<string>(String(params.name));
+  const [selectedName, setSelectedName] = useState<string>(String(params.name ?? ""));
   const [selectedColor, setSelectedColor] = useState<string>(Colors.find(c => c === String(params.color)) || Colors[0]);
-  const [selectedEmoji, setSelectedEmoji] = useState<string>(String(params.emoji));
+  const [selectedEmoji, setSelectedEmoji] = useState<string>(String(params.emoji ?? "🤓"));
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
   const AvailableEmojis = [
@@ -313,24 +315,29 @@ export default function EditSubject() {
         >
           <Papicons name={"Cross"} size={25} color={colors.text + "7F"} />
         </AnimatedPressable>
-        <Typography variant={"title"}>Modifier la matière</Typography>
+        <Typography variant={"title"}>{isCreating ? "Ajouter une matière" : "Modifier la matière"}</Typography>
         <AnimatedPressable
           style={{
             padding: 10,
             backgroundColor: colors.primary,
             borderRadius: 100,
           }}
+          disabled={!selectedName.trim() || (isCreating && !cleanSubjectName(selectedName))}
           onPress={() => {
             const store = useAccountStore.getState();
-            const originalName = String(params.name);
-            const originalColor = String(params.color);
-            const originalEmoji = String(params.emoji);
+            const subjectId = isCreating
+              ? cleanSubjectName(selectedName)
+              : String(params.id ?? cleanSubjectName(selectedName));
+            const originalName = String(params.name ?? "");
+            const originalColor = String(params.color ?? Colors[0]);
+            const originalEmoji = String(params.emoji ?? "🤓");
+            const formatted = getSubjectFormat(selectedName);
 
-            store.setSubjectName(String(params.id), selectedName);
-            store.setSubjectEmoji(String(params.id), selectedEmoji);
-            store.setSubjectColor(String(params.id), selectedColor);
+            store.setSubjectName(subjectId, selectedName.trim());
+            store.setSubjectEmoji(subjectId, selectedEmoji || formatted?.emoji || "🤓");
+            store.setSubjectColor(subjectId, selectedColor);
             trackAdvancedEvent("subject_info_changed", {
-              name_changed: selectedName !== originalName,
+              name_changed: selectedName.trim() !== originalName,
               emoji_changed: selectedEmoji !== originalEmoji,
               color_changed: selectedColor !== originalColor,
             });

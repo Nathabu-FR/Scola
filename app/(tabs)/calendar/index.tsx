@@ -266,6 +266,13 @@ function TabOneScreen() {
           <Typography variant="body2" weight="semibold" numberOfLines={1} style={{ marginLeft: 8 }}>
             {dayLabel}
           </Typography>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push("/(tabs)/calendar/icals")}
+            style={styles.desktopICalButton}
+          >
+            <Typography variant="body2" weight="semibold">{t("Tab_Calendar_Icals")}</Typography>
+          </Pressable>
         </View>
       )}
 
@@ -390,6 +397,16 @@ const styles = StyleSheet.create({
   desktopTodayButton: {
     minWidth: 110,
     height: 36,
+    paddingHorizontal: 14,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(127,127,127,0.14)',
+  },
+  desktopICalButton: {
+    minWidth: 92,
+    height: 36,
+    marginLeft: 12,
     paddingHorizontal: 14,
     borderRadius: 18,
     alignItems: 'center',

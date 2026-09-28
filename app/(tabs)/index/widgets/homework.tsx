@@ -15,10 +15,10 @@ export default function HomeHomeworkWidget({
   return (
     <FlatList
       scrollEnabled={false}
-      data={homeworks.slice(0, 4)}
+      data={homeworks.slice(0, 3)}
       ListEmptyComponent={
         <Typography variant="body2" color="textSecondary" style={{ paddingHorizontal: 6, paddingBottom: 10 }}>
-          {t("Home_Homework_Empty", "Aucun devoir pour cette semaine")}
+          {t("Home_Homework_Empty", "Aucun devoir restant")}
         </Typography>
       }
       style={{ width: "100%", paddingHorizontal: 10, paddingBottom: 4 }}

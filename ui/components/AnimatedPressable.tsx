@@ -94,7 +94,7 @@ function AnimatedPressable({
       <ReanimatedPressable
         {...props}
         layout={props.layout || layoutAnim}
-        style={[style, animatedStyle]}
+        style={[style, Platform.OS === "web" ? ({ userSelect: "none" } as any) : undefined, animatedStyle]}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
       // onPress is now handled by the TapGestureHandler's onActivated prop

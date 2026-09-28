@@ -51,6 +51,7 @@ const TaskItem = memo(
             description={item.content}
             date={new Date(item.dueDate)}
             completed={item.isDone}
+            custom={item.custom}
             hasAttachments={item.attachments.length > 0}
             magic={magic}
             onToggle={() => setAsDone(item, !item.isDone)}

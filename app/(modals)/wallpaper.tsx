@@ -20,6 +20,8 @@ import { t } from "i18next";
 import * as ImagePicker from 'expo-image-picker';
 import ActionMenu from "@/ui/components/ActionMenu"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
+import Button from "@/ui/new/Button"
+import TypographyNew from "@/ui/new/Typography"
 
 const COLLECTIONS_SOURCE = "https://raw.githubusercontent.com/PapillonApp/datasets/refs/heads/main/wallpapers/index.json";
 
@@ -43,10 +45,12 @@ const WallpaperModal = () => {
     try {
       if (isRefresh) setRefreshing(true);
       const response = await fetch(COLLECTIONS_SOURCE);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
       setCollections(data);
+      setError(null);
     } catch (error) {
-      setError(error as string);
+      setError(error instanceof Error ? error.message : "Impossible de charger les fonds d’écran.");
     } finally {
       setRefreshing(false);
     }
@@ -91,18 +95,33 @@ const WallpaperModal = () => {
     }
   }, [collections, currentWallpaper, headerHeight]);
 
-  const wallpaperDirectory = new Directory(Paths.document, "wallpapers");
+  const wallpaperDirectory = Platform.OS === "web"
+    ? null
+    : new Directory(Paths.document, "wallpapers");
 
   const downloadAndSelect = (wallpaper: Wallpaper) => {
+    if (Platform.OS === "web") {
+      mutateProperty("personalization", {
+        wallpaper: {
+          id: wallpaper.id,
+          url: wallpaper.url,
+          thumbnail: wallpaper.thumbnail,
+          credit: wallpaper.credit,
+        },
+      });
+      return;
+    }
+
     const fileName = `${wallpaper.id}.jpg`;
 
-    const wallpaperFile = new File(wallpaperDirectory, fileName);
+    const directory = wallpaperDirectory!;
+    const wallpaperFile = new File(directory, fileName);
     if (wallpaperFile.exists) {
       mutateProperty("personalization", {
         wallpaper: {
           id: wallpaper.id,
           path: {
-            directory: wallpaperDirectory.name,
+            directory: directory.name,
             name: wallpaperFile.name
           }
         }
@@ -112,15 +131,15 @@ const WallpaperModal = () => {
 
     setCurrentlyDownloading((prev) => [...prev, wallpaper.id]);
 
-    if (!wallpaperDirectory.exists) {
-      wallpaperDirectory.create();
+    if (!directory.exists) {
+      directory.create();
     }
     File.downloadFileAsync(wallpaper.url!, wallpaperFile).then((result) => {
       mutateProperty("personalization", {
         wallpaper: {
           id: wallpaper.id,
           path: {
-            directory: wallpaperDirectory.name,
+            directory: directory.name,
             name: result.name
           }
         }
@@ -130,39 +149,56 @@ const WallpaperModal = () => {
     })
   }
 
-  const uploadCustomWallpaper = () => {
+  const uploadCustomWallpaper = async () => {
     try {
-      ImagePicker.launchImageLibraryAsync({
+      const result = await ImagePicker.launchImageLibraryAsync({
         allowsEditing: true,
         aspect: [4, 3],
         quality: 1,
-      }).then((result) => {
-        if (result.canceled) return;
+        base64: Platform.OS === "web",
+      });
+      if (result.canceled) return;
 
-        const asset = result.assets[0];
+      const asset = result.assets[0];
+      const wallpaperId = `custom:${Date.now()}`;
+      if (Platform.OS === "web") {
+        if (!asset.base64) {
+          setError("Le navigateur n’a pas pu lire cette image. Essaie un autre fichier.");
+          return;
+        }
+        mutateProperty("personalization", {
+          wallpaper: {
+            id: wallpaperId,
+            dataUri: `data:${asset.mimeType || "image/jpeg"};base64,${asset.base64}`,
+          },
+        });
+        setError(null);
+        return;
+      }
+
         const sourceFile = new File(asset.uri);
 
-        if (!wallpaperDirectory.exists) {
-          wallpaperDirectory.create();
+        const directory = wallpaperDirectory!;
+        if (!directory.exists) {
+          directory.create();
         }
 
-        const newFileName = `custom:${Date.now()}.jpg`;
-        const destFile = new File(wallpaperDirectory, newFileName);
+        const newFileName = `${wallpaperId}.jpg`;
+        const destFile = new File(directory, newFileName);
 
         sourceFile.copy(destFile);
 
         mutateProperty("personalization", {
           wallpaper: {
-            id: `custom:${Date.now()}`,
+            id: wallpaperId,
             path: {
-              directory: wallpaperDirectory.name,
+              directory: directory.name,
               name: destFile.name
             }
           }
-        })
-      })
+        });
     } catch (error) {
-      console.log(error);
+      setError(error instanceof Error ? error.message : "Impossible d’ajouter cette image.");
     }
   }
 
@@ -179,6 +215,24 @@ const WallpaperModal = () => {
           paddingTop: Platform.OS === 'android' ? 20 : 0,
           paddingBottom: insets.bottom
         }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchCollections(true)} />}
+        ListHeaderComponent={Platform.OS === "web" ? (
+          <View style={{ paddingHorizontal: 16, paddingTop: 16, gap: 8 }}>
+            <Button label="Choisir une image sur cet ordinateur" onPress={uploadCustomWallpaper} />
+            {error ? <TypographyNew variant="body2" color="textSecondary">{error}</TypographyNew> : null}
+          </View>
+        ) : error ? (
+          <TypographyNew variant="body2" color="textSecondary" style={{ margin: 16 }}>{error}</TypographyNew>
+        ) : null}
+        ListEmptyComponent={collections.length === 0 ? (
+          <View style={{ alignItems: "center", paddingHorizontal: 24, paddingVertical: 28, gap: 12 }}>
+            <TypographyNew variant="body2" color="textSecondary" align="center">
+              {error ? "Les fonds en ligne sont indisponibles pour le moment." : "Aucun fond d’écran à afficher."}
+            </TypographyNew>
+            <Button label="Réessayer" variant="secondary" onPress={() => fetchCollections(true)} />
+            {Platform.OS !== "web" && <Button label="Choisir une image" variant="secondary" onPress={uploadCustomWallpaper} />}
+          </View>
+        ) : null}
         renderItem={({ item, index }) => (
           <View>
             <Stack direction="horizontal" alignItems="center" gap={8} padding={[16, 10]}>
@@ -239,7 +293,7 @@ const WallpaperModal = () => {
         )}
       </NativeHeaderSide>
 
-      <NativeHeaderSide side="Right" key={currentWallpaper?.id + ":" + wallpaperDirectory.exists}>
+      <NativeHeaderSide side="Right" key={currentWallpaper?.id + ":" + (wallpaperDirectory?.exists ?? false)}>
         {Platform.OS === 'android' && (
           <NativeHeaderPressable onPress={() => uploadCustomWallpaper()}>
             <Icon size={28} fill={hasCustomWallpaper ? colors.primary : undefined}>
@@ -248,7 +302,14 @@ const WallpaperModal = () => {
           </NativeHeaderPressable>
         )}
         <ActionMenu
-          actions={[
+          actions={Platform.OS === "web" ? [
+            {
+              id: "background:clear",
+              title: t("Modal_Wallpaper_Clear"),
+              imageColor: "#FF0000",
+              attributes: { "destructive": true, "disabled": !currentWallpaper }
+            },
+          ] : [
             {
               id: "background:clear",
               title: t("Modal_Wallpaper_Clear"),
@@ -269,7 +330,7 @@ const WallpaperModal = () => {
               subactions: [
                 {
                   title: t("Modal_Wallpaper_Downloads_Size"),
-                  subtitle: (wallpaperDirectory.info().size / (1024 * 1024)).toFixed(2) + " MB"
+                  subtitle: ((wallpaperDirectory!.info().size ?? 0) / (1024 * 1024)).toFixed(2) + " MB"
                 },
                 {
                   id: "downloads:clear",
@@ -278,7 +339,7 @@ const WallpaperModal = () => {
                   image: Platform.select({
                     ios: "trash.fill"
                   }),
-                  attributes: { "destructive": true, "disabled": !wallpaperDirectory.exists }
+                  attributes: { "destructive": true, "disabled": !wallpaperDirectory!.exists }
                 }
               ]
             },
@@ -287,7 +348,7 @@ const WallpaperModal = () => {
           onPressAction={({ nativeEvent }) => {
             const action = nativeEvent.event;
             if (action === "downloads:clear") {
-              wallpaperDirectory.delete();
+              wallpaperDirectory!.delete();
               mutateProperty("personalization", {
                 wallpaper: undefined
               })

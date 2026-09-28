@@ -96,7 +96,7 @@ export default function Button({ label, onPress, disabled = false, variant = "pr
       }}
     >
       {leading}
-      <Typography {...TextVariants[variant]}>{label}</Typography>
+      <Typography selectable={false} {...TextVariants[variant]}>{label}</Typography>
       {trailing}
     </Ripple>
   );

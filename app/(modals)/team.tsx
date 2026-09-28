@@ -33,22 +33,22 @@ const TeamModal: React.FC = () => {
           gap: 8
         }}
       >
-        <Typography variant="h3">Salut, nous sommes les étudiants derrière Papillon ! 👋</Typography>
+        <Typography variant="h3">Salut, nous sommes les étudiants derrière scola ! 👋</Typography>
         <Typography variant="body1" color="textSecondary">
-          Merci beaucoup d'utiliser Papillon ! Nous savons que parfois, certaines choses ne fonctionnent pas comme prévu, mais nous travaillons au quotidien a améliorer l'application pour vous offrir la meilleure expérience possible.
+          Merci beaucoup d'utiliser scola ! Nous savons que parfois, certaines choses ne fonctionnent pas comme prévu, mais nous travaillons au quotidien a améliorer l'application pour vous offrir la meilleure expérience possible.
         </Typography>
 
         <View style={{ height: 8 }} />
 
         <Typography variant="body1" weight="semibold" color="textPrimary">
-          Pour rester à jour sur les nouveautés, n'hésitez pas a nous suivre sur Instagram, on y partage tout !
+          Pour rester à jour sur les nouveautés, n'hésitez pas a consulter le site
         </Typography>
 
         <View style={{ paddingTop: 12, flexDirection: "row", gap: 8 }}>
         <Button
           label="Nos réseaux"
           onPress={() => {
-            Linking.openURL("https://papillon.bzh/links");
+            Linking.openURL("https://nathabu.fr");
           }}
           variant="primary"
           style={{flex: 1}}

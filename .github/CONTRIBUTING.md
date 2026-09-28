@@ -2,7 +2,7 @@
 
 ## 🔐 Signaler une vulnérabilité
 
-Nous prenons la sécurité **très au sérieux**. Si tu découvres une **vulnérabilité** dans **Papillon**, merci de suivre notre [**politique de sécurité**](https://github.com/PapillonApp/Papillon/.github/blob/main/SECURITY.md) : **n’ouvre pas d’issue publique** et signale-la directement à l’adresse suivante : <mark style="color:$danger;">**support@papillon.bzh**</mark>.
+Nous prenons la sécurité **très au sérieux**. Si tu découvres une **vulnérabilité** dans **Papillon**, merci de suivre notre [**politique de sécurité**](https://www.nathabu.fr/contactus) : **n’ouvre pas d’issue publique** et signale-la directement à l’adresse suivante : <mark style="color:$danger;">**nathanael.bubbe@gmail.com**</mark>.
 
 ## 📤 Soumettre une Pull Request
 

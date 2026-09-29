@@ -5,15 +5,15 @@ import { formatDistanceStrict, formatDistanceToNow } from 'date-fns'
 import * as DateLocale from 'date-fns/locale';
 import i18n, { t } from "i18next";
 import React, { useEffect, useState } from "react";
-import { Platform, Pressable, View } from "react-native";
+import { Alert, Platform, Pressable, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import * as WebBrowser from "expo-web-browser";
 
 import ModalOverhead from "@/components/ModalOverhead";
-import { getCourseById } from "@/database/useTimetable";
+import { getCourseById, getCourseRouteId, updateCourseCustomStatus } from "@/database/useTimetable";
 import { getManager, initializeAccountManager } from "@/services/shared";
 import { Attachment } from "@/services/shared/attachment";
-import { Course as SharedCourse, CourseResource } from "@/services/shared/timetable";
+import { COURSE_CANCELLED_LABEL, COURSE_TEACHER_ABSENT_LABEL, Course as SharedCourse, CourseResource } from "@/services/shared/timetable";
 import ActivityIndicator from "@/ui/components/ActivityIndicator";
 import Icon from "@/ui/components/Icon";
 import List from "@/ui/new/List";
@@ -51,6 +51,14 @@ export default function CourseModal() {
   const [sessionContents, setSessionContents] = useState<CourseResource[]>([]);
   const [loadingContents, setLoadingContents] = useState(false);
   const [contentsError, setContentsError] = useState(false);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
+  const backHeader = (Platform.OS === "android" || Platform.OS === "web") ? (
+    <NativeHeaderSide side="Left">
+      <NativeHeaderPressable onPress={() => router.canGoBack() ? router.back() : router.replace("/")}>
+        <Icon size={28}><Papicons name="ArrowLeft" color="#8B5CF6" /></Icon>
+      </NativeHeaderPressable>
+    </NativeHeaderSide>
+  ) : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -100,11 +108,11 @@ export default function CourseModal() {
   }, [course]);
 
   if (loading) {
-    return <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}><ActivityIndicator /></View>;
+    return <>{backHeader}<View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}><ActivityIndicator /></View></>;
   }
 
   if (!course) {
-    return <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}><Typography variant="title">{t("Tab_Calendar")}</Typography></View>;
+    return <>{backHeader}<View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}><Typography variant="title">{t("Tab_Calendar")}</Typography></View></>;
   }
 
   const subjectInfo: SubjectInfo = {
@@ -122,18 +130,23 @@ export default function CourseModal() {
       presentationStyle: "formSheet",
     });
   };
+  const setManualCourseStatus = async (customStatus?: string) => {
+    if (!course || course.createdByAccount.startsWith("ical_")) return;
+    setUpdatingStatus(true);
+    try {
+      await updateCourseCustomStatus(getCourseRouteId(course), customStatus);
+      setCourse({ ...course, customStatus });
+    } catch (error) {
+      if (Platform.OS === "web") window.alert(String(error));
+      else Alert.alert("Mise à jour impossible", String(error));
+    } finally {
+      setUpdatingStatus(false);
+    }
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.overground }}>
-      {Platform.OS === "android" && (
-        <NativeHeaderSide side="Left">
-          <NativeHeaderPressable onPress={() => router.back()}>
-            <Icon size={28}>
-              <Papicons name="Cross" />
-            </Icon>
-          </NativeHeaderPressable>
-        </NativeHeaderSide>
-      )}
+      {backHeader}
 
       {Platform.OS !== "android" && (
         <LinearGradient
@@ -237,6 +250,33 @@ export default function CourseModal() {
             </List.Item>
           </List.Section>
         ) : null}
+
+        {!course.createdByAccount.startsWith("ical_") && (
+          <List.Section>
+            <List.SectionTitle><List.Label>Signaler un changement</List.Label></List.SectionTitle>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, paddingHorizontal: 12, paddingBottom: 12 }}>
+              {[
+                { label: COURSE_CANCELLED_LABEL, value: COURSE_CANCELLED_LABEL },
+                { label: COURSE_TEACHER_ABSENT_LABEL, value: COURSE_TEACHER_ABSENT_LABEL },
+                { label: "Effacer", value: undefined },
+              ].map(option => {
+                const selected = course.customStatus === option.value;
+                return (
+                  <Pressable
+                    key={option.label}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected, disabled: updatingStatus }}
+                    disabled={updatingStatus}
+                    onPress={() => void setManualCourseStatus(option.value)}
+                    style={{ borderRadius: 999, borderWidth: 1, borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? colors.primary : colors.card, paddingHorizontal: 12, paddingVertical: 8, opacity: updatingStatus ? 0.6 : 1 }}
+                  >
+                    <Typography variant="body2" weight="semibold" selectable={false} style={{ color: selected ? colors.background : colors.text }}>{option.label}</Typography>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </List.Section>
+        )}
 
         <List.Section>
           <List.SectionTitle>

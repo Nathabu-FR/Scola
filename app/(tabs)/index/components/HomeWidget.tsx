@@ -90,6 +90,7 @@ const HomeWidgetContent: React.FC<HomeWidgetProps> = ({ item }) => {
         {(item.redirect || item.onPress) && (
           <Stack
             bordered={Platform.OS === "ios"}
+            width="auto"
             backgroundColor={
               Platform.OS === "ios"
                 ? theme.colors.card
@@ -105,6 +106,7 @@ const HomeWidgetContent: React.FC<HomeWidgetProps> = ({ item }) => {
                 <ListTouchable>
                   <Stack
                     direction="horizontal"
+                    width="auto"
                     hAlign="center"
                     padding={[12, 6]}
                     gap={6}

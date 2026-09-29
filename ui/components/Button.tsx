@@ -266,18 +266,22 @@ const Button: React.FC<ButtonProps> = React.memo(({
   }
 
   return (
-    <AnimatedPressable
-      {...rest}
+    <Reanimated.View
       layout={disableAnimation ? undefined : Animation(LinearTransition)}
       entering={FadeIn}
       exiting={FadeOut}
-      style={buttonStyle}
-      onPress={onPress}
-      onPressIn={handlePressIn}
-      onPressOut={handlePressOut}
+      style={inline ? { alignSelf: "flex-start" } : undefined}
     >
-      {ButtonContent}
-    </AnimatedPressable>
+      <AnimatedPressable
+        {...rest}
+        style={buttonStyle}
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+      >
+        {ButtonContent}
+      </AnimatedPressable>
+    </Reanimated.View>
   );
 });
 

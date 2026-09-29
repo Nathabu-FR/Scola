@@ -227,7 +227,6 @@ const ItemComponent = React.forwardRef<typeof Pressable, ListProps>(function Ite
         <AnimatedPressable
           {...rest}
           ref={ref as any}
-          layout={LAYOUT_ANIMATION}
           style={containerStyle}
           onPressIn={handlePressIn}
           onPressOut={handlePressOut}
@@ -247,7 +246,6 @@ const ItemComponent = React.forwardRef<typeof Pressable, ListProps>(function Ite
         <AnimatedPressable
           {...rest}
           ref={ref as any}
-          layout={LAYOUT_ANIMATION}
           style={containerStyle}
           onPressIn={handlePressIn}
           onPressOut={handlePressOut}

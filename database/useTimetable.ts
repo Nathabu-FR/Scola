@@ -35,6 +35,20 @@ export async function getCourseById(id: string): Promise<SharedCourse | undefine
   }
 }
 
+export async function updateCourseCustomStatus(courseId: string, customStatus?: string) {
+  const db = getDatabaseInstance();
+  const records = await db.get<Course>("courses")
+    .query(Q.where("courseId", courseId))
+    .fetch();
+  if (!records[0]) throw new Error("Ce cours n’est plus disponible dans ce compte.");
+
+  await safeWrite(db, async () => {
+    await records[0].update((record: Model) => {
+      (record as Course).customStatus = customStatus;
+    });
+  }, 10000, "updateCourseCustomStatus");
+}
+
 export function useTimetable(refresh = 0, weekNumber: number | number[] = 0, date: Date = new Date()) {
   const database = useDatabase();
   const [timetable, setTimetable] = useState<SharedCourseDay[]>([]);

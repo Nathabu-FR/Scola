@@ -4,7 +4,7 @@ import { t } from 'i18next';
 import { Papicons } from "@getpapillon/papicons";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { InteractionManager, Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { InteractionManager, Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -186,8 +186,6 @@ const TasksView: React.FC = () => {
   const hasHomeworkError = Boolean(homeworkError) || homeworkFailures.length > 0;
 
   const {
-    searchTerm,
-    setSearchTerm,
     sortMethod,
     setSortMethod,
     collapsedGroups,
@@ -325,12 +323,6 @@ const TasksView: React.FC = () => {
 
   return (
     <>
-      <Stack.SearchBar
-        placeholder={t('Tasks_Search_Placeholder')}
-        onChangeText={(e) => setSearchTerm(e.nativeEvent.text)}
-        autoCapitalize="none"
-      />
-
       {isAndroid ? (
         <Stack.Toolbar placement="left" asChild>
           <AndroidHeaderButton icon="Calendar" accessibilityLabel={weekLabel} onPress={toggleWeekPicker} />
@@ -395,6 +387,34 @@ const TasksView: React.FC = () => {
       )}
 
       <View style={styles.container}>
+        {Platform.OS === "web" && (
+          <Pressable
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: sortMethod === "undone" }}
+            accessibilityLabel="Afficher uniquement les devoirs non terminés"
+            onPress={() => setSortMethod(sortMethod === "undone" ? "date" : "undone")}
+            style={[
+              styles.desktopFilter,
+              {
+                borderColor: sortMethod === "undone" ? colors.primary : colors.border,
+                backgroundColor: sortMethod === "undone" ? `${colors.primary}18` : colors.card,
+                userSelect: "none",
+              },
+            ] as any}
+          >
+            <Papicons
+              name={sortMethod === "undone" ? "Check" : "Circle"}
+              size={19}
+              color={sortMethod === "undone" ? colors.primary : colors.text + "88"}
+            />
+            <Typography variant="body1" weight="semibold" selectable={false}>
+              Devoirs non terminés uniquement
+            </Typography>
+            <Typography variant="body2" color="textSecondary" style={{ marginLeft: "auto" }}>
+              {sortMethod === "undone" ? "Activé" : "Filtrer"}
+            </Typography>
+          </Pressable>
+        )}
         <GestureDetector gesture={panGesture}>
           <Reanimated.View style={[styles.pager, rowStyle]}>
             {pageOffsets.map(offset => {
@@ -414,7 +434,7 @@ const TasksView: React.FC = () => {
                       week={week}
                       homeworks={homeworkByWeek[week]}
                       animateItems={index === INITIAL_INDEX}
-                      searchTerm={searchTerm}
+                      searchTerm=""
                       sortMethod={sortMethod}
                       collapsedGroups={collapsedGroups}
                       toggleGroup={toggleGroup}
@@ -486,6 +506,18 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     overflow: "hidden",
+  },
+  desktopFilter: {
+    minHeight: 44,
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 2,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderRadius: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
   },
   pager: {
     flex: 1,

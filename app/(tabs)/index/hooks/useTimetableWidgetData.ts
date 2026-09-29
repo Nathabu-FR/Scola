@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createMMKV } from "react-native-mmkv";
 
 import { useTimetable } from "@/database/useTimetable";
-import { Course as SharedCourse, CourseStatus } from "@/services/shared/timetable";
+import { COURSE_CANCELLED_LABEL, Course as SharedCourse, CourseStatus } from "@/services/shared/timetable";
 import { useAccountStore } from "@/stores/account";
 
 const widgetCacheStorage = createMMKV({ id: "home-widget-cache" });
@@ -140,7 +140,7 @@ export const useTimetableWidgetData = (options: { showCancelled?: boolean } = {}
       const courses = cached.courses
         .map(deserializeCourse)
         .filter((course) => course.to.getTime() > Date.now())
-        .filter((course) => showCancelled || course.status !== CourseStatus.CANCELED)
+        .filter((course) => showCancelled || (course.status !== CourseStatus.CANCELED && course.customStatus !== COURSE_CANCELLED_LABEL))
         .sort((a, b) => a.from.getTime() - b.from.getTime());
 
       if (courses.length > 0) {
@@ -166,7 +166,7 @@ export const useTimetableWidgetData = (options: { showCancelled?: boolean } = {}
         date: day.date,
         courses: day.courses
           .filter((course) => course.to.getTime() > nowTimestamp)
-          .filter((course) => showCancelled || course.status !== CourseStatus.CANCELED)
+          .filter((course) => showCancelled || (course.status !== CourseStatus.CANCELED && course.customStatus !== COURSE_CANCELLED_LABEL))
           .sort((a, b) => a.from.getTime() - b.from.getTime())
       }))
       .filter((day) => day.courses.length > 0)

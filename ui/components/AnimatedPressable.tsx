@@ -22,6 +22,7 @@ type AnimatedPressableProps = PressableProps & {
   opacityTo?: number;
   hapticFeedback?: ExpoHaptics.ImpactFeedbackStyle;
   animated?: boolean;
+  layout?: any;
 };
 
 function AnimatedPressable({
@@ -31,6 +32,7 @@ function AnimatedPressable({
   hapticFeedback,
   animated = false,
   style,
+  layout,
   onPressIn,
   onPressOut,
   onPress,
@@ -83,6 +85,18 @@ function AnimatedPressable({
     () => (animated ? Animation(LinearTransition) : undefined),
     [animated]
   );
+  const layoutTransition = layout || layoutAnim;
+  const pressable = (
+    <ReanimatedPressable
+      {...props}
+      style={[style, Platform.OS === "web" ? ({ userSelect: "none" } as any) : undefined, animatedStyle]}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+    // onPress is now handled by the TapGestureHandler's onActivated prop
+    >
+      {children}
+    </ReanimatedPressable>
+  );
 
   return (
     <TapGestureHandler
@@ -91,16 +105,7 @@ function AnimatedPressable({
       maxDelayMs={0}
       onActivated={handleOnActivated}
     >
-      <ReanimatedPressable
-        {...props}
-        layout={props.layout || layoutAnim}
-        style={[style, Platform.OS === "web" ? ({ userSelect: "none" } as any) : undefined, animatedStyle]}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-      // onPress is now handled by the TapGestureHandler's onActivated prop
-      >
-        {children}
-      </ReanimatedPressable>
+      {layoutTransition ? <Reanimated.View layout={layoutTransition}>{pressable}</Reanimated.View> : pressable}
     </TapGestureHandler>
   );
 }

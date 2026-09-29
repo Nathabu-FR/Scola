@@ -7,7 +7,8 @@ import { t } from "i18next";
 import React, { useEffect, useState } from "react";
 
 import ModalOverhead from "@/components/ModalOverhead";
-import { getHomeworkById, updateHomeworkIsDone } from "@/database/useHomework";
+import { deleteCustomHomeworkFromDatabase, getHomeworkById, updateHomeworkIsDone } from "@/database/useHomework";
+import { useAccountStore } from "@/stores/account";
 import { getManager } from "@/services/shared";
 import AnimatedPressable from "@/ui/components/AnimatedPressable";
 import Icon from "@/ui/components/Icon";
@@ -18,7 +19,7 @@ import { getAttachmentIcon } from "@/utils/news/getAttachmentIcon";
 import { getSubjectColor } from "@/utils/subjects/colors";
 import { getSubjectEmoji } from "@/utils/subjects/emoji";
 import { getSubjectName } from "@/utils/subjects/name";
-import { Platform } from "react-native";
+import { Alert, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import List from "@/ui/new/List";
 import Typography from "@/ui/new/Typography";
@@ -32,6 +33,14 @@ const Task = () => {
   const router = useRouter();
   const theme = useTheme();
   const colors = theme.colors;
+  const activeAccountId = useAccountStore(state => state.lastUsedAccount);
+  const backHeader = (Platform.OS === "android" || Platform.OS === "web") ? (
+    <NativeHeaderSide side="Left">
+      <NativeHeaderPressable onPress={() => router.canGoBack() ? router.back() : router.replace("/")}>
+        <Icon size={28}><Papicons name="ArrowLeft" color="#8B5CF6" /></Icon>
+      </NativeHeaderPressable>
+    </NativeHeaderSide>
+  ) : null;
   const [task, setTask] = useState<Homework>();
   const [loading, setLoading] = useState(true);
   const [isDone, setIsDone] = useState(false);
@@ -64,14 +73,44 @@ const Task = () => {
 
   const setAsDone = async (done: boolean) => {
     if (!task) return;
-    if (!task.custom) {
-      const manager = getManager();
-      await manager?.setHomeworkCompletion(task, done);
+    try {
+      await updateHomeworkIsDone(id, done);
+    } catch (error) {
+      if (Platform.OS === "web") window.alert(`Ce devoir n’a pas pu être mis à jour.\n\n${String(error)}`);
+      else Alert.alert("Mise à jour impossible", "Ce devoir n’a pas pu être mis à jour.");
+      return;
     }
-
-    updateHomeworkIsDone(id, done);
     setIsDone(done);
+    if (!task.custom) {
+      try {
+        await getManager()?.setHomeworkCompletion(task, done);
+      } catch {
+        // Completion stays saved locally when the school service is read-only.
+      }
+    }
   }
+
+  const deletePersonalTask = () => {
+    const remove = async () => {
+      if (!task || !activeAccountId) return;
+      try {
+        await deleteCustomHomeworkFromDatabase(id, activeAccountId);
+        router.back();
+      } catch (error) {
+        if (Platform.OS === "web") window.alert(String(error));
+        else Alert.alert("Suppression impossible", String(error));
+      }
+    };
+
+    if (Platform.OS === "web") {
+      if (window.confirm("Supprimer définitivement ce devoir personnel ?")) void remove();
+      return;
+    }
+    Alert.alert("Supprimer ce devoir ?", "Ce devoir personnel sera supprimé de ce compte.", [
+      { text: "Annuler", style: "cancel" },
+      { text: "Supprimer", style: "destructive", onPress: () => void remove() },
+    ]);
+  };
 
   const insets = useSafeAreaInsets();
   const { paddingLeft: contentPaddingLeft, paddingRight: contentPaddingRight } = useSafeHorizontalPadding(16);
@@ -81,24 +120,16 @@ const Task = () => {
   });
 
   if (loading) {
-    return <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}><ActivityIndicator /></View>;
+    return <>{backHeader}<View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}><ActivityIndicator /></View></>;
   }
 
   if (!task) {
-    return <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}><Typography variant="title">{t("Tab_Tasks")}</Typography></View>;
+    return <>{backHeader}<View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}><Typography variant="title">{t("Tab_Tasks")}</Typography></View></>;
   }
 
   return (
     <>
-      {Platform.OS === "android" && (
-        <NativeHeaderSide side="Left">
-          <NativeHeaderPressable onPress={() => router.back()}>
-            <Icon size={28}>
-              <Papicons name="ArrowLeft" />
-            </Icon>
-          </NativeHeaderPressable>
-        </NativeHeaderSide>
-      )}
+      {backHeader}
 
       {Platform.OS !== "android" && (
         <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: theme.colors.overground, zIndex: -10 }}>
@@ -216,6 +247,14 @@ const Task = () => {
                 </Typography>
               </List.Item>
             ))}
+          </List.Section>
+        )}
+        {task.custom && (
+          <List.Section>
+            <List.Item onPress={deletePersonalTask}>
+              <List.Leading><Icon><Papicons name="Trash" color="#E5484D" /></Icon></List.Leading>
+              <Typography variant="title" style={{ color: "#E5484D" }}>Supprimer ce devoir perso</Typography>
+            </List.Item>
           </List.Section>
         )}
       </List>

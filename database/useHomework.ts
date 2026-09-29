@@ -184,8 +184,17 @@ export async function addHomeworkToDatabase(homeworks: SharedHomework[]) {
       !homeworkIds.includes(dbHomework.homeworkId)
   );
 
-  for (const homework of homeworksToDelete) {
-    await homework.markAsDeleted();
+  if (homeworksToDelete.length > 0) {
+    await safeWrite(
+      db,
+      async () => {
+        for (const homework of homeworksToDelete) {
+          await homework.markAsDeleted();
+        }
+      },
+      10000,
+      "removeStaleHomeworks"
+    );
   }
 
   for (const hw of homeworks) {
@@ -201,8 +210,17 @@ export async function addHomeworkToDatabase(homeworks: SharedHomework[]) {
       .query(Q.where("homeworkId", oldId))
       .fetch();
 
-    for (const oldRecord of oldExisting) {
-      await oldRecord.markAsDeleted();
+    if (oldExisting.length > 0) {
+      await safeWrite(
+        db,
+        async () => {
+          for (const oldRecord of oldExisting) {
+            await oldRecord.markAsDeleted();
+          }
+        },
+        10000,
+        "removeMigratedHomework"
+      );
     }
 
     if (existing.length === 0) {
@@ -306,8 +324,9 @@ export async function updateHomeworkIsDone(
     .fetch();
 
   if (existing.length === 0) {
-    warn(`Homework with ID ${homeworkId} not found`);
-    return;
+    const message = `Homework with ID ${homeworkId} not found`;
+    warn(message);
+    throw new Error(message);
   }
 
   const recordToUpdate = existing[0];
@@ -323,6 +342,25 @@ export async function updateHomeworkIsDone(
     10000,
     "updateHomeworkIsDone"
   );
+}
+
+export async function deleteCustomHomeworkFromDatabase(
+  homeworkId: string,
+  accountId: string
+) {
+  const db = getDatabaseInstance();
+  const records = await db
+    .get<Homework>("homework")
+    .query(Q.where("homeworkId", homeworkId), Q.where("createdByAccount", accountId))
+    .fetch();
+  const record = records[0];
+  if (!record || !record.custom) {
+    throw new Error("Ce devoir personnel n’existe plus pour ce compte.");
+  }
+
+  await safeWrite(db, async () => {
+    await record.markAsDeleted();
+  }, 10000, "deleteCustomHomework");
 }
 
 export function getDateRangeOfWeek(

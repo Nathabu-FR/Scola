@@ -43,3 +43,6 @@ export enum CourseStatus {
   ONLINE,
   EVALUATED
 }
+
+export const COURSE_CANCELLED_LABEL = "Cours annulé";
+export const COURSE_TEACHER_ABSENT_LABEL = "Professeur absent";

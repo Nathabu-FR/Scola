@@ -118,6 +118,7 @@
     "turboself-api": "^2.1.9",
     "typescript-eslint": "^8.49.0",
     "zustand": "^5.0.9",
+    "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-http": "^2.6.1"
   },
   "devDependencies": {

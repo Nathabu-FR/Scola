@@ -1,13 +1,12 @@
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 
-import { Account, ServiceAccount, Services } from "@/stores/account/types";
+import { Account, Services } from "@/stores/account/types";
 
 let mockState: {
   accounts: Account[];
   lastUsedAccount: string;
   addAccount: (account: Account) => void;
   setLastUsedAccount: (accountId: string) => void;
-  addServiceToAccount: (accountId: string, service: ServiceAccount) => void;
 };
 
 jest.mock("expo-router", () => ({
@@ -27,7 +26,7 @@ jest.mock("@/utils/uuid/uuid", () => {
   return { __esModule: true, default: () => `mock-uuid-${++id}` };
 });
 
-import { attachMockDataToCurrentAccount, createMockProfile } from "./account";
+import { createMockProfile } from "./account";
 
 const createState = () => {
   mockState = {
@@ -38,13 +37,6 @@ const createState = () => {
     },
     setLastUsedAccount: accountId => {
       mockState.lastUsedAccount = accountId;
-    },
-    addServiceToAccount: (accountId, service) => {
-      mockState.accounts = mockState.accounts.map(account =>
-        account.id === accountId
-          ? { ...account, services: [...account.services, service] }
-          : account
-      );
     },
   };
 };
@@ -62,7 +54,7 @@ describe("Mock Data account setup", () => {
     expect(first.services[0].serviceId).toBe(Services.MOCK_DATA);
   });
 
-  it("attaches Mock Data to the current account only once", async () => {
+  it("keeps Mock Data in its own account when a real account is selected", async () => {
     const now = new Date().toISOString();
     mockState.accounts = [
       {
@@ -77,12 +69,13 @@ describe("Mock Data account setup", () => {
     ];
     mockState.lastUsedAccount = "offline-profile";
 
-    await attachMockDataToCurrentAccount();
-    await attachMockDataToCurrentAccount();
+    const mockAccount = await createMockProfile();
 
-    const services = mockState.accounts[0].services;
-    expect(services).toHaveLength(1);
-    expect(services[0].serviceId).toBe(Services.MOCK_DATA);
+    expect(mockState.accounts).toHaveLength(2);
+    expect(mockState.accounts[0].services).toHaveLength(0);
     expect(mockState.accounts[0].firstName).toBe("Alex");
+    expect(mockAccount.id).not.toBe("offline-profile");
+    expect(mockAccount.services[0].serviceId).toBe(Services.MOCK_DATA);
+    expect(mockState.lastUsedAccount).toBe(mockAccount.id);
   });
 });

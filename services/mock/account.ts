@@ -34,10 +34,12 @@ const runMockSetup = (action: () => Promise<unknown>) => {
     // means the failure is at least visible in the console there, on top
     // of the native alert where that does work.
     logError(`Mock Data setup failed: ${String(cause)}`, "MockData");
-    Alert.alert(
-      "Erreur Mock Data",
-      `Impossible de préparer le compte fictif : ${String(cause)}`
-    );
+    const message = `Impossible de préparer le compte fictif : ${String(cause)}`;
+    if (Platform.OS === "web" && typeof window !== "undefined") {
+      window.alert(`Erreur Mock Data\n\n${message}`);
+    } else {
+      Alert.alert("Erreur Mock Data", message);
+    }
   });
 };
 
@@ -47,7 +49,8 @@ export async function createMockProfile(): Promise<Account> {
     account =>
       account.firstName === "Camille" &&
       account.lastName === "Martin" &&
-      account.services.some(service => service.serviceId === Services.MOCK_DATA)
+      account.services.length === 1 &&
+      account.services[0].serviceId === Services.MOCK_DATA
   );
 
   if (existing) {
@@ -72,76 +75,10 @@ export async function createMockProfile(): Promise<Account> {
   return account;
 }
 
-export async function attachMockDataToCurrentAccount(): Promise<Account> {
-  const store = useAccountStore.getState();
-  const account = store.accounts.find(
-    item => item.id === store.lastUsedAccount
-  );
-  if (!account) {
-    return createMockProfile();
-  }
-
-  if (
-    !account.services.some(service => service.serviceId === Services.MOCK_DATA)
-  ) {
-    store.addServiceToAccount(account.id, createMockService());
-  }
-
-  const updatedAccount =
-    useAccountStore.getState().accounts.find(item => item.id === account.id) ??
-    account;
-  await finishMockAccountSetup(updatedAccount.id);
-  return updatedAccount;
-}
-
 export function openMockDataAccountChooser(): void {
   useSettingsStore.getState().mutateProperty("personalization", { mockDataEnabled: true });
-  const store = useAccountStore.getState();
-  const currentAccount = store.accounts.find(
-    account => account.id === store.lastUsedAccount
-  );
-
-  if (!currentAccount) {
-    runMockSetup(createMockProfile);
-    return;
-  }
-
-  if (
-    currentAccount.services.some(
-      service => service.serviceId === Services.MOCK_DATA
-    )
-  ) {
-    runMockSetup(() => finishMockAccountSetup(currentAccount.id));
-    return;
-  }
-
-  // This used to ask (via a native Alert.alert with a `buttons` array)
-  // whether to create a brand new mock profile or attach mock data to the
-  // account already signed in. That dialog's buttons don't reliably work
-  // on web/desktop builds (Electron, Tauri), which made the whole "Mock
-  // Data" onboarding option look broken whenever an account already
-  // existed - the far more common case once someone has tested the app
-  // before. Attaching to the current account is the safer default (it
-  // never creates a duplicate profile), and is always reversible from the
-  // accounts settings afterwards.
-  if (Platform.OS === "web") {
-    runMockSetup(attachMockDataToCurrentAccount);
-    return;
-  }
-
-  Alert.alert(
-    "Ajouter Mock Data",
-    "Comment souhaites-tu utiliser les données fictives ?",
-    [
-      { text: "Annuler", style: "cancel" },
-      {
-        text: "Nouveau profil",
-        onPress: () => runMockSetup(createMockProfile),
-      },
-      {
-        text: "Compte actuel",
-        onPress: () => runMockSetup(attachMockDataToCurrentAccount),
-      },
-    ]
-  );
+  // Demo data always belongs to its own account. This keeps it from mixing
+  // with a real student's school data; createMockProfile reuses the existing
+  // demo profile when the user returns to it later.
+  runMockSetup(createMockProfile);
 }

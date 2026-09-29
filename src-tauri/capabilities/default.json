@@ -29,6 +29,9 @@
         },
         {
           "url": "https://data.education.gouv.fr/**"
+        },
+        {
+          "url": "https://calendar.google.com/**"
         }
       ]
     }

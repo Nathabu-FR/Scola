@@ -278,10 +278,10 @@ const WallpaperModal = () => {
       />
 
       <NativeHeaderSide side="Left" key={currentWallpaper?.id + ":" + "upload:" + (hasCustomWallpaper ? "true" : "false")}>
-        {Platform.OS === 'android' ? (
-          <NativeHeaderPressable onPress={() => router.back()}>
+        {Platform.OS === 'android' || Platform.OS === 'web' ? (
+          <NativeHeaderPressable onPress={() => router.canGoBack() ? router.back() : router.replace("/")}>
             <Icon size={28}>
-              <Papicons name="Cross" />
+              <Papicons name="ArrowLeft" color="#8B5CF6" />
             </Icon>
           </NativeHeaderPressable>
         ) : (

@@ -5,7 +5,7 @@ import React from 'react';
 import { FlatList } from "react-native";
 import * as DateLocale from 'date-fns/locale';
 
-import { CourseStatus } from "@/services/shared/timetable";
+import { COURSE_CANCELLED_LABEL, CourseStatus } from "@/services/shared/timetable";
 import Course from "@/ui/components/Course";
 import { getSubjectColor } from "@/utils/subjects/colors";
 import { getSubjectName } from "@/utils/subjects/name";
@@ -63,7 +63,7 @@ const HomeTimeTableWidget = React.memo(() => {
             teacher={item.teacher}
             room={item.room}
             color={getSubjectColor(item.subject)}
-            status={{ label: item.customStatus ? item.customStatus : getStatusText(item.status), canceled: (item.status === CourseStatus.CANCELED) }}
+            status={{ label: item.customStatus ? item.customStatus : getStatusText(item.status), canceled: item.status === CourseStatus.CANCELED || item.customStatus === COURSE_CANCELLED_LABEL }}
             variant="primary"
             start={Math.floor(item.from.getTime() / 1000)}
             end={Math.floor(item.to.getTime() / 1000)}

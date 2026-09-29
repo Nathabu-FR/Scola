@@ -24,14 +24,11 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Image, Platform, Pressable, View } from "react-native";
 import { ScrollView } from "react-native-gesture-handler";
-import AnimatedPressable from "@/ui/components/AnimatedPressable";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function QRCodeAndCardsPage() {
   const [wallets, setWallets] = useState<Balance[]>([]);
   const safePadding = useSafeHorizontalPadding(20);
   const accounts = useAccountStore(state => state.accounts);
-  const insets = useSafeAreaInsets();
   const lastUsedAccount = useAccountStore(state => state.lastUsedAccount);
 
   const account = accounts.find(a => a.id === lastUsedAccount);
@@ -58,6 +55,7 @@ export default function QRCodeAndCardsPage() {
   return (
     <>
       <TabHeader
+        showAndroidBackButton
         modal
         onHeightChanged={setHeaderHeight}
         title={
@@ -79,26 +77,6 @@ export default function QRCodeAndCardsPage() {
           ) : undefined
         }
       />
-
-      <AnimatedPressable
-        accessibilityRole="button"
-        accessibilityLabel="Retour"
-        onPress={() => router.canGoBack() ? router.back() : router.replace("/")}
-        style={{
-          position: "absolute",
-          top: insets.top + 14,
-          left: 18,
-          zIndex: 110,
-          width: 38,
-          height: 38,
-          alignItems: "center",
-          justifyContent: "center",
-          borderRadius: 20,
-          backgroundColor: "#8B5CF620",
-        }}
-      >
-        <Papicons name="ArrowLeft" size={22} color="#8B5CF6" />
-      </AnimatedPressable>
 
       {wallets?.length === 0 ? (
         <Stack flex hAlign={"center"} vAlign={"center"} height={"100%"} padding={20} style={safePadding}>

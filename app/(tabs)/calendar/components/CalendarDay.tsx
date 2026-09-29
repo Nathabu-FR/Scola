@@ -4,7 +4,7 @@ import React, { useMemo, useRef } from "react";
 import { FlatList, RefreshControl, StyleSheet, useWindowDimensions } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Course as SharedCourse, CourseStatus } from "@/services/shared/timetable";
+import { COURSE_CANCELLED_LABEL, Course as SharedCourse, CourseStatus } from "@/services/shared/timetable";
 import { TransportStorage } from "@/stores/account/types";
 import Course from "@/ui/components/Course";
 import { Colors, getSubjectColor } from "@/utils/subjects/colors";
@@ -168,7 +168,7 @@ export const CalendarDay = React.memo(({ dayDate, courses, isRefreshing, onRefre
                   label: item.customStatus
                     ? item.customStatus
                     : getStatusText(item.status),
-                  canceled: item.status === CourseStatus.CANCELED,
+                  canceled: item.status === CourseStatus.CANCELED || item.customStatus === COURSE_CANCELLED_LABEL,
                 }}
                 variant="primary"
                 start={Math.floor(item.from.getTime() / 1000)}

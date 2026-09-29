@@ -165,6 +165,7 @@ export default function QRCodeAndCardsPage() {
       />
 
       <TabHeader
+        showAndroidBackButton
         modal
         onHeightChanged={setHeaderHeight}
         title={
@@ -184,15 +185,6 @@ export default function QRCodeAndCardsPage() {
           />
         }
       />
-
-      <AnimatedPressable
-        accessibilityRole="button"
-        accessibilityLabel="Retour aux cartes"
-        onPress={() => router.back()}
-        style={{ position: "absolute", top: insets.top + 14, left: 18, zIndex: 110, width: 38, height: 38, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: "#8B5CF620" }}
-      >
-        <Papicons name="ArrowLeft" size={22} color="#8B5CF6" />
-      </AnimatedPressable>
 
       <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ paddingTop: headerHeight - 12 }}>
         <View style={{ padding: 15, ...safePadding, flex: 1, gap: 20 }}>

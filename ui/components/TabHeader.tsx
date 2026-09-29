@@ -1,8 +1,10 @@
 
 import { useTheme } from "expo-router/react-navigation";
+import { router } from "expo-router";
+import { Papicons } from "@getpapillon/papicons";
 import { ProgressiveBlurView } from '@sbaiahmed1/react-native-blur';
 import React, { useEffect } from 'react';
-import { Platform, useWindowDimensions, View } from 'react-native';
+import { Platform, Pressable, useWindowDimensions, View } from 'react-native';
 import Reanimated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -112,6 +114,16 @@ const TabHeader: React.FC<TabHeaderProps> = ({
             justifyContent: 'center',
           }}
         >
+          {showAndroidBackButton && Platform.OS === 'web' && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Retour"
+              onPress={() => router.canGoBack() ? router.back() : router.replace("/")}
+              style={{ width: 36, height: 36, alignItems: "center", justifyContent: "center" }}
+            >
+              <Papicons name="ArrowLeft" size={22} color="#8B5CF6" />
+            </Pressable>
+          )}
           {showAndroidBackButton && Platform.OS === 'android' && (
             <View style={{
               marginTop: -2,

@@ -6,6 +6,7 @@ import { filterEventsByWeek } from './event-filter';
 import { getAllIcals, updateProviderIfUnknown } from './ical-database';
 import { detectProvider } from './ical-utils';
 import { parseICalString } from './parsers/ical-event-parser';
+import { appFetch } from '@/utils/network/fetch';
 
 export interface ICalEvent {
   uid: string;
@@ -29,9 +30,26 @@ export interface ParsedICalData {
   schoolName?: string;
 }
 
+/** Google Calendar's embed page is HTML; turn public embeds into their ICS feed. */
+export function normalizeICalFeedUrl(rawUrl: string): string {
+  const parsed = new URL(rawUrl);
+  if (
+    parsed.hostname.toLowerCase() === 'calendar.google.com' &&
+    parsed.pathname.replace(/\/+$/, '').endsWith('/calendar/embed')
+  ) {
+    const calendarId = parsed.searchParams.get('src');
+    if (!calendarId) {
+      throw new Error('Ce lien Google Calendar ne contient pas de calendrier à importer.');
+    }
+    return `https://calendar.google.com/calendar/ical/${encodeURIComponent(calendarId)}/public/basic.ics`;
+  }
+  return parsed.toString();
+}
+
 export async function fetchAndParseICal(url: string): Promise<ParsedICalData> {
   try {
-    const response = await fetch(url);
+    const feedUrl = normalizeICalFeedUrl(url);
+    const response = await appFetch(feedUrl);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -45,7 +63,7 @@ export async function fetchAndParseICal(url: string): Promise<ParsedICalData> {
       isADE,
       isHyperplanning,
       provider,
-      url,
+      url: feedUrl,
       isSchool,
       schoolName
     };

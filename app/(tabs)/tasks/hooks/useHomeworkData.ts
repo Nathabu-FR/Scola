@@ -8,7 +8,7 @@ import { useLoadErrorAlert } from "@/hooks/useLoadErrorAlert";
 import { useManagerSubscription } from "@/hooks/useManagerSubscription";
 import { Capabilities, ServiceFailure } from "@/services/shared/types";
 import { generateId } from "@/utils/generateId";
-import { error } from '@/utils/logger/logger';
+import { error, warn } from '@/utils/logger/logger';
 import { trackAdvancedEvent } from '@/utils/logger/analytics';
 import { notificationAsync, NotificationFeedbackType } from "expo-haptics";
 
@@ -206,15 +206,10 @@ export const useHomeworkData = (weeks: number[], alert: any) => {
       const id = item.custom && item.id ? item.id : homeworkKey(item);
 
       try {
-        if (!item.custom) {
-          const manager = getManager();
-          await manager.setHomeworkCompletion(item, done);
-        }
-
-        updateHomeworkIsDone(id, done);
-
-        // The optimistic entry is what flips the checkbox: the database write
-        // and its cache read land a moment later.
+        // Persist the checkbox locally first. Some school services, including
+        // PRONOTE configurations that expose read-only homework, cannot update
+        // completion remotely; that must not make the control appear broken.
+        await updateHomeworkIsDone(id, done);
         setHomework(prev => ({
           ...prev,
           [id]: {
@@ -223,6 +218,17 @@ export const useHomeworkData = (weeks: number[], alert: any) => {
           }
         }));
         scheduleRefresh();
+
+        if (!item.custom) {
+          const accountManager = getManager();
+          if (accountManager) {
+            try {
+              await accountManager.setHomeworkCompletion(item, done);
+            } catch (remoteError) {
+              warn(`Could not sync homework completion with the school service: ${String(remoteError)}`);
+            }
+          }
+        }
         if (done) {
           notificationAsync(NotificationFeedbackType.Success);
         }
@@ -239,15 +245,6 @@ export const useHomeworkData = (weeks: number[], alert: any) => {
             technical: String(err)
           });
 
-        updateHomeworkIsDone(id, !done);
-        setHomework(prev => ({
-          ...prev,
-          [id]: {
-            ...(prev[id] ?? item),
-            isDone: !done,
-          }
-        }));
-        scheduleRefresh();
       }
     },
     [alert, scheduleRefresh]

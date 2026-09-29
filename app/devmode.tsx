@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
-import { Alert, Switch, View } from "react-native";
+import { Alert, Modal, Platform, Pressable, Switch, TextInput, View } from "react-native";
 import { router } from "expo-router";
-import { useHeaderHeight, useTheme } from "expo-router/react-navigation";
+import { useTheme } from "expo-router/react-navigation";
 import { Papicons } from "@getpapillon/papicons";
 
 import { useLogStore, useNetworkStore } from "@/stores/logs";
@@ -9,8 +9,6 @@ import List from "@/ui/new/List";
 import Stack from "@/ui/components/Stack";
 import Typography from "@/ui/new/Typography";
 import Icon from "@/ui/components/Icon";
-import SectionHeader from "@/ui/components/SectionHeader";
-import Button from "@/ui/new/Button";
 import { database } from "@/database";
 import { ClearDatabaseForAccount } from "@/database/DatabaseProvider";
 import { useAccountStore } from "@/stores/account";
@@ -41,8 +39,9 @@ export default function DevMode() {
   const { colors } = theme;
   const [visibleCount, setVisibleCount] = useState<number>(5);
   const [logsVisible, setLogsVisible] = useState<boolean>(false);
+  const [sourceEditorVisible, setSourceEditorVisible] = useState(false);
+  const [sourceDraft, setSourceDraft] = useState("");
   const hosts = useNetworkStore((state) => state.hosts);
-  const headerHeight = useHeaderHeight();
   const mockDataEnabled = useSettingsStore(
     state => state.personalization.mockDataEnabled ?? false
   );
@@ -114,105 +113,96 @@ export default function DevMode() {
     useMagicStore.getState().clear();
   }
 
-  const handleDangerousAction = (action: () => void) => {
-    Alert.alert(
-      "Confirmation",
-      `Es-tu sûr de vouloir faire cette opération ?`,
-      [
-        { text: "Annuler", style: "cancel" },
-        {
-          text: "Confirmer",
-          style: "destructive",
-          onPress: async () => {
-            await action();
-            Alert.alert("Succès", `Cette opération a été effectué avec succès.`);
-          },
-        },
-      ]
-    );
+  const showMessage = (title: string, message: string) => {
+    if (Platform.OS === "web") window.alert(`${title}\n\n${message}`);
+    else Alert.alert(title, message);
+  };
+
+  const confirmAction = (title: string, message: string, confirmLabel = "Confirmer") => {
+    if (Platform.OS === "web") return Promise.resolve(window.confirm(`${title}\n\n${message}`));
+    return new Promise<boolean>(resolve => {
+      Alert.alert(title, message, [
+        { text: "Annuler", style: "cancel", onPress: () => resolve(false) },
+        { text: confirmLabel, style: "destructive", onPress: () => resolve(true) },
+      ], { cancelable: true, onDismiss: () => resolve(false) });
+    });
+  };
+
+  const handleDangerousAction = async (action: () => Promise<unknown> | unknown) => {
+    if (!(await confirmAction("Confirmation", "Es-tu sûr de vouloir faire cette opération ?"))) return;
+    try {
+      await action();
+      showMessage("Succès", "Cette opération a été effectuée avec succès.");
+    } catch (error) {
+      showMessage("Erreur", String(error));
+    }
   };
 
   const resetModel = async () => {
     try {
       const result = await ModelManager.reset();
       if (result.success) {
-        Alert.alert(
-          "Succès",
-          "Le modèle a été réinitialisé avec succès. Il sera retéléchargé au prochain démarrage."
-        );
+        showMessage("Succès", "Le modèle a été réinitialisé avec succès. Il sera retéléchargé au prochain démarrage.");
       } else {
-        Alert.alert("Erreur", `Échec du reset: ${result.error}`);
+        showMessage("Erreur", `Échec du reset : ${result.error}`);
       }
     } catch (error) {
-      Alert.alert("Erreur", `Erreur lors du reset: ${String(error)}`);
+      showMessage("Erreur", `Erreur lors du reset : ${String(error)}`);
     }
   }
 
-  const handlePress = async (action: () => void) => {
-    await action();
-    Alert.alert("Succès", `Cette opération a été effectué avec succès.`);
+  const handlePress = async (action: () => Promise<unknown> | unknown) => {
+    try {
+      const result = await action();
+      if (result && typeof result === "object" && "success" in result && result.success === false) {
+        showMessage("Erreur", "error" in result ? String(result.error) : "L’opération a échoué.");
+        return;
+      }
+      showMessage("Succès", "Cette opération a été effectuée avec succès.");
+    } catch (error) {
+      showMessage("Erreur", String(error));
+    }
   }
 
-  const setMockDataEnabled = (enabled: boolean) => {
+  const setMockDataEnabled = async (enabled: boolean) => {
     if (enabled) {
-      Alert.alert(
-        "Activer Mock Data",
-        "Cette option de développement rend un service scolaire fictif disponible dans l'ajout de compte.",
-        [
-          { text: "Annuler", style: "cancel" },
-          {
-            text: "Activer",
-            onPress: () => {
-              useSettingsStore.getState().mutateProperty("personalization", {
-                mockDataEnabled: true,
-              });
-            },
-          },
-        ],
-      );
+      if (await confirmAction("Activer les données fictives", "Un service scolaire fictif apparaîtra dans l’ajout de compte.", "Activer")) {
+        useSettingsStore.getState().mutateProperty("personalization", { mockDataEnabled: true });
+      }
       return;
     }
 
-    Alert.alert(
-      "Désactiver Mock Data",
-      "Les services Mock Data seront retirés de tous les comptes et leurs données locales seront supprimées.",
-      [
-        { text: "Annuler", style: "cancel" },
-        {
-          text: "Désactiver",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              const accountStore = useAccountStore.getState();
-              const mockServices = accountStore.accounts.flatMap(account =>
-                account.services.filter(service => service.serviceId === Services.MOCK_DATA)
-              );
-
-              for (const service of mockServices) {
-                await ClearDatabaseForAccount(service.id);
-                getManager()?.removeService(service.id);
-                useAccountStore.getState().removeServiceFromAccount(service.id);
-              }
-
-              useSettingsStore.getState().mutateProperty("personalization", {
-                mockDataEnabled: false,
-              });
-
-              const activeAccountId = useAccountStore.getState().lastUsedAccount;
-              if (activeAccountId) {
-                try {
-                  await initializeAccountManager(activeAccountId);
-                } catch (cause) {
-                  warn(`Mock Data was disabled, but the account manager could not refresh: ${String(cause)}`);
-                }
-              }
-            } catch (cause) {
-              Alert.alert("Erreur", `Impossible de désactiver Mock Data : ${String(cause)}`);
-            }
-          },
-        },
-      ],
-    );
+    if (!(await confirmAction("Désactiver les données fictives", "Les services fictifs et leurs données locales seront supprimés.", "Désactiver"))) return;
+    try {
+      const profiles = useAccountStore.getState().accounts;
+      const mockServices = profiles.flatMap(account =>
+        account.services
+          .filter(service => service.serviceId === Services.MOCK_DATA)
+          .map(service => ({ service, profile: account }))
+      );
+      for (const { service } of mockServices) {
+        await ClearDatabaseForAccount(service.id);
+        getManager()?.removeService(service.id);
+        useAccountStore.getState().removeServiceFromAccount(service.id);
+      }
+      for (const profile of profiles) {
+        if (profile.services.length > 0 && profile.services.every(service => service.serviceId === Services.MOCK_DATA)) {
+          await ClearDatabaseForAccount(profile.id);
+          useAccountStore.getState().removeAccount(profile);
+        }
+      }
+      useSettingsStore.getState().mutateProperty("personalization", { mockDataEnabled: false });
+      const activeAccountId = useAccountStore.getState().lastUsedAccount;
+      if (activeAccountId) {
+        try {
+          await initializeAccountManager(activeAccountId);
+        } catch (cause) {
+          warn(`Mock Data was disabled, but the account manager could not refresh: ${String(cause)}`);
+        }
+      }
+    } catch (cause) {
+      showMessage("Erreur", `Impossible de désactiver les données fictives : ${String(cause)}`);
+    }
   };
 
   const forceAllTips = useTipsStore(state => state.forceAll);
@@ -220,10 +210,7 @@ export default function DevMode() {
   const triggerAllTips = async () => {
     useTipsStore.getState().setForceAll(true);
     await showAllTips();
-    Alert.alert(
-      "Astuces forcées",
-      "Chaque astuce réapparaîtra sur son écran sans attendre le nombre d'ouvertures habituel, et sans consommer ses passages."
-    );
+    showMessage("Astuces forcées", "Chaque astuce réapparaîtra sur son écran sans attendre le nombre d'ouvertures habituel, et sans consommer ses passages.");
   };
 
   // Only lifts our own override. TipKit's `showAllTipsForTesting` has no
@@ -232,29 +219,15 @@ export default function DevMode() {
   // just not re-applied at the next launch.
   const stopForcingTips = () => {
     useTipsStore.getState().setForceAll(false);
-    Alert.alert(
-      "Astuces",
-      "Les astuces reprennent leur rythme normal. Celles déjà à l'écran le resteront jusqu'au prochain lancement."
-    );
+    showMessage("Astuces", "Les astuces reprennent leur rythme normal. Celles déjà à l'écran le resteront jusqu'au prochain lancement.");
   };
 
-  const resetAllTips = () => {
-    Alert.alert(
-      "Réinitialiser les astuces",
-      "Les compteurs d'ouverture et d'affichage repartent de zéro. TipKit n'accepte d'oublier les astuces déjà fermées qu'au démarrage, alors elles reviendront au prochain lancement de l'app.",
-      [
-        { text: "Annuler", style: "cancel" },
-        {
-          text: "Réinitialiser",
-          style: "destructive",
-          onPress: () => {
-            const tips = useTipsStore.getState();
-            tips.reset();
-            tips.requestDatastoreReset();
-          },
-        },
-      ]
-    );
+  const resetAllTips = async () => {
+    if (!(await confirmAction("Réinitialiser les astuces", "Les compteurs repartent de zéro et les astuces déjà fermées reviendront au prochain lancement.", "Réinitialiser"))) return;
+    const tips = useTipsStore.getState();
+    tips.reset();
+    tips.requestDatastoreReset();
+    showMessage("Astuces", "Les compteurs ont été réinitialisés.");
   };
 
   return (
@@ -371,19 +344,15 @@ export default function DevMode() {
             <Papicons name="Bus" color={colors.text + 88} />
             <List.Label>Transport</List.Label>
           </List.SectionTitle>
-          <List.Item onPress={() => handlePress(() => {
-            initializeTransport(undefined).then(transport => {
-              console.log(transport);
-            });
+          <List.Item onPress={() => void handlePress(async () => {
+            const transport = await initializeTransport(undefined);
+            console.log(transport);
           })}>
             <Typography variant="action">Initialiser sans adresse</Typography>
           </List.Item>
-          <List.Item onPress={() => handlePress(() => {
-            initializeTransport("106 Rue de la Pompe, 75016 Paris").then(
-              transport => {
-                console.log(transport);
-              }
-            );
+          <List.Item onPress={() => void handlePress(async () => {
+            const transport = await initializeTransport("106 Rue de la Pompe, 75016 Paris");
+            console.log(transport);
           })}>
             <Typography variant="action">Initialiser avec une adresse</Typography>
           </List.Item>
@@ -401,15 +370,15 @@ export default function DevMode() {
                 </Typography>
               </List.Trailing>
             </List.Item>
-            <List.Item onPress={() => ModelManager.refresh}>
+            <List.Item onPress={() => void handlePress(() => ModelManager.refresh())}>
               <Typography variant="action">Rafraîchir le modèle</Typography>
             </List.Item>
-            <List.Item onPress={() => handlePress(resetModel)}>
+            <List.Item onPress={() => void resetModel()}>
               <Typography variant="action">Réinitialiser le modèle</Typography>
             </List.Item>
             <List.Item onPress={() => {
               const status = ModelManager.getStatus();
-              Alert.alert(
+              showMessage(
                 "Statut du modèle",
                 `Modèle chargé: ${status.hasModel ? "Oui" : "Non"}\n` +
                   `Max Length: ${status.maxLen}\n` +
@@ -427,9 +396,9 @@ export default function DevMode() {
                     true
                   );
                   if ("error" in result) {
-                    Alert.alert("Erreur de prédiction", result.error);
+                    showMessage("Erreur de prédiction", result.error);
                   } else {
-                    Alert.alert(
+                    showMessage(
                       "Test de prédiction réussi",
                       `Prédiction: ${result.predicted}\nScores: ${result.scores
                         .slice(0, 3)
@@ -438,36 +407,15 @@ export default function DevMode() {
                     );
                   }
                 } catch (error) {
-                  Alert.alert("Erreur", `Erreur lors du test: ${String(error)}`);
+                  showMessage("Erreur", `Erreur lors du test : ${String(error)}`);
                 }
               }}>
               <Typography variant="action">Tester les prédictions</Typography>
             </List.Item>
             <List.Item onPress={() => {
               const currentURL = useSettingsStore.getState().personalization.magicModelURL || MAGIC_URL;
-  
-              Alert.prompt(
-                "Mise à jour de la source", undefined,
-                [
-                  {
-                    text: "Annuler",
-                    style: "cancel",
-                  },
-                  {
-                    text: "Valider",
-                    onPress: (newURL?: string) => {
-                      if (newURL && newURL.trim()) {
-                        useSettingsStore.getState().mutateProperty("personalization", {
-                          magicModelURL: newURL.trim(),
-                        });
-                        Alert.alert("Succès", "URL du modèle Magic mise à jour!");
-                      }
-                    },
-                  },
-                ],
-                "plain-text",
-                currentURL
-              );
+              setSourceDraft(currentURL);
+              setSourceEditorVisible(true);
             }}>
               <Typography variant="action">Changer la source de Magic</Typography>
             </List.Item>
@@ -529,6 +477,39 @@ export default function DevMode() {
           </List.Item>
         </List.Section>
       </List>
+      <Modal visible={sourceEditorVisible} transparent animationType="fade" onRequestClose={() => setSourceEditorVisible(false)}>
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 24, backgroundColor: "#0009" }}>
+          <View style={{ width: "100%", maxWidth: 520, gap: 14, padding: 20, borderRadius: 18, backgroundColor: colors.card }}>
+            <Typography variant="title">Source du modèle Magic</Typography>
+            <TextInput
+              value={sourceDraft}
+              onChangeText={setSourceDraft}
+              autoCapitalize="none"
+              keyboardType="url"
+              placeholder="https://…"
+              placeholderTextColor={String(colors.text) + "80"}
+              style={{ color: colors.text, borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 12 }}
+            />
+            <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 10 }}>
+              <Pressable onPress={() => setSourceEditorVisible(false)} style={{ padding: 12 }}>
+                <Typography variant="body1">Annuler</Typography>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  const value = sourceDraft.trim();
+                  if (!value) return;
+                  useSettingsStore.getState().mutateProperty("personalization", { magicModelURL: value });
+                  setSourceEditorVisible(false);
+                  showMessage("Succès", "URL du modèle Magic mise à jour.");
+                }}
+                style={{ padding: 12 }}
+              >
+                <Typography variant="body1" weight="semibold" style={{ color: colors.primary }}>Valider</Typography>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }

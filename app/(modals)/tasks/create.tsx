@@ -1,14 +1,13 @@
 import { Papicons } from "@getpapillon/papicons";
 import { useTheme } from "expo-router/react-navigation";
 import { router } from "expo-router";
-import React, { useState } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, TextInput, View } from "react-native";
+import React, { useMemo, useState } from "react";
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { addCustomHomeworkToDatabase } from "@/database/useHomework";
+import { useTimetableWidgetData } from "@/app/(tabs)/index/hooks/useTimetableWidgetData";
 import { useAccountStore } from "@/stores/account";
-import { Colors } from "@/utils/subjects/colors";
-import { cleanSubjectName, getSubjectFormat } from "@/utils/subjects/utils";
 import AnimatedPressable from "@/ui/components/AnimatedPressable";
 import Button from "@/ui/new/Button";
 import Typography from "@/ui/new/Typography";
@@ -24,20 +23,25 @@ export default function CreatePersonalHomework() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const account = useAccountStore(state => state.accounts.find(item => item.id === state.lastUsedAccount));
+  const { upcomingDays } = useTimetableWidgetData({ showCancelled: true });
   const [subject, setSubject] = useState("");
   const [description, setDescription] = useState("");
   const [dueDate, setDueDate] = useState(() => localDateValue(new Date()));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const availableSubjects = useMemo(() => {
+    const services = new Set(account?.services?.map(service => service.id) ?? []);
+    const names = upcomingDays.flatMap(day => day.courses)
+      .filter(course => services.has(course.createdByAccount) && !course.createdByAccount.startsWith("ical_"))
+      .map(course => course.subject.trim())
+      .filter(Boolean);
+    return Array.from(new Map(names.map(name => [name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase(), name])).values());
+  }, [account?.services, upcomingDays]);
 
   const save = async () => {
     const cleanSubject = subject.trim();
-    if (!cleanSubject || !description.trim()) {
+    if (!availableSubjects.includes(cleanSubject) || !description.trim()) {
       setError("Renseigne une matière et une consigne.");
-      return;
-    }
-    if (!cleanSubjectName(cleanSubject)) {
-      setError("Le nom de la matière doit contenir une lettre ou un chiffre.");
       return;
     }
     const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dueDate.trim());
@@ -59,17 +63,6 @@ export default function CreatePersonalHomework() {
     setSaving(true);
     setError("");
     try {
-      const subjectId = cleanSubjectName(cleanSubject);
-      const savedSubject = account.customisation?.subjects?.[subjectId];
-      if (!savedSubject) {
-        const format = getSubjectFormat(cleanSubject);
-        const color = Colors[Object.keys(account.customisation?.subjects ?? {}).length % Colors.length];
-        const store = useAccountStore.getState();
-        store.setSubjectName(subjectId, cleanSubject);
-        store.setSubjectEmoji(subjectId, format?.emoji ?? "🤓");
-        store.setSubjectColor(subjectId, color);
-      }
-
       await addCustomHomeworkToDatabase({
         id: `personal-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         subject: cleanSubject,
@@ -109,7 +102,7 @@ export default function CreatePersonalHomework() {
           <AnimatedPressable
             accessibilityRole="button"
             accessibilityLabel="Retour"
-            onPress={() => router.back()}
+            onPress={() => router.canGoBack() ? router.back() : router.replace("/(tabs)/tasks")}
             style={{ width: 40, height: 40, alignItems: "center", justifyContent: "center" }}
           >
             <Papicons name="ArrowLeft" size={24} color="#8B5CF6" />
@@ -119,14 +112,26 @@ export default function CreatePersonalHomework() {
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 20, paddingBottom: Math.max(24, insets.bottom + 16), gap: 10, width: "100%", maxWidth: 700, alignSelf: "center" }}>
           <Typography variant="body2" color="textSecondary">Les devoirs ajoutés ici restent sur cet appareil et portent le tag « Devoir perso ».</Typography>
           <Typography variant="title">Matière</Typography>
-          <TextInput
-            value={subject}
-            onChangeText={setSubject}
-            placeholder="Ex. Mathématiques"
-            placeholderTextColor={colors.text + "80"}
-            style={inputStyle}
-            returnKeyType="next"
-          />
+          {availableSubjects.length > 0 ? (
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+              {availableSubjects.map(name => {
+                const selected = subject === name;
+                return (
+                  <Pressable
+                    key={name}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    onPress={() => { setSubject(name); setError(""); }}
+                    style={{ borderRadius: 999, borderWidth: 1, borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? colors.primary : colors.card, paddingHorizontal: 14, paddingVertical: 9 }}
+                  >
+                    <Typography variant="body2" weight="semibold" selectable={false} style={{ color: selected ? colors.background : colors.text }}>{name}</Typography>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : (
+            <Typography variant="body2" color="textSecondary">Aucune matière n’est disponible dans l’emploi du temps de ce compte.</Typography>
+          )}
           <Typography variant="title" style={{ marginTop: 8 }}>À faire pour le</Typography>
           <TextInput
             value={dueDate}

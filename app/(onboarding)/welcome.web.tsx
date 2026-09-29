@@ -1,7 +1,7 @@
 import Stack from "@/ui/components/Stack";
 import Button from "@/ui/new/Button";
 import Divider from "@/ui/new/Divider";
-import PapillonLogo from "@/ui/new/symbols/PapillonLogo";
+import ScolaLogo from "@/ui/new/symbols/ScolaLogo";
 import Typography from "@/ui/new/Typography";
 import { useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
@@ -98,7 +98,7 @@ export default function Welcome() {
             paddingBottom: insets.bottom + 16,
           }}
         >
-          <PapillonLogo fill="#FFFFFF" />
+          <ScolaLogo fill="#FFFFFF" />
 
           <Typography
             color="#FFFFFF"

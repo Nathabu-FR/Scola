@@ -1,4 +1,4 @@
-![Contribution](https://github.com/PapillonApp/papillon-v8/raw/main/.github/assets/contribution_header.png)
+![Scola](../assets/images/logotype.png)
 
 # Règles de contribution
 > [!CAUTION]
@@ -6,7 +6,7 @@
 
 - [ ] Cette Pull Request porte sur une seule fonctionnalité ou un seul correctif.
 - [ ] Cette Pull Request n'est pas faite essentiellement avec de l'IA.
-- [ ] Pour tout changement majeur, j’ai créé une issue afin d’échanger avec les mainteneurs de Papillon sur la meilleure façon de l’intégrer.
+- [ ] Pour tout changement majeur, j’ai créé une issue afin d’échanger avec les mainteneurs de Scola sur la meilleure façon de l’intégrer.
 - [ ] Ma Pull Request respecte les conventions Conventional Commits et Conventional Branch ainsi que les conventions de codage de l'application.
 - [ ] J’ai testé mes modifications sur iOS et Android, et l’application fonctionne correctement.
 - [ ] J’emploie un langage informel, clair et concis dans mes messages.

@@ -179,7 +179,7 @@ export default function SettingsAbout() {
     {
       title: t("Settings_App_Version"),
       description: packageJson.version,
-      leading: <Papicons name="Butterfly" />,
+      leading: <Papicons name="Book" />,
       onPress: handleVersionTap,
     },
     {
@@ -201,9 +201,9 @@ export default function SettingsAbout() {
       <List.View style={{ marginBottom: 10 }}>
         <SettingsHeader
           color={theme.dark ? "#121e2a" : "#dfebf7"}
-          title={t("Settings_About_Papillion_Behind")}
-          description={t("Settings_About_Papillion_Behind_Description")}
-          imageSource={require("@/assets/images/about_papillon.png")}
+          title={t("Settings_About_Scola_Behind")}
+          description={t("Settings_About_Scola_Behind_Description")}
+          imageSource={require("@/assets/images/about_scola.png")}
           disableMargin
           height={270}
         />

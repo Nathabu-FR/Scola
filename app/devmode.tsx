@@ -30,7 +30,7 @@ const HOSTS: Record<string, { title: string; icon: string }> = {
   "index-education": { title: "PRONOTE", icon: "Pronote" },
   "ecoledirecte.com": { title: "École Directe", icon: "EcoleDirecte" },
   "api.skolengo.com": { title: "Skolengo", icon: "Skolengo" },
-  "analytics.papillon.bzh": { title: "Télémétrie", icon: "PapillonIcon" },
+  "analytics.papillon.bzh": { title: "Télémétrie", icon: "Info" },
   "github.com": { title: "Ressource(s)", icon: "Code" },
   "geopf.fr": { title: "Localisation", icon: "MapPin" },
   "raw.githubusercontent.com": { title: "GitHub", icon: "Code" }
@@ -391,7 +391,7 @@ export default function DevMode() {
         <List.Section>
           <List.SectionTitle>
             <Papicons name="Sparkles" color={colors.text + 88} />
-            <List.Label>Papillon Magic+</List.Label>
+            <List.Label>Scola Magic+</List.Label>
           </List.SectionTitle>
             <List.Item onPress={() => handlePress(ClearMagicCache)}>
               <Typography variant="action">Supprimer le cache de Magic</Typography>
@@ -524,7 +524,7 @@ export default function DevMode() {
                 <Papicons name="Trash" />
               </Icon>
             </List.Leading>
-            <Typography variant="title" color="white">Réinitialiser Papillon</Typography>
+            <Typography variant="title" color="white">Réinitialiser Scola</Typography>
             <Typography variant="subtitle" color="white">Efface définitivement vos comptes, paramètres et données locales.</Typography>
           </List.Item>
         </List.Section>

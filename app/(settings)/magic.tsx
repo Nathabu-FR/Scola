@@ -136,7 +136,7 @@ export default function SettingsMagic() {
             if (settingsStore.magicEnabled && !isSwitchOn) {
               Alert.alert(
                 "Désactivation de Magic+",
-                "Papillon Magic+ sera désactivé au prochain redémarrage",
+                "Scola Magic+ sera désactivé au prochain redémarrage",
                 [{ text: "OK", style: "default" }]
               );
             }

@@ -266,7 +266,7 @@ const Averages = ({
 
               <View style={{ gap: 4, padding: 8, marginBottom: isLarge ? 16 : 0 }}>
                 <Typography variant="caption" weight="regular" color="textSecondary">
-                  Papillon ne peut pas précisément connaître ta moyenne générale. Hormis si c'est indiqué, la moyenne affichée est une estimation et peut différer de ton bulletin.
+                  Scola ne peut pas précisément connaître ta moyenne générale. Hormis si c'est indiqué, la moyenne affichée est une estimation et peut différer de ton bulletin.
                 </Typography>
               </View>
             </View>

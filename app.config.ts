@@ -5,7 +5,7 @@ const androidVersionCode = Math.floor(Date.now() / 1000) - 1577836800;
 
 export default {
   expo: {
-    name: "Papillon",
+    name: "Scola",
     slug: "papillon",
     version: PackageJSON.version,
     orientation: "default",
@@ -106,7 +106,7 @@ export default {
       // Magic model) only break when evaluated in that Node pre-render step —
       // not in an actual browser. Real web hosting can still opt back into
       // "static" later once/if those are individually made SSR-safe.
-      output: process.env.PAPILLON_TARGET === "electron" ? "single" : "static",
+      output: process.env.SCOLA_TARGET === "desktop" ? "single" : "static",
       favicon: "./assets/images/favicon.png",
     },
     plugins: [
@@ -136,7 +136,7 @@ export default {
         "expo-image-picker",
         {
           photosPermission:
-            "Papillon utilise ta galerie pour te permettre de personnaliser ta photo de profil",
+            "Scola utilise ta galerie pour te permettre de personnaliser ta photo de profil",
         },
       ],
       "expo-web-browser",
@@ -153,9 +153,9 @@ export default {
         "expo-location",
         {
           locationWhenInUsePermission:
-            "Papillon utilise ton emplacement pour trouver les établissements autour de toi.",
+            "Scola utilise ton emplacement pour trouver les établissements autour de toi.",
           cameraPermission:
-            "Papillon utilise ta caméra pour scanner des QR-codes pour te connecter, pour capturer des documents, ou pour des fonctionnalités amusantes telles que les réactions.",
+            "Scola utilise ta caméra pour scanner des QR-codes pour te connecter, pour capturer des documents, ou pour des fonctionnalités amusantes telles que les réactions.",
         },
       ],
       [

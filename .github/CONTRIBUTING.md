@@ -2,11 +2,11 @@
 
 ## 🔐 Signaler une vulnérabilité
 
-Nous prenons la sécurité **très au sérieux**. Si tu découvres une **vulnérabilité** dans **Papillon**, merci de suivre notre [**politique de sécurité**](https://www.nathabu.fr/contactus) : **n’ouvre pas d’issue publique** et signale-la directement à l’adresse suivante : <mark style="color:$danger;">**nathanael.bubbe@gmail.com**</mark>.
+Nous prenons la sécurité **très au sérieux**. Si tu découvres une **vulnérabilité** dans **Scola**, merci de suivre notre [**politique de sécurité**](https://www.nathabu.fr/contactus) : **n’ouvre pas d’issue publique** et signale-la directement à l’adresse suivante : <mark style="color:$danger;">**nathanael.bubbe@gmail.com**</mark>.
 
 ## 📤 Soumettre une Pull Request
 
-Nous serions ravis d’intégrer tes modifications à Papillon. Cependant, avant de fusionner avec la branche principale, merci de respecter les règles ci-dessous. En cas de non-respect, ta Pull Request sera considérée comme **invalide** et ne sera pas traitée tant que les corrections nécessaires n’auront pas été apportées.
+Nous serions ravis d’intégrer tes modifications à Scola. Cependant, avant de fusionner avec la branche principale, merci de respecter les règles ci-dessous. En cas de non-respect, ta Pull Request sera considérée comme **invalide** et ne sera pas traitée tant que les corrections nécessaires n’auront pas été apportées.
 
 * [x] Tu ne dois pas soumettre plusieurs fonctionnalités ou corrections de bugs dans une même Pull Request. Chaque modification doit rester isolée afin de faciliter son traitement et, si nécessaire, son éventuel retour.
 * [x] Si ta Pull Request concerne des changements majeurs, merci d'ouvrir une Issue pour discuter avec les mainteneurs de la stratégie à adopter pour ne pas faire de gros travaux pour rien.
@@ -25,7 +25,7 @@ $ npm run lint
 
 ## 📥 Ouvrir une issue
 
-Avant d’ouvrir une issue, assure-toi d’utiliser la **dernière version** de **Papillon**, teste si le problème persiste après mise à jour, et vérifie qu’une issue similaire n’a pas **déjà** été ouverte. Une issue bien écrite facilite son traitement et est toujours plus agréable pour nous à lire, afin que le traitement se passe au mieux, voici quelques conseils :
+Avant d’ouvrir une issue, assure-toi d’utiliser la **dernière version** de **Scola**, teste si le problème persiste après mise à jour, et vérifie qu’une issue similaire n’a pas **déjà** été ouverte. Une issue bien écrite facilite son traitement et est toujours plus agréable pour nous à lire, afin que le traitement se passe au mieux, voici quelques conseils :
 
 1. **Elle porte un nom explicite**, qui permet d’identifier **immédiatement** son **sujet principal**.
 2. **Aucune issue semblable n’existe déjà** : il est inutile d’en créer plusieurs pour le même problème, **cela ne fait que ralentir son traitement**. Si tu es concerné par une issue existante, **réagis** simplement avec un👍

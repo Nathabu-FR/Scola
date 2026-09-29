@@ -5,12 +5,15 @@ import { formatDistanceStrict, formatDistanceToNow } from 'date-fns'
 import * as DateLocale from 'date-fns/locale';
 import i18n, { t } from "i18next";
 import React, { useEffect, useState } from "react";
-import { Platform, View } from "react-native";
+import { Platform, Pressable, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import * as WebBrowser from "expo-web-browser";
 
 import ModalOverhead from "@/components/ModalOverhead";
 import { getCourseById } from "@/database/useTimetable";
-import { Course as SharedCourse } from "@/services/shared/timetable";
+import { getManager, initializeAccountManager } from "@/services/shared";
+import { Attachment } from "@/services/shared/attachment";
+import { Course as SharedCourse, CourseResource } from "@/services/shared/timetable";
 import ActivityIndicator from "@/ui/components/ActivityIndicator";
 import Icon from "@/ui/components/Icon";
 import List from "@/ui/new/List";
@@ -23,6 +26,7 @@ import { useSafeHorizontalPadding } from "@/ui/hooks/useSafeHorizontalPadding";
 
 import { getStatusText } from "../../(tabs)/calendar/components/CalendarDay";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { getAttachmentIcon } from "@/utils/news/getAttachmentIcon";
 
 interface SubjectInfo {
   name: string;
@@ -43,6 +47,10 @@ export default function CourseModal() {
   });
   const [course, setCourse] = useState<SharedCourse>();
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<"details" | "content">("details");
+  const [sessionContents, setSessionContents] = useState<CourseResource[]>([]);
+  const [loadingContents, setLoadingContents] = useState(false);
+  const [contentsError, setContentsError] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -58,6 +66,38 @@ export default function CourseModal() {
       cancelled = true;
     };
   }, [id]);
+
+  useEffect(() => {
+    if (!course?.resourceId) {
+      setSessionContents([]);
+      setLoadingContents(false);
+      setContentsError(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingContents(true);
+    setContentsError(false);
+
+    void (async () => {
+      try {
+        const manager = getManager(true) ?? await initializeAccountManager();
+        const contents = await manager.getCourseResources(course);
+        if (!cancelled) setSessionContents(contents);
+      } catch {
+        if (!cancelled) {
+          setSessionContents([]);
+          setContentsError(true);
+        }
+      } finally {
+        if (!cancelled) setLoadingContents(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [course]);
 
   if (loading) {
     return <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}><ActivityIndicator /></View>;
@@ -76,6 +116,12 @@ export default function CourseModal() {
   const item = course;
   const startTime = Math.floor(course.from.getTime() / 1000);
   const endTime = Math.floor(course.to.getTime() / 1000);
+  const openAttachment = (attachment: Attachment) => {
+    if (!attachment.url) return;
+    void WebBrowser.openBrowserAsync(attachment.url, {
+      presentationStyle: "formSheet",
+    });
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.overground }}>
@@ -131,6 +177,52 @@ export default function CourseModal() {
         style={{ backgroundColor: "transparent", zIndex: 2 }}
         contentContainerStyle={{ padding: 16, paddingLeft: contentPaddingLeft, paddingRight: contentPaddingRight }}
       >
+        <View
+          accessibilityRole="tablist"
+          style={{
+            flexDirection: "row",
+            gap: 6,
+            padding: 4,
+            marginBottom: 16,
+            borderRadius: 16,
+            backgroundColor: colors.card,
+          }}
+        >
+          {([
+            ["details", "Cours"],
+            ["content", "Contenu de séance"],
+          ] as const).map(([tab, label]) => {
+            const selected = activeTab === tab;
+            return (
+              <Pressable
+                key={tab}
+                accessibilityRole="tab"
+                accessibilityState={{ selected }}
+                onPress={() => setActiveTab(tab)}
+                style={{
+                  flex: 1,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  minHeight: 40,
+                  paddingHorizontal: 10,
+                  borderRadius: 12,
+                  backgroundColor: selected ? colors.primary : "transparent",
+                }}
+              >
+                <Typography
+                  variant="body1"
+                  weight="semibold"
+                  align="center"
+                  style={{ color: selected ? colors.background : colors.text }}
+                >
+                  {label}
+                </Typography>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {activeTab === "details" ? <>
         {getStatusText(course.status) ? (
           <List.Section>
             <List.Item>
@@ -241,6 +333,67 @@ export default function CourseModal() {
             </Typography>
           </List.Item>
         </List.Section>
+        </> : (
+          <List.Section>
+            <List.SectionTitle>
+              <List.Label>Contenu de séance</List.Label>
+            </List.SectionTitle>
+
+            {loadingContents ? (
+              <List.Item>
+                <List.Leading><ActivityIndicator /></List.Leading>
+                <Typography variant="title">Chargement du contenu…</Typography>
+              </List.Item>
+            ) : contentsError ? (
+              <List.Item>
+                <Typography variant="body1" color="textSecondary">
+                  Le contenu de cette séance n’a pas pu être récupéré. Réessaie lorsque la connexion Pronote sera disponible.
+                </Typography>
+              </List.Item>
+            ) : sessionContents.length === 0 ? (
+              <List.Item>
+                <Typography variant="body1" color="textSecondary">
+                  Aucun contenu de séance n’est disponible pour ce cours.
+                </Typography>
+              </List.Item>
+            ) : sessionContents.map((resource, index) => {
+              const description = (resource.description ?? "")
+                .replace(/<br\s*\/?\s*>/gi, "\n")
+                .replace(/<[^>]+>/g, " ")
+                .replace(/&nbsp;/g, " ")
+                .trim();
+
+              return (
+                <View key={`${resource.title ?? resource.category}-${index}`} style={{ gap: 4, marginBottom: 12 }}>
+                  <Typography variant="title">
+                    {resource.title || `Séance ${index + 1}`}
+                  </Typography>
+                  {description ? (
+                    <Typography variant="body1" color="textSecondary">
+                      {description}
+                    </Typography>
+                  ) : null}
+                  {resource.attachments.map((attachment, attachmentIndex) => (
+                    <List.Item
+                      key={`${attachment.url}-${attachmentIndex}`}
+                      onPress={() => openAttachment(attachment)}
+                    >
+                      <List.Leading>
+                        <Icon><Papicons name={getAttachmentIcon(attachment)} /></Icon>
+                      </List.Leading>
+                      <Typography variant="title" numberOfLines={1}>
+                        {attachment.name || attachment.url}
+                      </Typography>
+                      <Typography variant="body1" color="textSecondary" numberOfLines={1}>
+                        {attachment.url}
+                      </Typography>
+                    </List.Item>
+                  ))}
+                </View>
+              );
+            })}
+          </List.Section>
+        )}
       </List>
     </View>
   );

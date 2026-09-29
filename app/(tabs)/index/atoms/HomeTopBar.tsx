@@ -75,6 +75,11 @@ const HomeTopBar = ({ height = 56 }: { height?: number }) => {
             gap={7}
             inline
           >
+            <HomeTopBarButton
+              icon="Message"
+              route="/(features)/messages"
+              onPress={() => router.push("/(features)/messages")}
+            />
             {/* The tip anchors to the button's own box, pinned along its
                 bottom edge so the callout drops below it and points back up. */}
             <View>

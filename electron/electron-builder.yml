@@ -1,6 +1,6 @@
 appId: bzh.papillon.scola
 productName: Scola
-copyright: "Copyright © Papillon"
+copyright: "Copyright © Scola"
 
 directories:
   output: release

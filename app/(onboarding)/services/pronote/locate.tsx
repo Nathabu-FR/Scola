@@ -179,18 +179,6 @@ export default function PronoteLoginMethod() {
           </List.Item>
         )}
 
-        {Platform.OS !== "web" && cities.length === 0 && !loading && (
-          <List.Item animated onPress={() => navigation.navigate("qrcode")}>
-            <List.Leading>
-              <Icon><Papicons name="qrcode" /></Icon>
-            </List.Leading>
-            <Typography variant='title'>{t("ONBOARDING_PRONOTE_LOGIN_QRCODE")}</Typography>
-            <Typography variant='body1' color="textSecondary">
-              {t("ONBOARDING_PRONOTE_LOGIN_QRCODE_DESCRIPTION")}
-            </Typography>
-          </List.Item>
-        )}
-
         {cities.length === 0 && !loading && (
           <List.Item animated onPress={() => navigation.navigate("url")}>
             <List.Leading>

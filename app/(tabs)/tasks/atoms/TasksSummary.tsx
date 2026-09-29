@@ -6,28 +6,25 @@ import { CircularProgress } from '@/ui/components/CircularProgress';
 import Stack from '@/ui/components/Stack';
 import Typography from '@/ui/components/Typography';
 import { PapillonAppearIn, PapillonAppearOut } from '@/ui/utils/Transition';
-import { Homework } from "@/services/shared/homework";
 import { Platform } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Dynamic } from "@/ui/components/Dynamic";
 
 interface TasksSummaryProps {
-  sections: { data: Homework[] }[];
+  totalCount: number;
+  remainingCount: number;
   headerHeight: number;
 }
 
 const TasksSummary: React.FC<TasksSummaryProps> = ({
-  sections,
+  totalCount,
+  remainingCount,
   headerHeight,
 }) => {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const colors = theme.colors;
-
-  if (sections.length === 0) {
-    return null;
-  }
 
   return (
     <Reanimated.View
@@ -70,19 +67,7 @@ const TasksSummary: React.FC<TasksSummaryProps> = ({
             <CircularProgress
               backgroundColor={colors.tint + "15"}
               percentageComplete={
-                (sections.reduce(
-                  (acc, section) =>
-                    acc + section.data.filter(hw => hw.isDone).length,
-                  0
-                ) /
-                  Math.max(
-                    1,
-                    sections.reduce(
-                      (acc, section) => acc + section.data.length,
-                      0
-                    )
-                  )) *
-                100
+                totalCount === 0 ? 100 : ((totalCount - remainingCount) / totalCount) * 100
               }
               radius={15}
               strokeWidth={5}
@@ -90,23 +75,9 @@ const TasksSummary: React.FC<TasksSummaryProps> = ({
               showCheckmark={true}
             />
             <Typography variant="title" color={theme.colors.tint}>
-              {(() => {
-                const total = sections.reduce(
-                  (acc, section) => acc + section.data.length,
-                  0
-                );
-                const undone = sections.reduce(
-                  (acc, section) =>
-                    acc + section.data.filter(hw => !hw.isDone).length,
-                  0
-                );
-
-                if (undone === 0) {
-                  return "Toutes les tâches sont terminées !";
-                }
-
-                return `${undone} tâche${undone !== 1 ? "s" : ""} restante${undone !== 1 ? "s" : ""} cette semaine`;
-              })()}
+              {remainingCount === 0
+                ? "Aucun devoir restant"
+                : `${remainingCount} devoir${remainingCount !== 1 ? "s" : ""} restant${remainingCount !== 1 ? "s" : ""}`}
             </Typography>
           </Stack>
           </Dynamic>

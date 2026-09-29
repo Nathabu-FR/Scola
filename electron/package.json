@@ -2,8 +2,8 @@
   "name": "scola-desktop",
   "version": "1.0.0",
   "private": true,
-  "description": "Scola — la version PC de Papillon",
-  "author": "Papillon",
+  "description": "Scola — l’application scolaire sur ordinateur",
+  "author": "Scola",
   "main": "main.js",
   "scripts": {
     "start": "electron .",

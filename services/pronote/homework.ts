@@ -18,30 +18,33 @@ import { error } from "@/utils/logger/logger";
 export async function fetchPronoteHomeworks(session: SessionHandle, accountId: string, weekNumberRaw: number): Promise<Homework[]> {
   const result: Homework[] = [];
 
+  if (!session) {
+    throw error("Session is undefined", "fetchPronoteHomeworks");
+  }
+
   const { start } = getDateRangeOfWeek(weekNumberRaw)
   const weekNumber = translateToWeekNumber(start, session.instance.firstMonday);
-  if (session) {
-    const homeworks = await assignmentsFromWeek(session, weekNumber);
-    for (const homework of homeworks) {
-      result.push({
-        id: homework.id,
-        subject: homework.subject.name,
-        content: homework.description,
-        dueDate: homework.deadline,
-        isDone: homework.done,
-        returnFormat:
-          homework.return.kind === 1 ? ReturnFormat.PAPER : ReturnFormat.FILE_UPLOAD,
-        attachments: homework.attachments.map((attachment) => ({
-          type: attachment.kind,
-          name: attachment.name,
-          url: attachment.url,
-          createdByAccount: accountId,
-        })),
-        evaluation: false,
-        custom: false,
+  const homeworks = await assignmentsFromWeek(session, weekNumber);
+  for (const homework of Array.isArray(homeworks) ? homeworks : []) {
+    if (!homework.subject?.name) continue;
+    result.push({
+      id: homework.id,
+      subject: homework.subject.name,
+      content: homework.description ?? "",
+      dueDate: homework.deadline,
+      isDone: homework.done,
+      returnFormat:
+        homework.return?.kind === 1 ? ReturnFormat.PAPER : ReturnFormat.FILE_UPLOAD,
+      attachments: (Array.isArray(homework.attachments) ? homework.attachments : []).map((attachment) => ({
+        type: attachment.kind,
+        name: attachment.name,
+        url: attachment.url,
         createdByAccount: accountId,
-      });
-    }
+      })),
+      evaluation: false,
+      custom: false,
+      createdByAccount: accountId,
+    });
   }
 
   return result;
@@ -53,14 +56,16 @@ export async function setPronoteHomeworkAsDone(session: SessionHandle, homework:
     return homework;
   }
 
+  const finalState = status ?? !homework.isDone;
   try {
-    await assignmentStatus(session, homework.id, status || !homework.isDone)
+    await assignmentStatus(session, homework.id, finalState)
   } catch (err) {
-    error(String(err))
+    error(String(err), "setPronoteHomeworkAsDone");
+    return homework;
   }
   return {
     ...homework,
-    isDone: status || !homework.isDone,
-    progress: (status || !homework.isDone) ? 1 : 0
+    isDone: finalState,
+    progress: finalState ? 1 : 0
   }
 }

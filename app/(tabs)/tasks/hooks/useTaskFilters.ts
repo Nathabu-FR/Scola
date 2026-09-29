@@ -36,8 +36,9 @@ export const buildHomeworkSections = (
   const uniqueIds = new Set<string>();
   let data = homeworks.filter(hw => {
     if (hw.id) {
-      if (!uniqueIds.has(hw.id)) {
-        uniqueIds.add(hw.id);
+      const key = `${hw.createdByAccount}:${hw.id}`;
+      if (!uniqueIds.has(key)) {
+        uniqueIds.add(key);
         return true;
       }
       return false;

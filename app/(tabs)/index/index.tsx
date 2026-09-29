@@ -189,7 +189,7 @@ const HomeScreen = () => {
     },
     {
       icon: <Papicons name="User" />,
-      title: "Derrière Papillon",
+      title: "Derrière Scola",
       hidden: !account?.teamModal?.shown || account.teamModal.widgetDismissed === true,
       onDismiss: account
         ? () => dismissTeamWidget(account.id)

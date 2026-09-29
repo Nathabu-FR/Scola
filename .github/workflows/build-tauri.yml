@@ -36,7 +36,7 @@ jobs:
       - name: Export web bundle
         run: npx expo export --platform web
         env:
-          PAPILLON_TARGET: electron
+          SCOLA_TARGET: desktop
 
       - name: Check source for unsafe web ExpoUI imports
         run: npm run check:web-native-imports

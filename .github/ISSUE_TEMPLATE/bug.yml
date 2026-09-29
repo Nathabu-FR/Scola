@@ -1,5 +1,5 @@
 name: 🐛 Signaler un bug
-description: Signaler des bugs nous permet d'améliorer Papillon !
+description: Signaler des bugs nous permet d'améliorer Scola !
 title: "[Bug]: "
 
 body:
@@ -25,7 +25,7 @@ body:
   - type: textarea
     attributes:
       label: Comportement attendu
-      description: Ce que Papillon devrait faire
+      description: Ce que Scola devrait faire
       placeholder: Que la connexion à mon établissement fonctionne et qu'il n'y ait pas de chargement infini
     validations:
       required: true
@@ -48,8 +48,8 @@ body:
 
   - type: dropdown
     attributes:
-      label: Papillon testé depuis
-      description: Tu as testé/installé Papillon depuis...
+      label: Scola testé depuis
+      description: Tu as testé/installé Scola depuis...
       options:
         - Play/App Store (version stable)
         - Play Store/TestFlight (version bêta)
@@ -59,7 +59,7 @@ body:
   - type: input
     attributes:
       label: Version utilisée
-      description: Paramètres (de Papillon) -> Version affichée en bas de la page
+      description: Paramètres (de Scola) -> Version affichée en bas de la page
       placeholder: "8.0.0"
     validations:
       required: true

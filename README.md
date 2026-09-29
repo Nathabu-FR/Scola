@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://github.com/PapillonApp/Papillon"><picture><source media="(prefers-color-scheme: dark)" srcset="https://github.com/user-attachments/assets/8bffdf1a-6e18-4545-874d-94c3978fb1c3"><source media="(prefers-color-scheme: light)" srcset="https://github.com/user-attachments/assets/cc4a4903-fbf6-45ab-bb91-467351c89803"><img alt="Papillon" src="https://github.com/user-attachments/assets/cc4a4903-fbf6-45ab-bb91-467351c89803"></picture></a>
+  <a href="https://github.com/PapillonApp/Papillon"><img alt="Scola" src="assets/images/logotype.png" height="96"></a>
 </p>
 
 <p align="center">
@@ -40,14 +40,14 @@
   <img alt="Bienvenue !" src="https://github.com/user-attachments/assets/b9b5be6f-49cb-4327-a4dc-1c4325cff113" />
   
   <p align="center">
-  <b>Si tu souhaites contribuer à Papillon, tu es au bon endroit !</b><br/>
-  Retrouve les resources importantes pour t'aider à commencer dans l'univers Papillon ci-dessous.
+  <b>Si tu souhaites contribuer à Scola, tu es au bon endroit !</b><br/>
+  Retrouve les resources importantes pour t'aider à commencer dans l'univers Scola ci-dessous.
   </p>
 </p>
 
 <p align="center">
   <a href="https://docs.papillon.bzh/developper/compile"><img alt="Compiler" src="https://github.com/user-attachments/assets/3555367e-3813-4edc-9d60-998b2c1a9f79" /></a>
-  <a href="https://docs.papillon.bzh/ui"><img alt="Papillon UI" src="https://github.com/user-attachments/assets/75176fa7-4745-4c70-8464-569f61e3ac2b" /></a>
+  <a href="https://docs.papillon.bzh/ui"><img alt="Scola UI" src="assets/images/logotype.png" height="34" /></a>
   <a href="https://discord.gg/wVKWBRTbfh"><img alt="Community" src="https://github.com/user-attachments/assets/bac194cc-9183-4167-9bef-5787c9929b95" /></a>
 </p>
 

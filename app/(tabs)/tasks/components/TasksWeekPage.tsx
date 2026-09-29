@@ -41,6 +41,21 @@ const TasksWeekPage: React.FC<TasksWeekPageProps> = ({
     () => buildHomeworkSections(homeworks ?? [], { searchTerm, sortMethod }),
     [homeworks, searchTerm, sortMethod]
   );
+  const taskCounts = useMemo(() => {
+    const seen = new Set<string>();
+    const unique = (homeworks ?? []).filter(homework => {
+      const key = homework.id
+        ? `${homework.createdByAccount}:${homework.id}`
+        : `${homework.createdByAccount}:${homework.subject}:${homework.content}:${new Date(homework.dueDate).getTime()}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    return {
+      total: unique.length,
+      remaining: unique.filter(homework => !homework.isDone).length,
+    };
+  }, [homeworks]);
 
   const handleRefresh = useCallback(() => onRefresh(week), [onRefresh, week]);
 
@@ -56,6 +71,8 @@ const TasksWeekPage: React.FC<TasksWeekPageProps> = ({
       setAsDone={setAsDone}
       animateItems={animateItems}
       hasError={hasError}
+      totalHomeworkCount={taskCounts.total}
+      remainingHomeworkCount={taskCounts.remaining}
       // Until the week has been read once, an empty page means "not loaded
       // yet", not "nothing to do".
       isLoaded={homeworks !== undefined}

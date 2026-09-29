@@ -15,7 +15,7 @@ export async function fetchPronoteCanteenMenu(
   date: Date
 ): Promise<CanteenMenu[]> {
   if (!session) {
-    error("Session is undefined", "fetchPronoteAttendance");
+    throw error("Session is undefined", "fetchPronoteCanteenMenu");
   }
 
   const weeklyMenu = await menus(session, date);

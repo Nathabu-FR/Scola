@@ -174,6 +174,17 @@ function RootNavigatorContent() {
         />
 
         <Stack.Screen
+          name="(features)/messages"
+          options={{
+            headerShown: true,
+            headerTitle: "Messagerie",
+            headerLargeTitle: false,
+            presentation: Platform.OS === "web" ? "modal" : "card",
+            ...androidHeaderProps,
+          }}
+        />
+
+        <Stack.Screen
           name="(modals)/team"
           options={{
             headerShown: false,

@@ -95,7 +95,7 @@ export default function ConsentScreen() {
       >
         <Stack gap={16} style={{ marginBottom: 8 }}>
           <Image
-            source={require("../assets/images/papillon_heart.png")}
+            source={require("../assets/images/scola_heart.png")}
             style={{ width: 98, height: 72, alignSelf: "center" }}
           />
           <Typography variant="h2" color="text" align="center" style={{ width: "100%" }}>

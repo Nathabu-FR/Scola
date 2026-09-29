@@ -350,7 +350,8 @@ const Course = React.memo((props: CourseProps) => {
                     gap: 5,
                     minWidth: 0,
                     flexGrow: 0,
-                    flexShrink: 0,
+                    flexShrink: 1,
+                    maxWidth: "55%",
                   }}
                 >
                   <Icon
@@ -364,7 +365,9 @@ const Course = React.memo((props: CourseProps) => {
                     lineBreakStrategyIOS={"none"}
                     variant="body1"
                     weight="semibold"
-                    style={[styles.room, { color: textColor }]}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                    style={[styles.room, { color: textColor, minWidth: 0, flexShrink: 1 }]}
                     skeleton={skeleton}
                   >
                     {room || t("No_Course_Room")}
@@ -387,6 +390,7 @@ const Course = React.memo((props: CourseProps) => {
                     alignItems: "center",
                     gap: 5,
                     flex: 1,
+                    minWidth: 0,
                   }}
                 >
                   <Icon
@@ -540,7 +544,7 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   room: {
-    fontSize: 16,
+    fontSize: 15,
   },
   teacher: {
     fontSize: 15,

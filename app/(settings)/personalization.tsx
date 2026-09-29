@@ -4,7 +4,7 @@ import { EarthIcon } from "lucide-react-native";
 import React, { useEffect } from "react";
 import Typography from "@/ui/new/Typography";
 import Icon from "@/ui/components/Icon";
-import { Papicons, PapillonApp } from "@getpapillon/papicons";
+import { Papicons } from "@getpapillon/papicons";
 import AnimatedPressable from "@/ui/components/AnimatedPressable";
 import { useTheme, useHeaderHeight } from "expo-router/react-navigation";
 import AppColorsSelector from "@/components/AppColorsSelector";
@@ -268,7 +268,7 @@ const PersonalizationSettings = () => {
           >
             <List.Leading>
               <Icon>
-                <Papicons name={"PapillonApp"} />
+                <Papicons name={"Grid"} />
               </Icon>
             </List.Leading>
             <Typography variant={"title"}>{t("Settings_Tabs_Title")}</Typography>

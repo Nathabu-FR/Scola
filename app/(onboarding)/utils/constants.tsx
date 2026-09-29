@@ -239,15 +239,6 @@ export function GetLoginMethods(redirect: (path: { pathname: RelativePathString 
       }
     },
     {
-      id: "qrcode",
-      availableFor: Platform.OS === "web" ? [] : [Services.PRONOTE],
-      description: t("ONBOARDING_METHOD_QRCODE"),
-      icon: <Papicons name={"QrCode"} />,
-      onPress: () => {
-        redirect({ pathname: "/(onboarding)/services/pronote/qrcode" });
-      }
-    },
-    {
       id: "url",
       availableFor: [Services.PRONOTE],
       description: t("ONBOARDING_METHOD_LINK"),

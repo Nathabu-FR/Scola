@@ -3,9 +3,8 @@ const path = require("node:path");
 const fs = require("node:fs");
 const http = require("node:http");
 
-// A Google Geolocation API key, baked in at build time by
-// .github/workflows/build-electron.yml from the GOOGLE_GEOLOCATION_API_KEY
-// repo secret. Without it, Chromium's geolocation backend has no provider to
+// A Google Geolocation API key supplied in the local build's real-keys.json.
+// Without it, Chromium's geolocation backend has no provider to
 // ask and every position request fails — see the README for how to get one.
 // This file is generated on build and is gitignored: never commit a real key.
 let googleApiKey = "";
@@ -57,7 +56,7 @@ function resolveDistDir() {
   if (!found) {
     throw new Error(
       "dist/index.html introuvable. Lance d'abord l'export web : " +
-        "PAPILLON_TARGET=electron npx expo export --platform web"
+        "SCOLA_TARGET=desktop npx expo export --platform web"
     );
   }
   return found;

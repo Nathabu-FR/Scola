@@ -90,7 +90,7 @@ export default function SettingsIndex() {
         },*/
         {
           title: "Données fictives",
-          description: "Tester Papillon avec un emploi du temps, des devoirs et des notes de démonstration",
+          description: "Tester Scola avec un emploi du temps, des devoirs et des notes de démonstration",
           papicon: <Papicons name={"List"} />,
           color: "#7C3AED",
           onPress: openMockDataAccountChooser,
@@ -125,7 +125,7 @@ export default function SettingsIndex() {
         {
           title: t("Settings_ReleaseNotes_Title"),
           description: t("Settings_ReleaseNotes_Description"),
-          papicon: <Papicons name={"PrivatePapillonApp"} />,
+          papicon: <Papicons name={"Info"} />,
           icon: <InfoIcon />,
           color: "#1F7AFC",
           onPress: () =>

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Pressable, View } from 'react-native';
+import { MessageCircle } from 'lucide-react-native';
 import Icon from '@/ui/components/Icon';
 import { Papicons } from '@getpapillon/papicons';
 
@@ -33,9 +34,13 @@ const HomeTopBarButton: React.FC<HomeTopBarButtonProps> = ({ icon, onPress }) =>
           justifyContent: 'center',
         }}
       >
-        <Icon size={26} fill='white'>
-          <Papicons name={icon} />
-        </Icon>
+        {icon === "Message" ? (
+          <MessageCircle size={23} color="white" />
+        ) : (
+          <Icon size={26} fill='white'>
+            <Papicons name={icon} />
+          </Icon>
+        )}
       </View>
     </Pressable>
   );

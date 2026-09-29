@@ -11,6 +11,8 @@ import EmptyState from "../atoms/EmptyState";
 import TaskItem from "./TaskItem";
 import { useTheme } from "expo-router/react-navigation";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useHeaderHeight } from "expo-router/react-navigation";
+import TasksSummary from "../atoms/TasksSummary";
 
 export interface HomeworkSection {
   id: string;
@@ -31,6 +33,8 @@ interface TasksListProps {
   isLoaded?: boolean;
   /** The homework could not be loaded: an empty week means "unknown", not "free". */
   hasError?: boolean;
+  totalHomeworkCount: number;
+  remainingHomeworkCount: number;
   /**
    * Rows animate in only on the page the screen opened with. Every other page
    * is mounted off-screen by the week pager, where a couple of dozen entering
@@ -50,10 +54,13 @@ const TasksList: React.FC<TasksListProps> = ({
   setAsDone,
   isLoaded = true,
   hasError = false,
+  totalHomeworkCount,
+  remainingHomeworkCount,
   animateItems = true,
 }) => {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const headerHeight = useHeaderHeight();
   const { isLarge } = useResizable();
 
   // Items arrive already merged with the freshly fetched homework, so a row
@@ -75,7 +82,7 @@ const TasksList: React.FC<TasksListProps> = ({
 
   const taskKeyExtractor = useCallback((item: Homework) => {
     return (
-      item.id ??
+      (item.id ? `${item.createdByAccount}:${item.id}` : undefined) ??
       "hw:" +
         item.subject +
         item.content +
@@ -108,6 +115,13 @@ const TasksList: React.FC<TasksListProps> = ({
       contentInsetAdjustmentBehavior="automatic"
       showsVerticalScrollIndicator={false}
       showsHorizontalScrollIndicator={false}
+      ListHeaderComponent={isLoaded ? (
+        <TasksSummary
+          totalCount={totalHomeworkCount}
+          remainingCount={remainingHomeworkCount}
+          headerHeight={headerHeight}
+        />
+      ) : null}
       ListEmptyComponent={
         isLoaded || hasError ? (
           <EmptyState isSearching={searchTerm.length > 0} hasError={hasError} />

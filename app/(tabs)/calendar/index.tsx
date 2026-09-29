@@ -263,9 +263,6 @@ function TabOneScreen() {
           <Pressable style={styles.desktopDayButton} onPress={() => handlePickDate(new Date(date.getTime() + 86400000))}>
             <Typography variant="body2">›</Typography>
           </Pressable>
-          <Typography variant="body2" weight="semibold" numberOfLines={1} style={{ marginLeft: 8 }}>
-            {dayLabel}
-          </Typography>
           <Pressable
             accessibilityRole="button"
             onPress={() => router.push("/(tabs)/calendar/icals")}

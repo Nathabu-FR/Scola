@@ -32,8 +32,12 @@ export async function addCanteenMenuToDatabase(menus: SharedCanteenMenu[]) {
     await safeWrite(
       db,
       async () => {
-        const promises = menusToCreate.map(({ id, item }) =>
-          db.get('canteenmenus').create((record: Model) => {
+        // prepare + batch : les create() en Promise.all() dans le writer
+        // perdaient le contexte (« can only be called from inside of a Writer »).
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const prepared: any[] = [];
+        for (const { id, item } of menusToCreate) {
+          prepared.push(db.get('canteenmenus').prepareCreate((record: Model) => {
             const menu = record as CanteenMenu;
             Object.assign(menu, {
               menuId: id,
@@ -42,9 +46,9 @@ export async function addCanteenMenuToDatabase(menus: SharedCanteenMenu[]) {
               dinner: JSON.stringify(item.dinner),
               createdByAccount: item.createdByAccount
             });
-          })
-        );
-        await Promise.all(promises);
+          }));
+        }
+        await db.batch(...prepared);
       },
       10000,
       `add_canteen_menus_${menusToCreate.length}_items`
@@ -96,8 +100,10 @@ export async function addCanteenTransactionToDatabase(transactions: SharedCantee
     await safeWrite(
       db,
       async () => {
-        const promises = transactionsToCreate.map(({ id, item }) =>
-          db.get('canteentransactions').create((record: Model) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const prepared: any[] = [];
+        for (const { id, item } of transactionsToCreate) {
+          prepared.push(db.get('canteentransactions').prepareCreate((record: Model) => {
             const transaction = record as CanteenHistoryItem;
             Object.assign(transaction, {
               createdByAccount: item.createdByAccount,
@@ -107,9 +113,9 @@ export async function addCanteenTransactionToDatabase(transactions: SharedCantee
               currency: item.currency,
               amount: item.amount
             });
-          })
-        );
-        await Promise.all(promises);
+          }));
+        }
+        await db.batch(...prepared);
       },
       10000,
       `add_canteen_transactions_${transactionsToCreate.length}_items`

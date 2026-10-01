@@ -53,7 +53,9 @@ export default function TabOneScreen() {
       setIntelligentParsing(false);
       setRefresh(r => r + 1);
     } catch (error) {
-      const message = "Impossible de traiter l'URL iCal. Vérifie qu'elle est valide.";
+      const message = error instanceof Error && !/HTTP error/i.test(error.message)
+        ? error.message
+        : "Impossible de traiter l'URL iCal. Vérifie qu'elle est valide.";
       if (Platform.OS === "web") setFormError(message);
       else Alert.alert("Erreur", message);
     }
@@ -89,9 +91,13 @@ export default function TabOneScreen() {
       style={styles.container}
       keyboardShouldPersistTaps="handled"
     >
-      {Platform.OS === "android" && (
+      {(Platform.OS === "android" || Platform.OS === "web") && (
         <NativeHeaderSide side="Left">
-          <NativeHeaderPressable onPress={() => router.back()}>
+          <NativeHeaderPressable
+            accessibilityRole="button"
+            accessibilityLabel="Retour"
+            onPress={() => router.canGoBack() ? router.back() : router.replace("/(tabs)/calendar")}
+          >
             <Icon size={28}>
               <Papicons name="Cross" />
             </Icon>

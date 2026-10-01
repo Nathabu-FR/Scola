@@ -74,12 +74,21 @@ export default function RootLayout() {
     const shouldUseTauriTransport = (url: string) => {
       try {
         const hostname = new URL(url).hostname.toLowerCase();
+        // Tout le trafic scolaire/desktop passe par le client HTTP Rust :
+        // le log montrait des fetch iCal (calendar.google.com) + wallpapers
+        // (raw.githubusercontent.com) partis en window.fetch → CORS + ERR_FAILED.
         return (
           hostname === "api.ecoledirecte.com" ||
           hostname.endsWith(".ecoledirecte.com") ||
+          hostname === "calendar.google.com" ||
+          hostname === "raw.githubusercontent.com" ||
+          hostname.endsWith(".githubusercontent.com") ||
+          hostname === "api.github.com" ||
           hostname === "data.geopf.fr" ||
+          hostname === "data.education.gouv.fr" ||
           hostname.endsWith(".pronote.com") ||
-          hostname.endsWith(".index-education.com")
+          hostname.endsWith(".index-education.com") ||
+          hostname.endsWith(".indexeducation.com")
         );
       } catch {
         return false;

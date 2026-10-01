@@ -77,8 +77,10 @@ export async function addNewsToDatabase(news: SharedNews[]) {
     await safeWrite(
       db,
       async () => {
-        const createPromises = itemsToCreate.map(({ id, item }) =>
-          db.get('news').create((record: Model) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const prepared: any[] = [];
+        for (const { id, item } of itemsToCreate) {
+          prepared.push(db.get('news').prepareCreate((record: Model) => {
             const newsModel = record as News;
             newsModel.newsId = id;
             newsModel.title = item.title ?? "";
@@ -90,11 +92,11 @@ export async function addNewsToDatabase(news: SharedNews[]) {
             newsModel.category = item.category ?? "";
             newsModel.createdByAccount = item.createdByAccount ?? "";
             newsModel.question = item.question ?? false;
-          })
-        );
+          }));
+        }
 
-        const updatePromises = itemsToUpdate.map(({ record, item }) =>
-          record.update((model: Model) => {
+        for (const { record, item } of itemsToUpdate) {
+          prepared.push(record.prepareUpdate((model: Model) => {
             const newsModel = model as News;
             newsModel.title = item.title ?? newsModel.title;
             newsModel.createdAt = item.createdAt.getTime();
@@ -105,10 +107,12 @@ export async function addNewsToDatabase(news: SharedNews[]) {
             newsModel.category = item.category ?? newsModel.category;
             newsModel.createdByAccount = item.createdByAccount ?? newsModel.createdByAccount;
             newsModel.question = item.question ?? newsModel.question;
-          })
-        );
+          }));
+        }
 
-        await Promise.all([...createPromises, ...updatePromises]);
+        // prepare + un seul batch : les create/update en Promise.all() dans le
+        // writer perdaient le contexte (« can only be called from inside of a Writer »).
+        await db.batch(...prepared);
       },
       10000,
       `add_news_${itemsToCreate.length}_create_${itemsToUpdate.length}_update`

@@ -14,7 +14,11 @@ const getTauriFetch = async (): Promise<TauriFetch | null> => {
   tauriFetchPromise ??= import("@tauri-apps/plugin-http")
     .then((module) => module.fetch)
     .catch((error) => {
-      console.warn("Tauri HTTP plugin unavailable, falling back to browser fetch", error);
+      // Sur desktop Tauri le plugin HTTP est obligatoire pour contourner CORS.
+      // Le fallback window.fetch ne ferait que reproduire le CORS (cf. logs
+      // calendar.google.com bloqués depuis tauri.localhost) : on renvoie null
+      // et appFetch lèvera une erreur explicite au lieu d'un « Failed to fetch ».
+      console.warn("Tauri HTTP plugin unavailable — requests will fail instead of hitting CORS", error);
       return null;
     });
   return tauriFetchPromise;
@@ -33,6 +37,12 @@ export async function appFetch(
   const tauriFetch = await getTauriFetch();
   if (tauriFetch) {
     return tauriFetch(input as string | URL | Request, init);
+  }
+  if (isTauriWeb) {
+    throw new Error(
+      "Tauri HTTP indisponible : impossible de charger cette URL sans passer par le client natif (CORS). " +
+      "Vérifie que @tauri-apps/plugin-http est installé et que la capability http autorise ce domaine."
+    );
   }
   return fetch(input, init);
 }

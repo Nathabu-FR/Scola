@@ -73,14 +73,20 @@ const Task = () => {
 
   const setAsDone = async (done: boolean) => {
     if (!task) return;
+    // Optimiste : la case se coche immédiatement. L'ancien code attendait le
+    // retour réseau (setHomeworkCompletion) avant setIsDone, donc un service
+    // en lecture seule / hors-ligne donnait l'impression que « cocher ne
+    // fonctionne pas ». Le cache local fait foi, la synchro distante suit.
+    setIsDone(done);
     try {
       await updateHomeworkIsDone(id, done);
     } catch (error) {
+      // Rollback visuel : le cache n'a pas pu suivre, on restaure l'état.
+      setIsDone(!done);
       if (Platform.OS === "web") window.alert(`Ce devoir n’a pas pu être mis à jour.\n\n${String(error)}`);
       else Alert.alert("Mise à jour impossible", "Ce devoir n’a pas pu être mis à jour.");
       return;
     }
-    setIsDone(done);
     if (!task.custom) {
       try {
         await getManager()?.setHomeworkCompletion(task, done);
@@ -94,8 +100,25 @@ const Task = () => {
     const remove = async () => {
       if (!task || !activeAccountId) return;
       try {
-        await deleteCustomHomeworkFromDatabase(id, activeAccountId);
-        router.back();
+        // Les devoirs persos sont toujours supprimables : on cherche le record
+        // avec l'id de route réel (getHomeworkRouteId pour custom = id), et on
+        // retombe sur l'id d'URL si la route a été construite autrement.
+        const { getHomeworkRouteId } = await import("@/database/useHomework");
+        const routeId = getHomeworkRouteId(task);
+        const candidates = [routeId, id];
+        let lastError: unknown = null;
+        for (const candidate of candidates) {
+          try {
+            await deleteCustomHomeworkFromDatabase(candidate, activeAccountId);
+            lastError = null;
+            break;
+          } catch (error) {
+            lastError = error;
+          }
+        }
+        if (lastError) throw lastError;
+        if (router.canGoBack()) router.back();
+        else router.replace("/(tabs)/tasks");
       } catch (error) {
         if (Platform.OS === "web") window.alert(String(error));
         else Alert.alert("Suppression impossible", String(error));

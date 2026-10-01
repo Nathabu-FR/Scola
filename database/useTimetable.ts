@@ -92,28 +92,58 @@ export function useTimetable(refresh = 0, weekNumber: number | number[] = 0, dat
 
 export async function addCourseDayToDatabase(courses: SharedCourseDay[]) {
   const db = getDatabaseInstance();
+
+  // 1) Toutes les lectures HORS writer (les awaits dans un writer WatermelonDB
+  // font perdre le contexte et provoquent « markAsDeleted() can only be called
+  // from inside of a Writer »).
+  type DaySnapshot = {
+    dayTimestamp: number;
+    dbCourses: Course[];
+    items: { item: SharedCourseDay["courses"][number]; oldId: string; id: string; existingRecords: Course[]; oldExistingRecords: Course[] }[];
+  };
+  const snapshots: DaySnapshot[] = [];
+  const oneDayMs = 24 * 60 * 60 * 1000;
+  for (const day of courses) {
+    const dayTimestamp = day.date.getTime();
+
+    const dbCourses = await db.get<Course>('courses')
+      .query(
+        Q.where('from', Q.between(dayTimestamp, dayTimestamp + oneDayMs))
+      )
+      .fetch();
+
+    const items: DaySnapshot["items"] = [];
+    for (const item of day.courses) {
+      // MIGRATION TO AVOID DUPES, DO NOT DELETE
+      const oldId = generateId(item.from.toISOString() + item.to.toISOString() + item.subject + item.teacher + item.room + item.createdByAccount);
+      const id = getCourseRouteId(item);
+
+      const oldExistingRecords = await db.get<Course>('courses')
+        .query(Q.where('courseId', oldId))
+        .fetch();
+      const existingRecords = await db.get<Course>('courses')
+        .query(Q.where('courseId', id))
+        .fetch();
+      items.push({ item, oldId, id, existingRecords, oldExistingRecords });
+    }
+    snapshots.push({ dayTimestamp, dbCourses, items });
+  }
+
+  // 2) Un seul writer : tout est préparé (create/update/delete) puis batché
+  // d'un coup, sans aucun await intermédiaire.
   await safeWrite(
     db,
     async () => {
-      for (const day of courses) {
-        const dayTimestamp = day.date.getTime();
-        const oneDayMs = 24 * 60 * 60 * 1000;
-
-        const dbCourses = await db.get<Course>('courses')
-          .query(
-            Q.where('from', Q.between(dayTimestamp, dayTimestamp + oneDayMs))
-          )
-          .fetch();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const prepared: any[] = [];
+      for (const snapshot of snapshots) {
+        const { dbCourses, items } = snapshot;
 
         const dayCourseIds = new Set(
-          day.courses.map(course => {
-            const oldId = generateId(course.from.toISOString() + course.to.toISOString() + course.subject + course.teacher + course.room + course.createdByAccount);
-            const newId = generateId(course.from.toISOString() + course.to.toISOString() + course.subject + course.teacher + course.createdByAccount);
-            return [oldId, newId];
-          }).flat()
+          items.map(({ oldId, id }) => [oldId, id]).flat()
         );
         const refreshedServiceIds = new Set(
-          day.courses.map(course => course.createdByAccount)
+          items.map(({ item }) => item.createdByAccount)
         );
 
         const coursesToDelete = dbCourses.filter(
@@ -123,29 +153,18 @@ export async function addCourseDayToDatabase(courses: SharedCourseDay[]) {
         );
 
         for (const course of coursesToDelete) {
-          await course.markAsDeleted();
+          prepared.push(course.prepareMarkAsDeleted());
         }
 
-        for (const item of day.courses) {
-          // MIGRATION TO AVOID DUPES, DO NOT DELETE
-          const oldId = generateId(item.from.toISOString() + item.to.toISOString() + item.subject + item.teacher + item.room + item.createdByAccount);
-          const id = getCourseRouteId(item);
-
-          const oldExistingRecords = await db.get('courses')
-            .query(Q.where('courseId', oldId))
-            .fetch();
-          const existingRecords = await db.get('courses')
-            .query(Q.where('courseId', id))
-            .fetch();
-
+        for (const { item, oldId, id, existingRecords, oldExistingRecords } of items) {
           if (oldId !== id) {
             for (const oldRecord of oldExistingRecords) {
-              await oldRecord.markAsDeleted();
+              prepared.push(oldRecord.prepareMarkAsDeleted());
             }
           }
 
           if (existingRecords.length === 0) {
-            await db.get('courses').create((record: Model) => {
+            prepared.push(db.get('courses').prepareCreate((record: Model) => {
               const course = record as Course;
               Object.assign(course, {
                 createdByAccount: item.createdByAccount,
@@ -164,10 +183,10 @@ export async function addCourseDayToDatabase(courses: SharedCourseDay[]) {
                 url: item.url,
                 kidName: item.kidName,
               });
-            });
+            }));
           } else {
             const courseToUpdate = existingRecords[0];
-            await courseToUpdate.update((model: Model) => {
+            prepared.push(courseToUpdate.prepareUpdate((model: Model) => {
               const course = model as Course;
               Object.assign(course, {
                 subject: item.subject ?? course.subject,
@@ -184,9 +203,13 @@ export async function addCourseDayToDatabase(courses: SharedCourseDay[]) {
                 url: item.url ?? course.url,
                 kidName: item.kidName ?? course.kidName,
               });
-            });
+            }));
           }
         }
+      }
+
+      if (prepared.length > 0) {
+        await db.batch(...prepared);
       }
     },
     15000,

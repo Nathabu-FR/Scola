@@ -49,12 +49,28 @@ export function normalizeICalFeedUrl(rawUrl: string): string {
 export async function fetchAndParseICal(url: string): Promise<ParsedICalData> {
   try {
     const feedUrl = normalizeICalFeedUrl(url);
-    const response = await appFetch(feedUrl);
+    const response = await appFetch(feedUrl, {
+      // Google ICS : certains agendas privés exigent un UA navigateur,
+      // sinon Google répond 403/HTML au client Rust.
+      headers: { "User-Agent": "Mozilla/5.0 Scola/1.0" },
+    });
     if (!response.ok) {
+      if (response.status === 400 || response.status === 404) {
+        throw new Error("Ce lien iCal est invalide ou n'est plus partagé (vérifie le partage public du calendrier).");
+      }
+      if (response.status === 403) {
+        throw new Error("Accès refusé au calendrier : utilise l'adresse secrète iCal (partage privé) plutôt que l'URL publique/embed.");
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
+    const contentType = response.headers.get("content-type") ?? "";
     const icalString = await response.text();
+    // Google renvoie la page HTML d'embed quand on lui donne l'URL /embed :
+    // si on reçoit du HTML, l'URL n'a pas été normalisée en flux ICS.
+    if (contentType.includes("text/html") || /<\s*html[\s>]/i.test(icalString.slice(0, 2000))) {
+      throw new Error("Ce lien renvoie une page web, pas un flux iCal. Pour Google Agenda, utilise l'adresse iCal (…/basic.ics) ou l'adresse secrète, pas l'URL /embed.");
+    }
     const { events, metadata } = parseICalString(icalString);
     const { isADE, isHyperplanning, provider, isSchool, schoolName } = detectProvider(metadata.prodId, url);
     return {

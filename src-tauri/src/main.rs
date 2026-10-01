@@ -1,7 +1,7 @@
 // Hides the console window on release builds for Windows.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use tauri::{Emitter, Manager, WebviewWindowBuilder, WebviewUrl};
+use tauri::{webview::NewWindowResponse, Emitter, Manager, WebviewWindowBuilder, WebviewUrl};
 
 const PRONOTE_WINDOW_LABEL: &str = "pronote-auth";
 const PRONOTE_INFO_MOBILE_ID: &str = "0D264427-EEFC-4810-A9E9-346942A862A4";
@@ -114,7 +114,7 @@ fn pronote_initialization_script(info_url: &str, mobile_url: &str, device_uuid: 
 }
 
 #[tauri::command(rename_all = "camelCase")]
-fn open_pronote_login(app: tauri::AppHandle, url: String, device_uuid: String) -> Result<(), String> {
+async fn open_pronote_login(app: tauri::AppHandle, url: String, device_uuid: String) -> Result<(), String> {
     if let Some(existing) = app.get_webview_window(PRONOTE_WINDOW_LABEL) {
         existing.close().map_err(|error| error.to_string())?;
     }
@@ -126,6 +126,7 @@ fn open_pronote_login(app: tauri::AppHandle, url: String, device_uuid: String) -
     let script = pronote_initialization_script(&info_url, &mobile_url, &device_uuid)?;
     let initial_url = tauri::Url::parse(&info_url).map_err(|error| error.to_string())?;
     let event_app = app.clone();
+    let popup_app = app.clone();
 
     WebviewWindowBuilder::new(
         &app,
@@ -138,6 +139,17 @@ fn open_pronote_login(app: tauri::AppHandle, url: String, device_uuid: String) -
     .resizable(true)
     .user_agent(PRONOTE_USER_AGENT)
     .initialization_script(script)
+    // PRONOTE/ENT opens some identity-provider pages with window.open.
+    // Match the former React Native WebView flow: reuse this authenticated
+    // WebView for the popup URL so its redirect reaches the login hook.
+    .on_new_window(move |url, _features| {
+        if matches!(url.scheme(), "http" | "https") {
+            if let Some(window) = popup_app.get_webview_window(PRONOTE_WINDOW_LABEL) {
+                let _ = window.navigate(url);
+            }
+        }
+        NewWindowResponse::Deny
+    })
     .on_navigation(move |url| {
         if url.scheme() == "scola-pronote" {
             match url.host_str() {

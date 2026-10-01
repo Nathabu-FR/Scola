@@ -14,148 +14,111 @@ export async function addAttendanceToDatabase(attendances: SharedAttendance[], p
   for (const attendance of attendances) {
     const id = generateId(attendance.createdByAccount + period + attendance.kidName);
 
+    // 1) Lectures HORS writer (tout await ici est autorisé).
+    const existing = await db.get('attendance').query(Q.where('attendanceId', id)).fetch();
+    const existingAttendance = (existing[0] as Attendance | undefined) ?? null;
+    const [oldDelays, oldAbsences, oldObservations, oldPunishments] = existingAttendance
+      ? await Promise.all([
+        existingAttendance.delays.fetch(),
+        existingAttendance.absences.fetch(),
+        existingAttendance.observations.fetch(),
+        existingAttendance.punishments.fetch(),
+      ])
+      : [[], [], [], []] as const;
+
+    // 2) Un seul writer, 100 % synchrone : pas d'await entre la préparation
+    // et le batch. Appeler des sub-writers (update/create/markAsDeleted)
+    // après un await faisait perdre le contexte Writer (« can only be called
+    // from inside of a Writer »). Ici on prépare tout puis on batch d'un coup.
+    // NOTE : attendanceId reste l'id métier généré (pas le row id Watermelon),
+    // car les tables enfants le référencent via ce champ (cf. ancien code).
     await safeWrite(db, async () => {
-      const existing = await db.get('attendance').query(Q.where('attendanceId', id)).fetch();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const prepared: any[] = [];
 
-      if (existing.length > 0) {
-        const existingAttendance = existing[0] as Attendance;
-
-        await existingAttendance.update(record => {
-          record.createdByAccount = attendance.createdByAccount;
-          record.kidName = attendance.kidName ?? undefined;
-          record.period = period;
-        });
-
-        await Promise.all([
-          ...(await existingAttendance.delays.fetch()).map((d: Delay) => d.markAsDeleted()),
-          ...(await existingAttendance.absences.fetch()).map((a: Absence) => a.markAsDeleted()),
-          ...(await existingAttendance.observations.fetch()).map((o: Observation) => o.markAsDeleted()),
-          ...(await existingAttendance.punishments.fetch()).map((p: Punishment) => p.markAsDeleted()),
-        ]);
-
-
-        for (const delay of attendance.delays) {
-          await db.get('delays').create(record => {
-            Object.assign(record, {
-              givenAt: delay.givenAt.getTime(),
-              reason: delay.reason,
-              justified: delay.justified,
-              duration: delay.duration,
-              attendanceId: id,
-              kidName: delay.kidName
-            });
-          });
-        }
-
-        for (const absence of attendance.absences) {
-          await db.get('absences').create(record => {
-            Object.assign(record, {
-              from: absence.from.getTime(),
-              to: absence.to.getTime(),
-              reason: absence.reason,
-              justified: absence.justified,
-              attendanceId: id,
-              kidName: absence.kidName
-            });
-          });
-        }
-
-        for (const observation of attendance.observations) {
-          await db.get('observations').create(record => {
-            Object.assign(record, {
-              givenAt: observation.givenAt.getTime(),
-              sectionName: observation.sectionName,
-              sectionType: observation.sectionType,
-              subjectName: observation.subjectName,
-              shouldParentsJustify: observation.shouldParentsJustify,
-              reason: observation.reason,
-              attendanceId: id
-            });
-          });
-        }
-
-        for (const punishment of attendance.punishments) {
-          await db.get('punishments').create(record => {
-            Object.assign(record, {
-              givenAt: punishment.givenAt.getTime(),
-              givenBy: punishment.givenBy,
-              exclusion: punishment.exclusion,
-              duringLesson: punishment.duringLesson,
-              nature: punishment.nature,
-              duration: punishment.duration,
-              homeworkDocumentsRaw: JSON.stringify(punishment.homework.documents ?? []),
-              reasonDocumentsRaw: JSON.stringify(punishment.reason.documents ?? []),
-              homeworkText: punishment.homework.text,
-              reasonText: punishment.reason.text,
-              reasonCircumstances: punishment.reason.circumstances,
-              attendanceId: id
-            });
-          });
-        }
+      if (existingAttendance) {
+        prepared.push(
+          existingAttendance.prepareUpdate((record: unknown) => {
+            const att = record as Attendance;
+            att.createdByAccount = attendance.createdByAccount;
+            att.kidName = attendance.kidName ?? undefined;
+            att.period = period;
+          })
+        );
       } else {
-        await db.get('attendance').create(record => {
+        prepared.push(db.get('attendance').prepareCreate((record: unknown) => {
           const att = record as Attendance;
           att.attendanceId = id;
           att.createdByAccount = attendance.createdByAccount;
           att.period = period;
-        });
+        }));
+      }
 
-        for (const delay of attendance.delays) {
-          await db.get('delays').create(record => {
-            Object.assign(record, {
-              givenAt: delay.givenAt.getTime(),
-              reason: delay.reason,
-              justified: delay.justified,
-              duration: delay.duration,
-              attendanceId: id
-            });
-          });
-        }
+      for (const record of [...oldDelays, ...oldAbsences, ...oldObservations, ...oldPunishments]) {
+        prepared.push(record.prepareMarkAsDeleted());
+      }
 
-        for (const absence of attendance.absences) {
-          await db.get('absences').create(record => {
-            Object.assign(record, {
-              from: absence.from.getTime(),
-              to: absence.to.getTime(),
-              reason: absence.reason,
-              justified: absence.justified,
-              attendanceId: id
-            });
+      for (const delay of attendance.delays) {
+        prepared.push(db.get('delays').prepareCreate((record: unknown) => {
+          Object.assign(record, {
+            givenAt: delay.givenAt.getTime(),
+            reason: delay.reason,
+            justified: delay.justified,
+            duration: delay.duration,
+            attendanceId: id,
+            kidName: delay.kidName
           });
-        }
+        }));
+      }
 
-        for (const observation of attendance.observations) {
-          await db.get('observations').create(record => {
-            Object.assign(record, {
-              givenAt: observation.givenAt.getTime(),
-              sectionName: observation.sectionName,
-              sectionType: observation.sectionType,
-              subjectName: observation.subjectName,
-              shouldParentsJustify: observation.shouldParentsJustify,
-              reason: observation.reason,
-              attendanceId: id
-            });
+      for (const absence of attendance.absences) {
+        prepared.push(db.get('absences').prepareCreate((record: unknown) => {
+          Object.assign(record, {
+            from: absence.from.getTime(),
+            to: absence.to.getTime(),
+            reason: absence.reason,
+            justified: absence.justified,
+            attendanceId: id,
+            kidName: absence.kidName
           });
-        }
+        }));
+      }
 
-        for (const punishment of attendance.punishments) {
-          await db.get('punishments').create(record => {
-            Object.assign(record, {
-              givenAt: punishment.givenAt.getTime(),
-              givenBy: punishment.givenBy,
-              exclusion: punishment.exclusion,
-              duringLesson: punishment.duringLesson,
-              nature: punishment.nature,
-              duration: punishment.duration,
-              homeworkDocumentsRaw: JSON.stringify(punishment.homework.documents ?? []),
-              reasonDocumentsRaw: JSON.stringify(punishment.reason.documents ?? []),
-              homeworkText: punishment.homework.text,
-              reasonText: punishment.reason.text,
-              reasonCircumstances: punishment.reason.circumstances,
-              attendanceId: id
-            });
+      for (const observation of attendance.observations) {
+        prepared.push(db.get('observations').prepareCreate((record: unknown) => {
+          Object.assign(record, {
+            givenAt: observation.givenAt.getTime(),
+            sectionName: observation.sectionName,
+            sectionType: observation.sectionType,
+            subjectName: observation.subjectName,
+            shouldParentsJustify: observation.shouldParentsJustify,
+            reason: observation.reason,
+            attendanceId: id
           });
-        }
+        }));
+      }
+
+      for (const punishment of attendance.punishments) {
+        prepared.push(db.get('punishments').prepareCreate((record: unknown) => {
+          Object.assign(record, {
+            givenAt: punishment.givenAt.getTime(),
+            givenBy: punishment.givenBy,
+            exclusion: punishment.exclusion,
+            duringLesson: punishment.duringLesson,
+            nature: punishment.nature,
+            duration: punishment.duration,
+            homeworkDocumentsRaw: JSON.stringify(punishment.homework.documents ?? []),
+            reasonDocumentsRaw: JSON.stringify(punishment.reason.documents ?? []),
+            homeworkText: punishment.homework.text,
+            reasonText: punishment.reason.text,
+            reasonCircumstances: punishment.reason.circumstances,
+            attendanceId: id
+          });
+        }));
+      }
+
+      if (prepared.length > 0) {
+        await db.batch(...prepared);
       }
     }, 10000, 'addAttendanceToDatabase');
   }

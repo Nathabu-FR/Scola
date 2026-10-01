@@ -44,7 +44,11 @@ const WallpaperModal = () => {
   const fetchCollections = async (isRefresh = false) => {
     try {
       if (isRefresh) setRefreshing(true);
-      const response = await fetch(COLLECTIONS_SOURCE);
+      // Sur Tauri desktop, window.fetch subit le CORS (comme les iCal) :
+      // on passe par appFetch → client HTTP Rust (capability http déjà élargie
+      // à raw.githubusercontent.com).
+      const { appFetch } = await import("@/utils/network/fetch");
+      const response = await appFetch(COLLECTIONS_SOURCE);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
       setCollections(data);
@@ -278,29 +282,21 @@ const WallpaperModal = () => {
       />
 
       <NativeHeaderSide side="Left" key={currentWallpaper?.id + ":" + "upload:" + (hasCustomWallpaper ? "true" : "false")}>
-        {Platform.OS === 'android' || Platform.OS === 'web' ? (
-          <NativeHeaderPressable onPress={() => router.canGoBack() ? router.back() : router.replace("/")}>
-            <Icon size={28}>
-              <Papicons name="ArrowLeft" color="#8B5CF6" />
-            </Icon>
-          </NativeHeaderPressable>
-        ) : (
-          <NativeHeaderPressable onPress={() => uploadCustomWallpaper()}>
-            <Icon size={28} fill={hasCustomWallpaper ? colors.primary : undefined}>
-              <Papicons name="Gallery" />
-            </Icon>
-          </NativeHeaderPressable>
-        )}
+        {/* Bouton retour sur toutes les plateformes : la capture desktop
+            montrait la modale sans retour (flèche violette en haut à gauche). */}
+        <NativeHeaderPressable onPress={() => router.canGoBack() ? router.back() : router.replace("/")}>
+          <Icon size={28}>
+            <Papicons name="ArrowLeft" color="#8B5CF6" />
+          </Icon>
+        </NativeHeaderPressable>
       </NativeHeaderSide>
 
       <NativeHeaderSide side="Right" key={currentWallpaper?.id + ":" + (wallpaperDirectory?.exists ?? false)}>
-        {Platform.OS === 'android' && (
-          <NativeHeaderPressable onPress={() => uploadCustomWallpaper()}>
-            <Icon size={28} fill={hasCustomWallpaper ? colors.primary : undefined}>
-              <Papicons name="Gallery" />
-            </Icon>
-          </NativeHeaderPressable>
-        )}
+        <NativeHeaderPressable onPress={() => uploadCustomWallpaper()}>
+          <Icon size={28} fill={hasCustomWallpaper ? colors.primary : undefined}>
+            <Papicons name="Gallery" />
+          </Icon>
+        </NativeHeaderPressable>
         <ActionMenu
           actions={Platform.OS === "web" ? [
             {

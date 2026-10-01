@@ -65,6 +65,16 @@ export default function CourseModal() {
     setLoading(true);
     getCourseById(id)
       .then(result => {
+        if (cancelled || !result) return;
+        // Restaure le statut manuel posé sur un cours iCal (localStorage web).
+        if (result.createdByAccount.startsWith("ical_") && Platform.OS === "web" && typeof window !== "undefined") {
+          try {
+            const saved = window.localStorage.getItem(`ical-course-status:${result.id}`);
+            if (saved !== null) {
+              result.customStatus = saved || undefined;
+            }
+          } catch { /* stockage indisponible : on garde le statut réseau */ }
+        }
         if (!cancelled) setCourse(result);
       })
       .finally(() => {
@@ -131,9 +141,20 @@ export default function CourseModal() {
     });
   };
   const setManualCourseStatus = async (customStatus?: string) => {
-    if (!course || course.createdByAccount.startsWith("ical_")) return;
+    // Les cours iCal n'ont pas de record modifiable : on persiste le statut
+    // en paramètre local plutôt que de quitter silencieusement (le `return`
+    // précédent donnait l'impression que les boutons « annulé / prof absent »
+    // ne fonctionnaient pas sur les cours iCal).
+    if (!course) return;
     setUpdatingStatus(true);
     try {
+      if (course.createdByAccount.startsWith("ical_")) {
+        if (Platform.OS === "web" && typeof window !== "undefined") {
+          window.localStorage.setItem(`ical-course-status:${course.id}`, customStatus ?? "");
+        }
+        setCourse({ ...course, customStatus });
+        return;
+      }
       await updateCourseCustomStatus(getCourseRouteId(course), customStatus);
       setCourse({ ...course, customStatus });
     } catch (error) {
@@ -251,8 +272,7 @@ export default function CourseModal() {
           </List.Section>
         ) : null}
 
-        {!course.createdByAccount.startsWith("ical_") && (
-          <List.Section>
+        <List.Section>
             <List.SectionTitle><List.Label>Signaler un changement</List.Label></List.SectionTitle>
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, paddingHorizontal: 12, paddingBottom: 12 }}>
               {[
@@ -275,8 +295,12 @@ export default function CourseModal() {
                 );
               })}
             </View>
+            {course.createdByAccount.startsWith("ical_") ? (
+              <Typography variant="caption" color="textSecondary" style={{ paddingHorizontal: 12, paddingBottom: 12 }}>
+                Cours importé d’un agenda externe : ce statut reste local à cet appareil.
+              </Typography>
+            ) : null}
           </List.Section>
-        )}
 
         <List.Section>
           <List.SectionTitle>

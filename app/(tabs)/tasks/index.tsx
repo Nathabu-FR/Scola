@@ -358,13 +358,29 @@ const TasksView: React.FC = () => {
           <AndroidHeaderMenu
             icon="Filter"
             accessibilityLabel={t('Task_Sorting_Title')}
-            actions={sortings.map(sorting => ({
-              id: sorting.value,
-              title: sorting.label,
-              papicon: sorting.papicon,
-              state: sortMethod === sorting.value ? 'on' : 'off',
-            }))}
-            onPressAction={({ nativeEvent }) => setSortMethod(nativeEvent.event as SortMethod)}
+            actions={[
+              ...sortings.map(sorting => ({
+                id: sorting.value,
+                title: sorting.label,
+                papicon: sorting.papicon,
+                state: sortMethod === sorting.value ? 'on' : 'off',
+              })),
+              // Le bouton « filtrer par non terminé » manquait sur Android :
+              // on l'ajoute au menu natif plutôt que de le cacher.
+              {
+                id: "__undone_only",
+                title: "Non terminés uniquement",
+                papicon: "Check",
+                state: showUndoneOnly ? "on" : "off",
+              },
+            ]}
+            onPressAction={({ nativeEvent }) => {
+              if (nativeEvent.event === "__undone_only") {
+                setShowUndoneOnly(value => !value);
+                return;
+              }
+              setSortMethod(nativeEvent.event as SortMethod);
+            }}
           />
         </Stack.Toolbar>
       ) : (
@@ -382,36 +398,43 @@ const TasksView: React.FC = () => {
                 {sorting.label}
               </Stack.Toolbar.MenuAction>
             ))}
+            <Stack.Toolbar.MenuAction
+              isOn={showUndoneOnly}
+              icon={showUndoneOnly ? "checkmark.circle.fill" : "circle"}
+              onPress={() => setShowUndoneOnly(value => !value)}
+            >
+              Non terminés uniquement
+            </Stack.Toolbar.MenuAction>
           </Stack.Toolbar.Menu>
         </Stack.Toolbar>
       )}
 
       <View style={styles.container}>
-        {Platform.OS === "web" && (
+        {(Platform.OS === "web" || Platform.OS === "android") && (
           <Pressable
             accessibilityRole="checkbox"
-            accessibilityState={{ checked: sortMethod === "undone" }}
+            accessibilityState={{ checked: showUndoneOnly }}
             accessibilityLabel="Afficher uniquement les devoirs non terminés"
-            onPress={() => setSortMethod(sortMethod === "undone" ? "date" : "undone")}
+            onPress={() => setShowUndoneOnly(value => !value)}
             style={[
               styles.desktopFilter,
               {
-                borderColor: sortMethod === "undone" ? colors.primary : colors.border,
-                backgroundColor: sortMethod === "undone" ? `${colors.primary}18` : colors.card,
+                borderColor: showUndoneOnly ? colors.primary : colors.border,
+                backgroundColor: showUndoneOnly ? `${colors.primary}18` : colors.card,
                 userSelect: "none",
               },
             ] as any}
           >
             <Papicons
-              name={sortMethod === "undone" ? "Check" : "Circle"}
+              name={showUndoneOnly ? "Check" : "Circle"}
               size={19}
-              color={sortMethod === "undone" ? colors.primary : colors.text + "88"}
+              color={showUndoneOnly ? colors.primary : colors.text + "88"}
             />
             <Typography variant="body1" weight="semibold" selectable={false}>
               Devoirs non terminés uniquement
             </Typography>
             <Typography variant="body2" color="textSecondary" style={{ marginLeft: "auto" }}>
-              {sortMethod === "undone" ? "Activé" : "Filtrer"}
+              {showUndoneOnly ? "Activé" : "Filtrer"}
             </Typography>
           </Pressable>
         )}
@@ -434,8 +457,9 @@ const TasksView: React.FC = () => {
                       week={week}
                       homeworks={homeworkByWeek[week]}
                       animateItems={index === INITIAL_INDEX}
-                      searchTerm=""
+                      searchTerm={searchTerm}
                       sortMethod={sortMethod}
+                      showUndoneOnly={showUndoneOnly}
                       collapsedGroups={collapsedGroups}
                       toggleGroup={toggleGroup}
                       isRefreshing={refreshingWeek === week}

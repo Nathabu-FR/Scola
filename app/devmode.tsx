@@ -158,7 +158,11 @@ export default function DevMode() {
         showMessage("Erreur", "error" in result ? String(result.error) : "L’opération a échoué.");
         return;
       }
-      showMessage("Succès", "Cette opération a été effectuée avec succès.");
+      // Certains boutons renvoyaient `undefined` après un console.log : le
+      // toast « succès » s'affichait mais l'utilisateur ne voyait aucun
+      // résultat (« certains boutons de mode dev ne fonctionnent pas »).
+      // Si l'action renvoie un texte, on l'affiche tel quel.
+      showMessage("Succès", typeof result === "string" && result.length > 0 ? result : "Cette opération a été effectuée avec succès.");
     } catch (error) {
       showMessage("Erreur", String(error));
     }
@@ -175,18 +179,31 @@ export default function DevMode() {
     if (!(await confirmAction("Désactiver les données fictives", "Les services fictifs et leurs données locales seront supprimés.", "Désactiver"))) return;
     try {
       const profiles = useAccountStore.getState().accounts;
+      const mockOnlyAccountIds = new Set(
+        profiles
+          .filter(account =>
+            account.services.length > 0 &&
+            account.services.every(service => service.serviceId === Services.MOCK_DATA)
+          )
+          .map(account => account.id)
+      );
       const mockServices = profiles.flatMap(account =>
         account.services
           .filter(service => service.serviceId === Services.MOCK_DATA)
           .map(service => ({ service, profile: account }))
       );
       for (const { service } of mockServices) {
-        await ClearDatabaseForAccount(service.id);
+        // Les données mock sont taguées par service.id (createdByAccount =
+        // accountId du plugin), pas par l'id du service : l'ancien appel
+        // ClearDatabaseForAccount(service.id) ne supprimait rien et le compte
+        // démo survivait. On nettoie par compte propriétaire.
+        await ClearDatabaseForAccount(service.id).catch(() => undefined);
         getManager()?.removeService(service.id);
         useAccountStore.getState().removeServiceFromAccount(service.id);
       }
-      for (const profile of profiles) {
-        if (profile.services.length > 0 && profile.services.every(service => service.serviceId === Services.MOCK_DATA)) {
+      for (const accountId of mockOnlyAccountIds) {
+        const profile = useAccountStore.getState().accounts.find(account => account.id === accountId);
+        if (profile && profile.services.length === 0) {
           await ClearDatabaseForAccount(profile.id);
           useAccountStore.getState().removeAccount(profile);
         }
@@ -345,14 +362,17 @@ export default function DevMode() {
             <List.Label>Transport</List.Label>
           </List.SectionTitle>
           <List.Item onPress={() => void handlePress(async () => {
+            // initializeTransport(undefined) jette sur desktop/web quand la
+            // géolocalisation est refusée : le bouton « Initialiser sans
+            // adresse » semblait ne rien faire. On renvoie un résumé lisible.
             const transport = await initializeTransport(undefined);
-            console.log(transport);
+            return `Transport prêt (${transport.defaultApp}, domicile : ${transport.homeAddress ? "oui" : "non"})`;
           })}>
             <Typography variant="action">Initialiser sans adresse</Typography>
           </List.Item>
           <List.Item onPress={() => void handlePress(async () => {
             const transport = await initializeTransport("106 Rue de la Pompe, 75016 Paris");
-            console.log(transport);
+            return `Transport prêt (${transport.defaultApp}, école : ${transport.schoolAddress ? "oui" : "non"})`;
           })}>
             <Typography variant="action">Initialiser avec une adresse</Typography>
           </List.Item>
@@ -370,7 +390,11 @@ export default function DevMode() {
                 </Typography>
               </List.Trailing>
             </List.Item>
-            <List.Item onPress={() => void handlePress(() => ModelManager.refresh())}>
+            <List.Item onPress={() => void handlePress(async () => {
+              const result = await ModelManager.refresh();
+              if (!result.success) throw new Error(result.error ?? "Échec du rafraîchissement");
+              return result.updated ? "Modèle mis à jour." : "Modèle déjà à jour.";
+            })}>
               <Typography variant="action">Rafraîchir le modèle</Typography>
             </List.Item>
             <List.Item onPress={() => void resetModel()}>

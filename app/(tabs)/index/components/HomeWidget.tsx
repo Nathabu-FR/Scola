@@ -100,8 +100,30 @@ const HomeWidgetContent: React.FC<HomeWidgetProps> = ({ item }) => {
             style={{
               overflow: Platform.OS === "android" ? "hidden" : "visible",
               flexShrink: 0,
+              // Sur desktop les cartes « Afficher plus » débordaient du widget
+              // (flèches violettes de la capture) : on laisse le libellé se
+              // réduire au lieu de pousser le widget hors de sa colonne.
+              maxWidth: "55%",
             }}
           >
+            {item.onPress && !item.redirect ? (
+              <ListTouchable onPress={item.onPress}>
+                <Stack
+                  direction="horizontal"
+                  width="auto"
+                  hAlign="center"
+                  padding={[12, 6]}
+                  gap={6}
+                >
+                  <Typography variant="body2" color="secondary" inline numberOfLines={1}>
+                    {item.buttonLabel ?? t("Home_Display_More")}
+                  </Typography>
+                  <Icon size={20} papicon opacity={0.5}>
+                    <Papicons name={"ArrowRightUp"} />
+                  </Icon>
+                </Stack>
+              </ListTouchable>
+            ) : (
             <Link asChild href={item.redirect ?? "/(features)/soon"}>
                 <ListTouchable>
                   <Stack
@@ -111,8 +133,8 @@ const HomeWidgetContent: React.FC<HomeWidgetProps> = ({ item }) => {
                     padding={[12, 6]}
                     gap={6}
                   >
-                    <Typography variant="body2" color="secondary" inline>
-                      {t("Home_Display_More")}
+                    <Typography variant="body2" color="secondary" inline numberOfLines={1}>
+                      {item.buttonLabel ?? t("Home_Display_More")}
                     </Typography>
                     <Icon size={20} papicon opacity={0.5}>
                       <Papicons name={"ArrowRightUp"} />
@@ -120,6 +142,7 @@ const HomeWidgetContent: React.FC<HomeWidgetProps> = ({ item }) => {
                   </Stack>
                 </ListTouchable>
             </Link>
+            )}
           </Stack>
         )}
       </Stack>

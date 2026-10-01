@@ -5,7 +5,7 @@ import React, { useMemo, useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { addCustomHomeworkToDatabase } from "@/database/useHomework";
+import { addCustomHomeworkToDatabase, useAllHomeworkFromCache } from "@/database/useHomework";
 import { useTimetableWidgetData } from "@/app/(tabs)/index/hooks/useTimetableWidgetData";
 import { useAccountStore } from "@/stores/account";
 import AnimatedPressable from "@/ui/components/AnimatedPressable";
@@ -24,24 +24,42 @@ export default function CreatePersonalHomework() {
   const insets = useSafeAreaInsets();
   const account = useAccountStore(state => state.accounts.find(item => item.id === state.lastUsedAccount));
   const { upcomingDays } = useTimetableWidgetData({ showCancelled: true });
+  const allCachedHomeworks = useAllHomeworkFromCache();
   const [subject, setSubject] = useState("");
   const [description, setDescription] = useState("");
   const [dueDate, setDueDate] = useState(() => localDateValue(new Date()));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const availableSubjects = useMemo(() => {
+    // Les iCal ne créent pas de matières : on ne propose que les matières de
+    // l'emploi du temps du compte (cours non-iCal), + les matières déjà
+    // utilisées par des devoirs en cache (sinon impossible d'ajouter un
+    // « maths » avec une casse différente, cf. capture « Devoir perso / maths »).
     const services = new Set(account?.services?.map(service => service.id) ?? []);
-    const names = upcomingDays.flatMap(day => day.courses)
+    const fromTimetable = upcomingDays.flatMap(day => day.courses)
       .filter(course => services.has(course.createdByAccount) && !course.createdByAccount.startsWith("ical_"))
       .map(course => course.subject.trim())
       .filter(Boolean);
+    const fromCache = allCachedHomeworks
+      .filter(hw => hw.createdByAccount === account?.id || services.has(hw.createdByAccount))
+      .map(hw => hw.subject.trim())
+      .filter(Boolean);
+    const names = [...fromTimetable, ...fromCache];
     return Array.from(new Map(names.map(name => [name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase(), name])).values());
-  }, [account?.services, upcomingDays]);
+  }, [account?.services, account?.id, allCachedHomeworks, upcomingDays]);
 
+  // Les devoirs persos sont toujours supprimables ; le bouton retour existe
+  // sur toutes les plateformes (la capture « fonds d'écran » montrait une
+  // modale sans retour sur desktop/web).
   const save = async () => {
     const cleanSubject = subject.trim();
-    if (!availableSubjects.includes(cleanSubject) || !description.trim()) {
-      setError("Renseigne une matière et une consigne.");
+    // Le devoir doit utiliser une matière affichée pour ce compte. Les cours
+    // iCal sont exclus de availableSubjects et ne peuvent donc pas en ajouter.
+    const normalized = (value: string) =>
+      value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
+    const matched = availableSubjects.find(name => normalized(name) === normalized(cleanSubject));
+    if (!matched || !description.trim()) {
+      setError(!matched ? "Choisis une matière dans la liste." : "Renseigne une consigne.");
       return;
     }
     const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dueDate.trim());
@@ -65,7 +83,7 @@ export default function CreatePersonalHomework() {
     try {
       await addCustomHomeworkToDatabase({
         id: `personal-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        subject: cleanSubject,
+        subject: matched,
         content: description.trim(),
         dueDate: date,
         isDone: false,
@@ -75,7 +93,8 @@ export default function CreatePersonalHomework() {
         createdByAccount: account.id,
         fromCache: true,
       });
-      router.back();
+      if (router.canGoBack()) router.back();
+      else router.replace("/(tabs)/tasks");
     } catch {
       setError("Le devoir n’a pas pu être enregistré. Réessaie.");
     } finally {
@@ -152,7 +171,7 @@ export default function CreatePersonalHomework() {
             multiline
           />
           {error ? <Typography variant="body2" color="#E5484D">{error}</Typography> : null}
-          <Button label={saving ? "Enregistrement…" : "Ajouter le devoir"} onPress={save} disabled={saving} style={{ marginTop: 10 }} />
+          <Button label={saving ? "Enregistrement…" : "Ajouter le devoir"} onPress={save} disabled={saving || availableSubjects.length === 0} style={{ marginTop: 10 }} />
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

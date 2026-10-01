@@ -184,13 +184,17 @@ export async function addHomeworkToDatabase(homeworks: SharedHomework[]) {
       !homeworkIds.includes(dbHomework.homeworkId)
   );
 
+  // Batch WatermelonDB : markAsDeleted() doit rester dans le Writer synchrone.
+  // On prépare hors writer puis on batch, plutôt que d'appeler en boucle
+  // des sub-writers (le log « can only be called from inside of a Writer »
+  // venait d'écritures concurrentes imbriquées).
   if (homeworksToDelete.length > 0) {
     await safeWrite(
       db,
       async () => {
-        for (const homework of homeworksToDelete) {
-          await homework.markAsDeleted();
-        }
+        await db.batch(
+          ...homeworksToDelete.map(homework => homework.prepareMarkAsDeleted())
+        );
       },
       10000,
       "removeStaleHomeworks"
@@ -214,9 +218,10 @@ export async function addHomeworkToDatabase(homeworks: SharedHomework[]) {
       await safeWrite(
         db,
         async () => {
-          for (const oldRecord of oldExisting) {
-            await oldRecord.markAsDeleted();
-          }
+          await db.batch(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ...oldExisting.map(oldRecord => (oldRecord as any).prepareMarkAsDeleted())
+          );
         },
         10000,
         "removeMigratedHomework"
@@ -280,6 +285,8 @@ export async function addHomeworkToDatabase(homeworks: SharedHomework[]) {
 export async function addCustomHomeworkToDatabase(homework: SharedHomework) {
   const db = getDatabaseInstance();
   const id = homework.id || getHomeworkRouteId(homework);
+  // Lecture HORS writer : un await dans le writer WatermelonDB fait perdre
+  // le contexte (« can only be called from inside of a Writer »).
   const existing = await db
     .get<Homework>("homework")
     .query(Q.where("homeworkId", id))
@@ -318,6 +325,7 @@ export async function updateHomeworkIsDone(
 ) {
   const db = getDatabaseInstance();
 
+  // Lecture HORS writer (même raison que ci-dessus : pas d'await dans le writer).
   const existing = await db
     .get("homework")
     .query(Q.where("homeworkId", homeworkId))
@@ -358,8 +366,11 @@ export async function deleteCustomHomeworkFromDatabase(
     throw new Error("Ce devoir personnel n’existe plus pour ce compte.");
   }
 
+  // deleteCustomHomework passé en batch préparé : le markAsDeleted() direct
+  // dans le writer levait « can only be called from inside of a Writer »
+  // quand une autre écriture tournait en parallèle.
   await safeWrite(db, async () => {
-    await record.markAsDeleted();
+    await db.batch(record.prepareMarkAsDeleted());
   }, 10000, "deleteCustomHomework");
 }
 

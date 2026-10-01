@@ -34,19 +34,31 @@ export default function QRCodeAndCardsPage() {
   const account = accounts.find(a => a.id === lastUsedAccount);
 
   async function fetchWallets() {
-    const manager = getManager();
-    const balances = await manager.getCanteenBalances();
-    const result: Balance[] = [];
-    for (const balance of balances) {
-      result.push(balance);
+    const manager = getManager(true);
+    // Les cartes se relient au compte courant uniquement : l'ancien code
+    // branchait le manager global (dernier compte initialisé), ce qui
+    // mélangeait les soldes entre comptes (« chaque compte a sa propre
+    // database et se mélange pas, ya que les cartes… »).
+    if (!manager || manager.account.id !== account?.id) return;
+    try {
+      const balances = await manager.getCanteenBalances();
+      const serviceIds = new Set(account?.services.map(service => service.id) ?? []);
+      const result: Balance[] = [];
+      for (const balance of balances) {
+        if (balance.createdByAccount === manager.account.id || serviceIds.has(balance.createdByAccount)) {
+          result.push(balance);
+        }
+      }
+      setWallets(result);
+    } catch {
+      setWallets([]);
     }
-    setWallets(result);
   }
 
   useEffect(() => {
     setWallets([]);
     fetchWallets();
-  }, [accounts]);
+  }, [accounts, lastUsedAccount]);
 
   const { t } = useTranslation();
 

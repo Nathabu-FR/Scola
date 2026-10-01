@@ -11,6 +11,8 @@ interface TasksWeekPageProps {
   homeworks?: Homework[];
   searchTerm: string;
   sortMethod: SortMethod;
+  /** Filtre « non terminés » : doit descendre jusqu'aux sections. */
+  showUndoneOnly?: boolean;
   collapsedGroups: string[];
   toggleGroup: (headerId: string) => void;
   isRefreshing: boolean;
@@ -29,6 +31,7 @@ const TasksWeekPage: React.FC<TasksWeekPageProps> = ({
   homeworks,
   searchTerm,
   sortMethod,
+  showUndoneOnly = false,
   collapsedGroups,
   toggleGroup,
   isRefreshing,
@@ -38,8 +41,8 @@ const TasksWeekPage: React.FC<TasksWeekPageProps> = ({
   hasError,
 }) => {
   const sections = useMemo(
-    () => buildHomeworkSections(homeworks ?? [], { searchTerm, sortMethod }),
-    [homeworks, searchTerm, sortMethod]
+    () => buildHomeworkSections(homeworks ?? [], { searchTerm, sortMethod, showUndoneOnly }),
+    [homeworks, searchTerm, sortMethod, showUndoneOnly]
   );
   const taskCounts = useMemo(() => {
     const seen = new Set<string>();

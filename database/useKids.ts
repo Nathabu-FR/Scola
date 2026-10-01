@@ -11,22 +11,35 @@ import { safeWrite } from "./utils/safeTransaction";
 export async function addKidToDatabase(kids: SharedKid[]) {
   const db = getDatabaseInstance()
   for (const kid of kids) {
-    const existing = await db.get('kids').query(Q.where('kidId', kid.id)).fetch();
+    const existingRecords = await db.get<Kid>('kids')
+      .query(Q.where('kidId', kid.id))
+      .fetch();
+    const existing = existingRecords.find(record => record.createdByAccount === kid.createdByAccount)
+      // Claim the single legacy row written with the old misspelled column.
+      ?? (existingRecords.length === 1 && !existingRecords[0].createdByAccount
+        ? existingRecords[0]
+        : undefined);
+    const updateKid = (record: Kid) => {
+      Object.assign(record, {
+        createdByAccount: kid.createdByAccount,
+        kidId: kid.id,
+        firstName: kid.firstName,
+        lastName: kid.lastName,
+        class: kid.class,
+        dateOfBirth: kid.dateOfBirth.getTime()
+      });
+    };
 
-    if (existing.length === 0) {
+    if (existing) {
+      const prepared = existing.prepareUpdate(record => updateKid(record as Kid));
       await safeWrite(db, async () => {
-        await db.get('kids').create((record: Model) => {
-          const kidsModel = record as Kid
-          Object.assign(kidsModel, {
-            createByAccount: kid.createdByAccount,
-            kidId: kid.id,
-            firstName: kid.firstName,
-            lastName: kid.lastName,
-            class: kid.class,
-            dateOfBirth: kid.dateOfBirth.getTime()
-          })
-        })
-      }, 10000, 'addKidToDatabase')
+        await db.batch(prepared);
+      }, 10000, 'updateKidInDatabase');
+    } else {
+      const prepared = db.get<Kid>('kids').prepareCreate(record => updateKid(record));
+      await safeWrite(db, async () => {
+        await db.batch(prepared);
+      }, 10000, 'addKidToDatabase');
     }
   }
 }

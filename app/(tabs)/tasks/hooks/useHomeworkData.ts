@@ -203,13 +203,26 @@ export const useHomeworkData = (weeks: number[], alert: any) => {
 
   const setAsDone = useCallback(
     async (item: Homework, done: boolean) => {
-      const id = item.custom && item.id ? item.id : homeworkKey(item);
+      // L'ancien id local (homeworkKey) ne correspond pas toujours au
+      // homeworkId stocké (custom → id réel, importés → hash). On résout
+      // d'abord l'id de route officiel, sinon la MAJ locale échouait
+      // silencieusement (« cocher ne fonctionne pas »). Si le record n'est
+      // pas en cache, on l'y insère d'abord pour que la case reste fiable.
+      const { getHomeworkRouteId, addCustomHomeworkToDatabase } = await import("@/database/useHomework");
+      const id = getHomeworkRouteId(item);
 
       try {
         // Persist the checkbox locally first. Some school services, including
         // PRONOTE configurations that expose read-only homework, cannot update
         // completion remotely; that must not make the control appear broken.
-        await updateHomeworkIsDone(id, done);
+        try {
+          await updateHomeworkIsDone(id, done);
+        } catch (cacheMiss) {
+          // Item réseau jamais persisté (ou id réseau brut) : on le matérialise
+          // en cache puis on applique l'état — sans ça, updateHomeworkIsDone
+          // levait « Homework with ID … not found » et la case restait figée.
+          await addCustomHomeworkToDatabase({ ...item, id, isDone: done });
+        }
         setHomework(prev => ({
           ...prev,
           [id]: {

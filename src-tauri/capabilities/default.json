@@ -25,6 +25,18 @@
           "url": "https://*.index-education.com/**"
         },
         {
+          "url": "https://*.indexeducation.com/**"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/**"
+        },
+        {
+          "url": "https://*.githubusercontent.com/**"
+        },
+        {
+          "url": "https://api.github.com/**"
+        },
+        {
           "url": "https://data.geopf.fr/**"
         },
         {

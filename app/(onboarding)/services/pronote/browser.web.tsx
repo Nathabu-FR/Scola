@@ -307,7 +307,8 @@ export default function PronoteDesktopLogin() {
         setErrorMessage("Pronote a signalé une erreur de connexion. Vérifie l’ENT de ton établissement.");
       });
       unlistenTauriEvents.current = [unlistenLogin, unlistenError];
-      await invoke("open_pronote_login", { url, deviceUUID: deviceId });
+      // rename_all = "camelCase" côté Rust : le paramètre s'appelle deviceUuid.
+      await invoke("open_pronote_login", { url, deviceUuid: deviceId });
     } catch (cause) {
       setLoading(false);
       setErrorMessage(

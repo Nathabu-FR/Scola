@@ -399,7 +399,9 @@ export class AccountManager {
         multiple: true,
         fallback: async () => getCoursesFromCache([weekNumber], date.getFullYear()),
         saveToCache: async (data: CourseDay[]) => {
-          addCourseDayToDatabase(data);
+          // L'oubli d'await laissait des écritures EDT en vol pendant le
+          // fetchData suivant → « capability 1 failed » + Writer occupé.
+          await addCourseDayToDatabase(data);
         },
       }
     );
@@ -480,7 +482,11 @@ export class AccountManager {
         client.getCanteenBalances ? await client.getCanteenBalances() : [],
       {
         multiple: true,
-        fallback: async () => getBalancesFromCache(),
+        // Les soldes cantine sont rattachés par compte (createdByAccount =
+        // accountId du plugin) : sans ce filtre, getBalancesFromCache()
+        // mélangeait les cartes entre comptes.
+        fallback: async () =>
+          getBalancesFromCache(this.account.services.map(service => service.id)),
         saveToCache: async (data: Balance[]) => {
           await addBalancesToDatabase(data);
         },
@@ -586,10 +592,30 @@ export class AccountManager {
   ): Promise<T | T[]> {
     const callFallback = async (): Promise<T | T[]> => {
       const fallbackResult = await options!.fallback!();
-      if (options?.multiple && Array.isArray(fallbackResult)) {
+      const sourceIds = new Set(
+        options?.clientId !== undefined
+          ? [options.clientId]
+          : this.account.services.map(service => service.id)
+      );
+      const belongsToAccount = (item: unknown): boolean => {
+        if (typeof item !== "object" || item === null) return true;
+        const record = item as { createdByAccount?: unknown; custom?: unknown };
+        if (typeof record.createdByAccount !== "string") return true;
+        if (sourceIds.has(record.createdByAccount)) return true;
+        return options?.clientId === undefined &&
+          capability === Capabilities.HOMEWORK &&
+          record.createdByAccount === this.account.id &&
+          record.custom === true;
+      };
+
+      if (Array.isArray(fallbackResult)) {
         return fallbackResult.filter(
-          (item): item is T => item !== null && item !== undefined
+          (item): item is T =>
+            item !== null && item !== undefined && belongsToAccount(item)
         );
+      }
+      if (!belongsToAccount(fallbackResult)) {
+        throw new Error("Aucune donnée en cache pour le compte actif.");
       }
       return fallbackResult;
     };
@@ -614,7 +640,15 @@ export class AccountManager {
       if (options?.clientId !== undefined) {
         const client = this.clients[options.clientId];
         if (!client) {
-          error("Client ID missing");
+          // « Client ID missing » loggé sans throw : l'ancien code appelait
+          // error() (qui retourne une Error sans la lever) puis continuait
+          // sur `client.capabilities` → « Cannot read properties of undefined ».
+          // On bascule proprement sur le cache au lieu de crasher.
+          warn(`Client ${options.clientId} introuvable, repli sur le cache`, "fetchData");
+          if (options.fallback) {
+            return await callFallback();
+          }
+          throw new Error(`Client introuvable : ${options.clientId}`);
         }
         if (!client.capabilities.includes(capability)) {
           error(
@@ -646,7 +680,14 @@ export class AccountManager {
           result = result.filter(item => item !== null && item !== undefined);
         }
         if (options.saveToCache) {
-          await options.saveToCache(result);
+          // Le cache local ne doit jamais faire échouer la donnée réseau :
+          // une écriture Watermelon concurrente (Writer occupé) rejetait
+          // tout le fetchData avec « capability 1 failed ». On isole l'erreur.
+          try {
+            await options.saveToCache(result);
+          } catch (cacheError) {
+            warn(`saveToCache ignoré (capability ${capability}) : ${String(cacheError)}`, "fetchData");
+          }
         }
         return result;
       }
@@ -697,7 +738,11 @@ export class AccountManager {
         });
 
         if (options?.saveToCache && failures.length === 0) {
-          await options.saveToCache(combinedResult);
+          try {
+            await options.saveToCache(combinedResult);
+          } catch (cacheError) {
+            warn(`saveToCache ignoré (capability ${capability}) : ${String(cacheError)}`, "fetchData");
+          }
         }
 
         return combinedResult;

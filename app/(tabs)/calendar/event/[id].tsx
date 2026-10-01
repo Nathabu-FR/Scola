@@ -70,11 +70,14 @@ export default function TabOneScreen() {
                     style: "destructive",
                     onPress: async () => {
                       try {
+                        // find() HORS writer : l'await dans le writer cassait le
+                        // contexte (« can only be called from inside of a Writer »).
+                        const eventToDelete = await database.get('events').find(eventId);
                         await database.write(async () => {
-                          const eventToDelete = await database.get('events').find(eventId);
-                          await eventToDelete.destroyPermanently();
+                          await database.batch(eventToDelete.prepareDestroyPermanently());
                         });
-                        router.back();
+                        if (router.canGoBack()) router.back();
+                        else router.replace("/(tabs)/calendar");
                       } catch (error) {
                         console.error("Error deleting event:", error);
                         Alert.alert(

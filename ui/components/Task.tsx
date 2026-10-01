@@ -156,16 +156,16 @@ const Task: React.FC<TaskProps> = React.memo(({
                 </Dynamic>
               )}
             </Stack>
-            <Stack animated layout={Animation(LinearTransition, "list")} radius={300} inline hAlign='end' vAlign='center' style={{ overflow: Platform.OS === "android" ? "hidden" : undefined }}>
-              <ListTouchable scaleTo={0.8} animated layout={Animation(LinearTransition, "list")} onPress={onToggle}>
+            {/* Le toggle mélangeait layout Reanimated + opacity animée sur le même
+                nœud : sur web Reanimated loggait « Property [opacity] may be
+                overwritten by a layout animation ». Le layout reste sur le
+                conteneur parent, le bouton lui-même reste une vue simple. */}
+            <Stack radius={300} inline hAlign='end' vAlign='center' style={{ overflow: Platform.OS === "android" ? "hidden" : undefined }}>
+              <ListTouchable scaleTo={0.8} onPress={onToggle}>
                 <Stack
-                  animated
-                  layout={Animation(LinearTransition, "list")}
                   card
                   backgroundColor={completed ? tintedColor : undefined}>
                   <Stack
-                    animated
-                    layout={Animation(LinearTransition, "list")}
                     padding={[completed ? 12 : 8, 8]}
                     direction='horizontal'
                     gap={6}

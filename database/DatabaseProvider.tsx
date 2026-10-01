@@ -29,11 +29,6 @@ export const useDatabase = () => useContext(DatabaseContext);
 
 export async function ClearDatabaseForAccount(accountId: string) {
   const db = getDatabaseInstance();
-  const destroy = async (records: Model[]) => {
-    for (const record of records) {
-      await record.destroyPermanently();
-    }
-  };
   const tablesWithAccount = [
     "homework",
     "news",
@@ -49,50 +44,64 @@ export async function ClearDatabaseForAccount(accountId: string) {
     "canteentransactions",
   ];
 
-  await safeWrite(db, async () => {
-    const attendanceRecords = await db.get<Attendance>("attendance")
-      .query(Q.where("createdByAccount", accountId))
-      .fetch();
-    for (const attendance of attendanceRecords) {
-      await destroy([
-        ...(await attendance.delays.fetch()),
-        ...(await attendance.absences.fetch()),
-        ...(await attendance.observations.fetch()),
-        ...(await attendance.punishments.fetch()),
-      ]);
-    }
+  // 1) Lectures HORS writer : tout await reste ici, jamais dans le batch.
+  // Les await (relation.fetch()…) DANS le writer perdaient le contexte et
+  // produisaient « markAsDeleted() can only be called from inside of a Writer ».
+  const attendanceRecords = await db.get<Attendance>("attendance")
+    .query(Q.where("createdByAccount", accountId))
+    .fetch();
+  const attendanceChildren: Model[] = [];
+  for (const attendance of attendanceRecords) {
+    const [delays, absences, observations, punishments] = await Promise.all([
+      attendance.delays.fetch(),
+      attendance.absences.fetch(),
+      attendance.observations.fetch(),
+      attendance.punishments.fetch(),
+    ]);
+    attendanceChildren.push(...delays, ...absences, ...observations, ...punishments);
+  }
 
-    const periodGradeRecords = await db.get<PeriodGrades>("periodgrades")
-      .query(Q.where("createdByAccount", accountId))
+  const periodGradeRecords = await db.get<PeriodGrades>("periodgrades")
+    .query(Q.where("createdByAccount", accountId))
+    .fetch();
+  const gradeChildren: Model[] = [];
+  for (const periodGrade of periodGradeRecords) {
+    const subjects = await db.get<Subject>("subjects")
+      .query(Q.where("periodGradeId", periodGrade.id))
       .fetch();
-    for (const periodGrade of periodGradeRecords) {
-      const subjects = await db.get<Subject>("subjects")
-        .query(Q.where("periodGradeId", periodGrade.id))
+    for (const subject of subjects) {
+      const grades = await db.get<Grade>("grades")
+        .query(Q.where("subjectId", subject.id))
         .fetch();
-      for (const subject of subjects) {
-        const grades = await db.get<Grade>("grades")
-          .query(Q.where("subjectId", subject.id))
-          .fetch();
-        await destroy(grades);
-      }
-      await destroy(subjects);
+      gradeChildren.push(...grades);
     }
+    gradeChildren.push(...subjects);
+  }
 
-    for (const table of tablesWithAccount) {
-      try {
-        const collection = db.get(table);
-        const records = await collection
-          .query(Q.where("createdByAccount", accountId))
-          .fetch();
+  const tableRecords: Model[] = [];
+  for (const table of tablesWithAccount) {
+    try {
+      const collection = db.get(table);
+      const records = await collection
+        .query(Q.where("createdByAccount", accountId))
+        .fetch();
 
-        if (records.length > 0) {
-          await destroy(records);
-        }
-      } catch (err) {
-        error(String(err))
+      if (records.length > 0) {
+        tableRecords.push(...records);
       }
+    } catch (err) {
+      error(String(err))
     }
-  }, 10000, 'ClearDatabaseForAccount');
+  }
+
+  // 2) Un seul batch de destroyPermanently préparés : destroy est lui-même
+  // un sub-writer, l'appeler en boucle avec des awaits concurrents sortait
+  // du writer parent.
+  const allToDestroy = [...attendanceChildren, ...gradeChildren, ...tableRecords];
+  if (allToDestroy.length === 0) return;
+  await safeWrite(db, async () => {
+    await db.batch(...allToDestroy.map(record => record.prepareDestroyPermanently()));
+  }, 30000, 'ClearDatabaseForAccount');
 }
 
 export async function removeAllDuplicates() {
@@ -132,14 +141,18 @@ export async function removeAllDuplicates() {
 
     if (allDuplicatesToDelete.length > 0) {
 
-      await safeWrite(db, async () => {
-        const batches = batchOperations(allDuplicatesToDelete, 100);
+      // prepareMarkAsDeleted + batch séquentiels : les markAsDeleted() en
+      // Promise.all() dans le writer perdaient le contexte Writer.
+      const batches = batchOperations(allDuplicatesToDelete, 100);
 
-        for (const batch of batches) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await Promise.all(batch.map((record: any) => record.markAsDeleted()));
-        }
-      }, 120000, 'removeAllDuplicates');
+      for (const batch of batches) {
+        await safeWrite(db, async () => {
+          await db.batch(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ...(batch as any[]).map((record: any) => record.prepareMarkAsDeleted())
+          );
+        }, 30000, 'removeAllDuplicates');
+      }
 
       info(`🍉 Duplicate removal completed successfully`);
     } else {

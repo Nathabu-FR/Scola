@@ -12,27 +12,38 @@ import { safeWrite } from "./utils/safeTransaction";
 export async function addPeriodsToDatabase(periods: SharedPeriod[]) {
   const db = getDatabaseInstance();
 
-  await safeWrite(db, async () => {
-    for (const item of periods) {
-      const id = generateId(item.name + item.createdByAccount);
+  // Lectures HORS writer : les fetch() avec await DANS le writer perdaient le
+  // contexte (« can only be called from inside of a Writer »).
+  const toCreate: Array<{ id: string; item: SharedPeriod }> = [];
+  for (const item of periods) {
+    const id = generateId(item.name + item.createdByAccount);
 
-      const existing = await db.get('periods')
-        .query(Q.where("periodId", id))
-        .fetch();
+    const existing = await db.get('periods')
+      .query(Q.where("periodId", id))
+      .fetch();
 
-      if (existing.length === 0) {
-        await db.get('periods').create((record: Model) => {
-          const period = record as Period;
-          Object.assign(period, {
-            periodId: id,
-            name: item.name,
-            createdByAccount: item.createdByAccount,
-            start: item.start.getTime(),
-            end: item.end.getTime(),
-          });
-        });
-      }
+    if (existing.length === 0) {
+      toCreate.push({ id, item });
     }
+  }
+  if (toCreate.length === 0) return;
+
+  await safeWrite(db, async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const prepared: any[] = [];
+    for (const { id, item } of toCreate) {
+      prepared.push(db.get('periods').prepareCreate((record: Model) => {
+        const period = record as Period;
+        Object.assign(period, {
+          periodId: id,
+          name: item.name,
+          createdByAccount: item.createdByAccount,
+          start: item.start.getTime(),
+          end: item.end.getTime(),
+        });
+      }));
+    }
+    await db.batch(...prepared);
   }, 10000, 'addPeriodsToDatabase');
 }
 
@@ -94,6 +105,7 @@ export async function addPeriodGradesToDatabase(item: SharedPeriodGrades, period
   const db = getDatabaseInstance();
   const id = generateId(period);
 
+  // Lecture HORS writer (fetch + await interdits dans le writer WatermelonDB).
   const existing = await db.get('periodgrades').query(
     Q.where("id", id)
   ).fetch();

@@ -16,14 +16,14 @@ export async function removeBalanceFromDatabase(serviceId: string) {
       Q.where('createdByAccount', serviceId)
     )
     .fetch();
-  
-  for (const balance of dbBalances) {
-    if (balance.createdByAccount === serviceId) {
-      await safeWrite(db, async () => {
-        balance.markAsDeleted()
-      })
-    }
-  }
+
+  const toDelete = dbBalances.filter(balance => balance.createdByAccount === serviceId);
+  if (toDelete.length === 0) return;
+  // markAsDeleted() doit rester dans le Writer : batch préparé + await
+  // (l'ancien appel sans await sortait du writer et levait l'erreur).
+  await safeWrite(db, async () => {
+    await db.batch(...toDelete.map(balance => balance.prepareMarkAsDeleted()));
+  }, 10000, 'removeBalanceFromDatabase')
 }
 
 export async function addBalancesToDatabase(balances: SharedBalance[]) {
@@ -51,15 +51,19 @@ export async function addBalancesToDatabase(balances: SharedBalance[]) {
   }
 }
 
-export async function getBalancesFromCache(): Promise<SharedBalance[]> {
+export async function getBalancesFromCache(accountIds?: string | string[]): Promise<SharedBalance[]> {
   try {
     const database = getDatabaseInstance();
-    const balances = await database
-      .get<Balance>('balances')
-      .query()
-      .fetch()
+    // Les soldes sont enregistrés sous l'identifiant du service source.
+    // Le manager fournit les services rattachés au compte courant.
+    const sourceIds = accountIds === undefined
+      ? null
+      : new Set(Array.isArray(accountIds) ? accountIds : [accountIds]);
+    const balances = await database.get<Balance>('balances').query().fetch();
 
-    return balances.map(mapBalancesToShared)
+    return balances
+      .filter(balance => sourceIds === null || sourceIds.has(balance.createdByAccount))
+      .map(mapBalancesToShared)
   } catch (e) {
     warn(String(e));
     return [];

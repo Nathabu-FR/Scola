@@ -6,6 +6,7 @@ import { Absence, Attendance, Delay, Punishment } from "../shared/attendance";
 import { Period } from "../shared/grade";
 import { durationToMinutes } from "../skolengo/attendance";
 import { fetchEDGradePeriods } from "./grades";
+import { formatEcoleDirecteError, isEcoleDirecteServerError } from "./errors";
 
 const FRENCH_MONTHS: Record<string, number> = {
   janvier: 0,
@@ -56,7 +57,12 @@ export async function fetchEDAttendance(session: Client, accountId: string, peri
       createdByAccount: accountId
     };
   } catch (error) {
-    warn(String(error));
+    const message = formatEcoleDirecteError(error);
+    if (isEcoleDirecteServerError(error)) {
+      // Keep the last successful attendance in use during an upstream outage.
+      throw new Error(message);
+    }
+    warn(message, "fetchEDAttendance");
     return {
       absences: [],
       punishments: [],

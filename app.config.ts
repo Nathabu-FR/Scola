@@ -1,4 +1,5 @@
 import PackageJSON from "./package.json" with { type: "json" };
+import { SCOLA_BRAND } from "./constants/scolaBrand";
 
 // versionCode: seconds since 2020-01-01 UTC — unique, strictly increasing, well under the 2.1e9 cap
 const androidVersionCode = Math.floor(Date.now() / 1000) - 1577836800;
@@ -92,7 +93,7 @@ export default {
       ],
       adaptiveIcon: {
         foregroundImage: "./assets/images/adaptive-icon.png",
-        backgroundColor: "#ffffff",
+        backgroundColor: SCOLA_BRAND.navy,
         monochromeImage: "./assets/images/monochrome-icon.png",
       },
       supportsTablet: true,
@@ -127,7 +128,7 @@ export default {
       [
         "expo-splash-screen",
         {
-          backgroundColor: "#29947A",
+          backgroundColor: SCOLA_BRAND.navy,
           image: "./assets/images/logotype.png",
           imageWidth: 240,
         },

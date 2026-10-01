@@ -73,6 +73,18 @@ import { AuthenticationError } from "../errors/AuthenticationError";
 import { SecurityChallengeError } from "../errors/SecurityChallengeError";
 import { ServiceUnavailableError } from "../errors/ServiceUnavailableError";
 
+const summarizeFailure = (reason: unknown): string => {
+  const message = reason instanceof Error ? `${reason.name}: ${reason.message}` : String(reason);
+  const status = message.match(/\b([45]\d\d)\b/)?.[1];
+
+  // Some school APIs include their full HTML outage page in Error.message.
+  if (message.length > 1000 && status) {
+    return `HTTP ${status}: réponse d’erreur trop longue (contenu masqué)`;
+  }
+
+  return message.length > 500 ? `${message.slice(0, 497)}…` : message;
+};
+
 const isPermanentAuthError = (e: unknown): boolean =>
   e instanceof BadCredentialsError ||
   e instanceof AuthenticateError ||
@@ -624,7 +636,7 @@ export class AccountManager {
 
     const noteFailure = (client: SchoolServicePlugin, reason: unknown) => {
       warn(
-        `[${client.displayName}] capability ${capability}: ${String(reason)}`,
+        `[${client.displayName}] capability ${capability}: ${summarizeFailure(reason)}`,
         "fetchData"
       );
       failures.push({
@@ -718,6 +730,7 @@ export class AccountManager {
         );
 
         const combinedResult: T[] = [];
+        let successfulClientCount = 0;
         settled.forEach((result, index) => {
           if (result.status === "rejected") {
             noteFailure(availableClients[index], result.reason);
@@ -732,10 +745,17 @@ export class AccountManager {
             return;
           }
 
+          successfulClientCount += 1;
           combinedResult.push(
             ...result.value.filter(item => item !== null && item !== undefined)
           );
         });
+
+        // If every provider failed, an empty aggregate would hide the last
+        // good data and could be mistaken for a valid empty result.
+        if (successfulClientCount === 0 && failures.length > 0 && options?.fallback) {
+          return await callFallback();
+        }
 
         if (options?.saveToCache && failures.length === 0) {
           try {
@@ -748,7 +768,7 @@ export class AccountManager {
         return combinedResult;
       }
     } catch (e) {
-      warn(`capability ${capability} failed: ${String(e)}`, "fetchData");
+      warn(`capability ${capability} failed: ${summarizeFailure(e)}`, "fetchData");
       if (options?.fallback) {
         return await callFallback();
       }

@@ -124,7 +124,7 @@ export default function CreatePersonalHomework() {
             onPress={() => router.canGoBack() ? router.back() : router.replace("/(tabs)/tasks")}
             style={{ width: 40, height: 40, alignItems: "center", justifyContent: "center" }}
           >
-            <Papicons name="ArrowLeft" size={24} color="#8B5CF6" />
+            <Papicons name="ArrowLeft" size={24} color={colors.primary} />
           </AnimatedPressable>
           <Typography variant="title" weight="semibold">Nouveau devoir</Typography>
         </View>

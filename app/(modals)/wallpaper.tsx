@@ -286,7 +286,7 @@ const WallpaperModal = () => {
             montrait la modale sans retour (flèche violette en haut à gauche). */}
         <NativeHeaderPressable onPress={() => router.canGoBack() ? router.back() : router.replace("/")}>
           <Icon size={28}>
-            <Papicons name="ArrowLeft" color="#8B5CF6" />
+            <Papicons name="ArrowLeft" color={colors.primary} />
           </Icon>
         </NativeHeaderPressable>
       </NativeHeaderSide>

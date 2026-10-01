@@ -4,11 +4,13 @@ import Typography from "@/ui/components/Typography";
 import { NativeHeaderPressable, NativeHeaderSide } from "@/ui/components/NativeHeader";
 import { Papicons } from "@getpapillon/papicons";
 import { useRouter } from "expo-router";
+import { useTheme } from "expo-router/react-navigation";
 import React from "react";
 import { Linking, Platform, View } from "react-native";
 
 export default function Soon() {
   const router = useRouter();
+  const { colors } = useTheme();
 
   return (
     <View
@@ -34,7 +36,7 @@ export default function Soon() {
         hAlign="center"
       >
         <Icon size={42}>
-          <Papicons name="clock" color="#29947A" />
+          <Papicons name="clock" color={colors.primary} />
         </Icon>
         <Typography variant="h2" align="center">
           Promis, ça arrive (vraiment) bientôt !

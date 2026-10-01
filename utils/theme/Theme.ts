@@ -4,25 +4,28 @@ import {
 } from "expo-router/react-navigation";
 import { Platform } from "react-native";
 import { getDynamicColorScheme } from "react-native-dynamic-theme";
+import { SCOLA_BRAND } from "@/constants/scolaBrand";
 
 const FALLBACK_COLORS = {
   light: {
-    primary: "#29947A",
-    tint: "#29947A",
-    background: "#FFFFFF",
-    overground: "#F3F6F7",
-    text: "#000000",
+    primary: SCOLA_BRAND.blue,
+    tint: SCOLA_BRAND.blue,
+    background: "#FBFCFF",
+    overground: "#F1F5FD",
+    text: "#10203D",
     card: "#FFFFFF",
-    item: Platform.OS === "android" ? "#f1f1f1" : "#FFFFFF",
+    item: Platform.OS === "android" ? "#EDF3FF" : "#FFFFFF",
+    border: "#D8E3F5",
   },
   dark: {
-    primary: "#29947A",
-    tint: "#29947A",
-    background: "#000000",
-    overground: "#000000",
-    text: "#FFFFFF",
-    card: "#121212",
-    item: "#121212",
+    primary: "#65A8FF",
+    tint: SCOLA_BRAND.cyan,
+    background: SCOLA_BRAND.navy,
+    overground: "#091C40",
+    text: "#F5F8FF",
+    card: "#0D244E",
+    item: "#132B57",
+    border: "#213F78",
   },
 };
 
@@ -31,7 +34,7 @@ const isMaterialYouAvailable =
 
 function getThemeColors(useMaterialYou: boolean) {
   if (useMaterialYou && isMaterialYouAvailable) {
-    const scheme = getDynamicColorScheme('#29947A');
+    const scheme = getDynamicColorScheme(SCOLA_BRAND.blue);
     return {
       light: {
         primary: scheme.light.primary,
@@ -41,6 +44,7 @@ function getThemeColors(useMaterialYou: boolean) {
         text: scheme.light.onBackground,
         card: scheme.light.surfaceDim,
         item: scheme.light.surfaceContainerLowest,
+        border: scheme.light.outlineVariant,
       },
       dark: {
         primary: scheme.dark.primaryContainer,
@@ -50,6 +54,7 @@ function getThemeColors(useMaterialYou: boolean) {
         text: scheme.dark.onBackground,
         card: scheme.dark.surfaceContainer,
         item: scheme.dark.surfaceContainer,
+        border: scheme.dark.outlineVariant,
       },
     };
   }
@@ -71,6 +76,7 @@ export function createDefaultTheme(useMaterialYou: boolean, primaryColor: string
       text: colors.light.text,
       card: colors.light.card,
       item: colors.light.item,
+      border: colors.light.border,
     },
   };
 }
@@ -89,6 +95,7 @@ export function createDarkTheme(useMaterialYou: boolean, primaryColor: string) {
       text: colors.dark.text,
       card: colors.dark.card,
       item: colors.dark.item,
+      border: colors.dark.border,
     },
   };
 }

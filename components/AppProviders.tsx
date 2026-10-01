@@ -2,13 +2,12 @@ import { ThemeProvider } from "expo-router/react-navigation";
 import * as SystemUI from 'expo-system-ui';
 import { PostHogProvider } from 'posthog-react-native';
 import React, { useEffect, useMemo } from 'react';
-import { Platform, useColorScheme } from 'react-native';
+import { useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { DatabaseProvider } from "@/database/DatabaseProvider";
 import { DEFAULT_MATERIAL_YOU_ENABLED, useSettingsStore } from '@/stores/settings';
 import { AlertProvider } from '@/ui/components/AlertProvider';
-import { runsIOS26 } from '@/ui/utils/IsLiquidGlass';
 import { AppColors } from "@/utils/colors";
 import { posthog } from '@/utils/logger/posthog';
 import { createDarkTheme, createDefaultTheme } from '@/utils/theme/Theme';
@@ -36,23 +35,15 @@ export function AppProviders({ children }: AppProvidersProps) {
     return newScheme;
   }, [colorScheme, color, selectedTheme, useMaterialYou]);
 
-  // Memoize background color to prevent string recreation
-  const backgroundColor = useMemo(() => {
-    return colorScheme === 'dark' ? '#000000' : '#F5F5F5';
-  }, [colorScheme]);
+  const backgroundColor = theme.colors.background;
 
   // Combined effect for system UI updates to reduce effect overhead
   useEffect(() => {
-    if (runsIOS26) {
-      SystemUI.setBackgroundColorAsync(backgroundColor);
-    }
-    else {
-      SystemUI.setBackgroundColorAsync("#000000");
-    }
+    SystemUI.setBackgroundColorAsync(backgroundColor);
   }, [backgroundColor]);
 
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: "black" }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor }}>
       <PostHogProvider client={posthog} autocapture={false}>
         <DatabaseProvider>
           <ThemeProvider value={theme}>

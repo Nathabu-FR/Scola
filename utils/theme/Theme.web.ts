@@ -2,6 +2,7 @@ import {
   DarkTheme as NativeDarkTheme,
   DefaultTheme as NativeDefaultTheme,
 } from "expo-router/react-navigation";
+import { SCOLA_BRAND } from "@/constants/scolaBrand";
 
 // react-native-dynamic-theme wraps a native TurboModule ('DynamicTheme') to
 // read Android 12+ Material You colors. It has no web implementation, and
@@ -13,22 +14,24 @@ import {
 
 const FALLBACK_COLORS = {
   light: {
-    primary: "#29947A",
-    tint: "#29947A",
-    background: "#FFFFFF",
-    overground: "#F3F6F7",
-    text: "#000000",
+    primary: SCOLA_BRAND.blue,
+    tint: SCOLA_BRAND.blue,
+    background: "#FBFCFF",
+    overground: "#F1F5FD",
+    text: "#10203D",
     card: "#FFFFFF",
     item: "#FFFFFF",
+    border: "#D8E3F5",
   },
   dark: {
-    primary: "#29947A",
-    tint: "#29947A",
-    background: "#000000",
-    overground: "#000000",
-    text: "#FFFFFF",
-    card: "#121212",
-    item: "#121212",
+    primary: "#65A8FF",
+    tint: SCOLA_BRAND.cyan,
+    background: SCOLA_BRAND.navy,
+    overground: "#091C40",
+    text: "#F5F8FF",
+    card: "#0D244E",
+    item: "#132B57",
+    border: "#213F78",
   },
 };
 
@@ -56,6 +59,7 @@ export function createDefaultTheme(useMaterialYou: boolean, primaryColor: string
       text: colors.light.text,
       card: colors.light.card,
       item: colors.light.item,
+      border: colors.light.border,
     },
   };
 }
@@ -74,6 +78,7 @@ export function createDarkTheme(useMaterialYou: boolean, primaryColor: string) {
       text: colors.dark.text,
       card: colors.dark.card,
       item: colors.dark.item,
+      border: colors.dark.border,
     },
   };
 }

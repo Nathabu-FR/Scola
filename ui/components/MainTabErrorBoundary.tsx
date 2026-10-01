@@ -6,6 +6,7 @@ import Button from '../new/Button';
 import Icon from './Icon';
 import { Papicons } from '@getpapillon/papicons';
 import { useRouter } from 'expo-router';
+import { SCOLA_BRAND } from '@/constants/scolaBrand';
 
 type MainTabErrorBoundaryProps = {
   children: React.ReactNode;
@@ -21,7 +22,7 @@ const MainTabErrorFallback = () => {
         onPress={() => router.canGoBack() ? router.back() : router.replace("/")}
         style={styles.backButton}
       >
-        <Papicons name="ArrowLeft" size={24} color="#8B5CF6" />
+        <Papicons name="ArrowLeft" size={24} color={SCOLA_BRAND.blue} />
       </Pressable>
       <Icon size={52} fill='white'>
         <Papicons name='alertCircle' />
@@ -57,7 +58,7 @@ const styles = StyleSheet.create({
     flex: 1,
     width: "100%",
     height: "100%",
-    backgroundColor: '#29947A',
+    backgroundColor: SCOLA_BRAND.navy,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 30,

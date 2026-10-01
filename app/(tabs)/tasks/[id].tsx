@@ -37,7 +37,7 @@ const Task = () => {
   const backHeader = (Platform.OS === "android" || Platform.OS === "web") ? (
     <NativeHeaderSide side="Left">
       <NativeHeaderPressable onPress={() => router.canGoBack() ? router.back() : router.replace("/")}>
-        <Icon size={28}><Papicons name="ArrowLeft" color="#8B5CF6" /></Icon>
+        <Icon size={28}><Papicons name="ArrowLeft" color={colors.primary} /></Icon>
       </NativeHeaderPressable>
     </NativeHeaderSide>
   ) : null;

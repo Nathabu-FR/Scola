@@ -96,7 +96,7 @@ const NewsView = () => {
             loading={isLoading}
           />
         }
-        bottom={<Search placeholder={t('News_Search_Placeholder')} color='#2B7ED6' onTextChange={(text) => setSearchText(text)} />}
+        bottom={<Search placeholder={t('News_Search_Placeholder')} color='#2B7ED6' style={{ width: '100%' }} onTextChange={(text) => setSearchText(text)} />}
         trailing={
           Platform.OS === 'ios' ? (
             <ChipButton single icon='cross' onPress={() => router.dismiss()} />

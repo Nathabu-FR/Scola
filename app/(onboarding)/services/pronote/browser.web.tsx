@@ -69,6 +69,7 @@ export default function PronoteDesktopLogin() {
   const [challengeError, setChallengeError] = useState<SecurityError | null>(null);
   const [challengeSession, setChallengeSession] = useState<SessionHandle | null>(null);
   const [deviceId] = useState(() => relinkDeviceUUID || uuid());
+  const loginAttemptInProgress = useRef(false);
   const unlistenTauriEvents = useRef<Array<() => void>>([]);
   const goBack = () => router.canGoBack()
     ? router.back()
@@ -212,11 +213,11 @@ export default function PronoteDesktopLogin() {
       return;
     }
 
+    if (loginAttemptInProgress.current) return;
+    loginAttemptInProgress.current = true;
     setLoading(true);
     setErrorMessage("");
     try {
-      const { invoke } = await import("@tauri-apps/api/core");
-      await invoke("close_pronote_login").catch(() => undefined);
       const session = createSessionHandle(customFetcher);
       let refresh: RefreshInformation | undefined;
       try {
@@ -249,6 +250,8 @@ export default function PronoteDesktopLogin() {
               context.initialUsername,
             );
           } else {
+            const { invoke } = await import("@tauri-apps/api/core");
+            await invoke("close_pronote_login").catch(() => undefined);
             setChallengeError(cause);
             setChallengeSession(session);
             setChallengeVisible(true);
@@ -261,6 +264,9 @@ export default function PronoteDesktopLogin() {
       }
 
       if (!refresh) throw new Error("Pronote n’a pas confirmé la connexion.");
+      // Keep the ENT window open until Pronote has accepted the returned token.
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("close_pronote_login").catch(() => undefined);
       await finishAccountSetup(session, refresh);
     } catch (cause) {
       setErrorMessage(
@@ -269,6 +275,7 @@ export default function PronoteDesktopLogin() {
           : "La connexion Pronote via l’ENT a échoué. Réessaie."
       );
     } finally {
+      loginAttemptInProgress.current = false;
       setLoading(false);
     }
   };
@@ -337,9 +344,9 @@ export default function PronoteDesktopLogin() {
         accessibilityRole="button"
         accessibilityLabel="Retour"
         onPress={goBack}
-        style={{ position: "absolute", left: 16, top: 12, zIndex: 2, width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 22, backgroundColor: "#8B5CF620" }}
+        style={{ position: "absolute", left: 16, top: 12, zIndex: 2, width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 22, backgroundColor: `${colors.primary}20` }}
       >
-        <Papicons name="ArrowLeft" size={23} color="#8B5CF6" />
+        <Papicons name="ArrowLeft" size={23} color={colors.primary} />
       </Pressable>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <ScrollView

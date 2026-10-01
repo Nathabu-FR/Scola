@@ -5,7 +5,6 @@ import { router } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  Alert,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
@@ -35,6 +34,7 @@ import Typography from "@/ui/components/Typography";
 import uuid from "@/utils/uuid/uuid";
 import { ScrollView } from "react-native-gesture-handler";
 import LoginView from "../../components/LoginView";
+import { formatEcoleDirecteError, isEcoleDirecteServerError } from "@/services/ecoledirecte/errors";
 
 const ANIMATION_DURATION = 170;
 export const PlatformPressable = Platform.OS === 'android' ? Pressable : AnimatedPressable;
@@ -130,7 +130,7 @@ export default function EDLoginWithCredentials() {
         try {
           await initializeAccountManager(device);
         } catch (managerError) {
-          console.warn("ÉcoleDirecte: initial manager refresh failed", managerError);
+          console.warn("ÉcoleDirecte: initial manager refresh failed", formatEcoleDirecteError(managerError));
         }
 
         router.dismissAll();
@@ -139,13 +139,41 @@ export default function EDLoginWithCredentials() {
     } catch (e) {
       setIsLoggingIn(false);
       if (e instanceof Require2FA) {
-        const questions = await client.auth.get2FAQuestion(e.token);
-        setDoubleAuthChallenge(questions);
-        setSession(client);
-        setChallengeModalVisible(true);
-        setToken(e.token);
+        try {
+          const questions = await client.auth.get2FAQuestion(e.token);
+          setDoubleAuthChallenge(questions);
+          setSession(client);
+          setChallengeModalVisible(true);
+          setToken(e.token);
+        } catch (challengeError) {
+          const message = formatEcoleDirecteError(challengeError);
+          const description = isEcoleDirecteServerError(challengeError)
+            ? message
+            : t("ONBOARDING_ALERT_LOGIN_ABORTED");
+          alert.showAlert({
+            title: t("Alert_Auth_Error"),
+            description,
+            message: description,
+            technical: message,
+            icon: "AlertTriangle",
+            color: "#D60046",
+            withoutNavbar: true,
+          });
+        }
       } else {
-        Alert.alert(t("Alert_Auth_Error"), t("ONBOARDING_ALERT_LOGIN_ABORTED"));
+        const message = formatEcoleDirecteError(e);
+        const description = isEcoleDirecteServerError(e)
+          ? message
+          : t("ONBOARDING_ALERT_LOGIN_ABORTED");
+        alert.showAlert({
+          title: t("Alert_Auth_Error"),
+          description,
+          message: description,
+          technical: message,
+          icon: "AlertTriangle",
+          color: "#D60046",
+          withoutNavbar: true,
+        });
       }
     }
   }
@@ -154,19 +182,34 @@ export default function EDLoginWithCredentials() {
     if (!submittedUsername.trim() || !submittedPassword.trim()) { return; }
     setIsLoggingIn(true);
     Keyboard.dismiss();
-    await handleLogin(submittedUsername, submittedPassword);
-    setIsLoggingIn(false);
+    try {
+      await handleLogin(submittedUsername, submittedPassword);
+    } finally {
+      setIsLoggingIn(false);
+    }
   };
 
   async function handleChallenge(index: number) {
-    setChallengeModalVisible(false);
-
-    if (!session || !doubleAuthChallenge?.propositions?.[index]) { return }
+    const proposition = doubleAuthChallenge?.propositions?.[index];
+    if (!session || !proposition) { return }
     try {
-      const keys = await session.auth.send2FAQuestion(doubleAuthChallenge.propositions[index], token ?? "");
-      queueMicrotask(() => void handleLogin(username, password, keys));
-    } catch {
-      throw new Error("2FA challenge failed");
+      const keys = await session.auth.send2FAQuestion(proposition, token ?? "");
+      setChallengeModalVisible(false);
+      await handleLogin(username, password, keys);
+    } catch (challengeError) {
+      const message = formatEcoleDirecteError(challengeError);
+      const description = isEcoleDirecteServerError(challengeError)
+        ? message
+        : t("ONBOARDING_ALERT_LOGIN_ABORTED");
+      alert.showAlert({
+        title: t("Alert_Auth_Error"),
+        description,
+        message: description,
+        technical: message,
+        icon: "AlertTriangle",
+        color: "#D60046",
+        withoutNavbar: true,
+      });
     }
   }
 

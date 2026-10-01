@@ -121,7 +121,7 @@ const TabHeader: React.FC<TabHeaderProps> = ({
               onPress={() => router.canGoBack() ? router.back() : router.replace("/")}
               style={{ width: 36, height: 36, alignItems: "center", justifyContent: "center" }}
             >
-              <Papicons name="ArrowLeft" size={22} color="#8B5CF6" />
+              <Papicons name="ArrowLeft" size={22} color={colors.primary} />
             </Pressable>
           )}
           {showAndroidBackButton && Platform.OS === 'android' && (

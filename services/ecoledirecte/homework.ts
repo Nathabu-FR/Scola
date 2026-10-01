@@ -3,6 +3,7 @@ import { Client } from "@blockshub/blocksdirecte";
 
 import { Homework } from "../shared/homework";
 import { warn } from "@/utils/logger/logger";
+import { formatEcoleDirecteError, isEcoleDirecteServerError } from "./errors";
 
 export async function fetchEDHomeworks(
   session: Client,
@@ -51,7 +52,13 @@ export async function fetchEDHomeworks(
         });
       }
     } catch (error) {
-      warn(`Skipping ED homework for ${formattedDate}: ${String(error)}`, "fetchEDHomeworks");
+      const message = formatEcoleDirecteError(error);
+      if (isEcoleDirecteServerError(error)) {
+        // A server outage is not an empty homework day; let the shared layer
+        // fall back to the last saved homework week.
+        throw new Error(message);
+      }
+      warn(`Skipping ED homework for ${formattedDate}: ${message}`, "fetchEDHomeworks");
     }
   }
 

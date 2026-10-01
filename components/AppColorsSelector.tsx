@@ -95,7 +95,7 @@ const AppColorsSelector = React.memo<AppColorsSelectorProps>(function AppColorsS
   );
 
   const [selectedColor, setSelectedColor] = useState<string>(defaultColorData.mainColor);
-  const [color, setColor] = useState<Colors>(settingsStore.colorSelected || Colors.PINK);
+  const [color, setColor] = useState<Colors>(settingsStore.colorSelected ?? Colors.BLUE);
 
   const itemWidth = useMemo(() => {
     if (containerWidth === 0) return 100;

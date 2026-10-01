@@ -1,5 +1,5 @@
 import { Papicons } from '@getpapillon/papicons';
-import { useTheme } from "expo-router/react-navigation";
+import { useIsFocused, useTheme } from "expo-router/react-navigation";
 import { useRouter } from 'expo-router';
 import { t } from 'i18next';
 import React from 'react';
@@ -34,6 +34,7 @@ import Icon from '@/ui/components/Icon';
 import Button from '@/ui/new/Button';
 
 const HomeScreen = () => {
+  const focused = useIsFocused();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const bottomTabBarHeight = insets.bottom + 76;

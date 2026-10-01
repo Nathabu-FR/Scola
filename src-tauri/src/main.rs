@@ -15,7 +15,7 @@ fn normalize_pronote_base(raw_url: &str) -> Result<tauri::Url, String> {
         return Err("L’adresse Pronote doit commencer par http:// ou https://.".to_string());
     }
 
-    let path = url.path().trim_end_matches('/');
+    let path = url.path().trim_end_matches('/').to_string();
     if let Some((parent, leaf)) = path.rsplit_once('/') {
         if matches!(leaf.to_ascii_lowercase().as_str(), "eleve.html" | "parent.html" | "professeur.html") {
             url.set_path(if parent.is_empty() { "/" } else { parent });

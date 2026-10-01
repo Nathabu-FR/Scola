@@ -61,6 +61,17 @@ export async function ClearDatabaseForAccount(accountId: string) {
     attendanceChildren.push(...delays, ...absences, ...observations, ...punishments);
   }
 
+  const accountChats = await db.get<Chat>("chats")
+    .query(Q.where("createdByAccount", accountId))
+    .fetch();
+  const chatIds = accountChats.map(chat => chat.chatId);
+  const chatChildren: Model[] = chatIds.length > 0
+    ? await Promise.all([
+      db.get<Message>("messages").query(Q.where("chatId", Q.oneOf(chatIds))).fetch(),
+      db.get<Recipient>("recipients").query(Q.where("chatId", Q.oneOf(chatIds))).fetch(),
+    ]).then(([messages, recipients]) => [...messages, ...recipients])
+    : [];
+
   const periodGradeRecords = await db.get<PeriodGrades>("periodgrades")
     .query(Q.where("createdByAccount", accountId))
     .fetch();
@@ -97,7 +108,12 @@ export async function ClearDatabaseForAccount(accountId: string) {
   // 2) Un seul batch de destroyPermanently préparés : destroy est lui-même
   // un sub-writer, l'appeler en boucle avec des awaits concurrents sortait
   // du writer parent.
-  const allToDestroy = [...attendanceChildren, ...gradeChildren, ...tableRecords];
+  // Grade rows may also be reached through their subject relation. Keep only
+  // one prepared delete per Watermelon row.
+  const allToDestroy = [...new Map(
+    [...attendanceChildren, ...chatChildren, ...gradeChildren, ...tableRecords]
+      .map(record => [record.id, record])
+  ).values()];
   if (allToDestroy.length === 0) return;
   await safeWrite(db, async () => {
     await db.batch(...allToDestroy.map(record => record.prepareDestroyPermanently()));
@@ -108,25 +124,28 @@ export async function removeAllDuplicates() {
   const db = getDatabaseInstance();
 
   try {
+    const ownedKey = <T extends { createdByAccount?: string }>(key: (record: T) => string) =>
+      (record: T) => `${record.createdByAccount ?? ""}:${key(record)}`;
+
     const uniqueKeys = {
       subjects: (r: Subject) => `${r.name}-${r.periodGradeId || ''}`,
-      homework: (r: Homework) => r.homeworkId,
-      news: (r: News) => r.newsId,
-      periods: (r: Period) => r.periodId,
-      grades: (r: Grade) => r.gradeId,
-      attendance: (r: Attendance) => r.attendanceId,
+      homework: ownedKey((r: Homework) => r.homeworkId),
+      news: ownedKey((r: News) => r.newsId),
+      periods: ownedKey((r: Period) => r.periodId),
+      grades: ownedKey((r: Grade) => r.gradeId),
+      attendance: ownedKey((r: Attendance) => r.attendanceId),
       delays: (r: Delay) => `${r.attendanceId}-${r.givenAt}`,
       observations: (r: Observation) => `${r.attendanceId}-${r.givenAt}`,
       absences: (r: Absence) => `${r.attendanceId}-${r.from}-${r.to}`,
       punishments: (r: Punishment) => `${r.attendanceId}-${r.givenAt}`,
-      canteenmenus: (r: CanteenMenu) => r.menuId,
-      chats: (r: Chat) => r.chatId,
+      canteenmenus: ownedKey((r: CanteenMenu) => r.menuId),
+      chats: ownedKey((r: Chat) => r.chatId),
       recipients: (r: Recipient) => r.recipientId,
       messages: (r: Message) => r.messageId,
-      courses: (r: Course) => r.courseId,
-      kids: (r: Kid) => r.kidId,
-      balances: (r: Balance) => r.balanceId,
-      canteentransactions: (r: CanteenHistoryItem) => r.transactionId,
+      courses: ownedKey((r: Course) => r.courseId),
+      kids: ownedKey((r: Kid) => r.kidId),
+      balances: ownedKey((r: Balance) => r.balanceId),
+      canteentransactions: ownedKey((r: CanteenHistoryItem) => r.transactionId),
     };
     let totalDuplicatesFound = 0;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

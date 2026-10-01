@@ -5,7 +5,7 @@ import React from "react";
 import { Alert, Image, ScrollView } from "react-native";
 
 import { removeBalanceFromDatabase } from "@/database/useBalance";
-import { getManager } from "@/services/shared";
+import { getManager, resetAccountManager } from "@/services/shared";
 import { useAccountStore } from "@/stores/account";
 import Avatar from "@/ui/components/Avatar";
 import Icon from "@/ui/components/Icon";
@@ -26,7 +26,6 @@ export default function AccountsView() {
   const lastUsedAccount = useAccountStore(state => state.lastUsedAccount);
   const account = accounts.find(a => a.id === lastUsedAccount);
   const store = useAccountStore.getState();
-
   const services = account?.services;
 
   const askDeleteAccount = (targetAccount: (typeof accounts)[number]) => {
@@ -42,6 +41,9 @@ export default function AccountsView() {
           text: "Supprimer",
           style: "destructive",
           onPress: () => {
+            if (useAccountStore.getState().lastUsedAccount === targetAccount.id) {
+              resetAccountManager();
+            }
             store.removeAccount(targetAccount);
           },
         },

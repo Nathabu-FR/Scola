@@ -4,7 +4,7 @@ import React, { useMemo, useRef } from "react";
 import { FlatList, RefreshControl, StyleSheet, useWindowDimensions } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { COURSE_CANCELLED_LABEL, Course as SharedCourse, CourseStatus } from "@/services/shared/timetable";
+import { COURSE_CANCELLED_LABEL, Course as SharedCourse, CourseStatus, getManualCourseStatus } from "@/services/shared/timetable";
 import { TransportStorage } from "@/stores/account/types";
 import Course from "@/ui/components/Course";
 import { Colors, getSubjectColor } from "@/utils/subjects/colors";
@@ -38,7 +38,8 @@ function areCoursesEquivalent(a: SharedCourse[], b: SharedCourse[]) {
       left.from?.getTime?.() !== right.from?.getTime?.() ||
       left.to?.getTime?.() !== right.to?.getTime?.() ||
       left.status !== right.status ||
-      left.customStatus !== right.customStatus
+      left.customStatus !== right.customStatus ||
+      left.manualStatus !== right.manualStatus
     ) {
       return false;
     }
@@ -153,6 +154,7 @@ export const CalendarDay = React.memo(({ dayDate, courses, isRefreshing, onRefre
             );
           }
 
+          const manualStatus = getManualCourseStatus(item);
           return (
             <Link
               href={{ pathname: "/(modals)/course/[id]", params: { id: getCourseRouteId(item) } }}
@@ -165,10 +167,9 @@ export const CalendarDay = React.memo(({ dayDate, courses, isRefreshing, onRefre
                 room={item.room}
                 color={getSubjectColor(item.subject) || Colors[0]}
                 status={{
-                  label: item.customStatus
-                    ? item.customStatus
-                    : getStatusText(item.status),
-                  canceled: item.status === CourseStatus.CANCELED || item.customStatus === COURSE_CANCELLED_LABEL,
+                  label: manualStatus || item.customStatus || getStatusText(item.status),
+                  canceled: item.status === CourseStatus.CANCELED || manualStatus === COURSE_CANCELLED_LABEL,
+                  manual: Boolean(manualStatus),
                 }}
                 variant="primary"
                 start={Math.floor(item.from.getTime() / 1000)}

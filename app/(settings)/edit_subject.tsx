@@ -278,6 +278,12 @@ export default function EditSubject() {
   const [selectedColor, setSelectedColor] = useState<string>(Colors.find(c => c === String(params.color)) || Colors[0]);
   const [selectedEmoji, setSelectedEmoji] = useState<string>(String(params.emoji ?? "🤓"));
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const closeEmojiPicker = () => {
+    if (Platform.OS === "web" && typeof document !== "undefined") {
+      (document.activeElement as HTMLElement | null)?.blur();
+    }
+    setShowEmojiPicker(false);
+  };
 
   const AvailableEmojis = [
     "📖",
@@ -510,13 +516,13 @@ export default function EditSubject() {
         presentationStyle={"formSheet"}
         animationType={"slide"}
         visible={showEmojiPicker}
-        onRequestClose={() => setShowEmojiPicker(false)}
+        onRequestClose={closeEmojiPicker}
       >
         <EmojiPicker
-          onCancel={() => setShowEmojiPicker(false)}
+          onCancel={closeEmojiPicker}
           onSelect={emoji => {
             setSelectedEmoji(emoji);
-            setShowEmojiPicker(false);
+            closeEmojiPicker();
           }}
         />
       </Modal>

@@ -7,6 +7,7 @@ import { getDatabaseInstance } from "./DatabaseProvider";
 import { mapKidsToShared } from "./mappers/kids";
 import Kid from "./models/Kid";
 import { safeWrite } from "./utils/safeTransaction";
+import { getActiveAccountDataSourceIds } from "./accountScope";
 
 export async function addKidToDatabase(kids: SharedKid[]) {
   const db = getDatabaseInstance()
@@ -44,12 +45,14 @@ export async function addKidToDatabase(kids: SharedKid[]) {
   }
 }
 
-export async function getKidsFromCache(): Promise<SharedKid[]> {
+export async function getKidsFromCache(
+  sourceIds: string[] = getActiveAccountDataSourceIds()
+): Promise<SharedKid[]> {
   try {
     const db = getDatabaseInstance();
     const kids = await db
       .get<Kid>('kids')
-      .query()
+      .query(Q.where("createdByAccount", sourceIds.length > 0 ? Q.oneOf(sourceIds) : "__no_active_account__"))
       .fetch()
 
     return kids.map(mapKidsToShared)

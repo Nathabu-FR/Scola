@@ -25,7 +25,7 @@ const FakeSplash = ({ isAppReady, instant }: { isAppReady: boolean; instant?: bo
       }}
     >
       <Image
-        source={require("@/assets/images/logotype.png")}
+        source={require("@/assets/images/logotype-scola.png")}
         style={{ width: 240, height: 53 }}
         resizeMode="contain"
       />

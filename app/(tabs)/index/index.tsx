@@ -1,5 +1,5 @@
 import { Papicons } from '@getpapillon/papicons';
-import { useIsFocused, useTheme } from "expo-router/react-navigation";
+import { useTheme } from "expo-router/react-navigation";
 import { useRouter } from 'expo-router';
 import { t } from 'i18next';
 import React from 'react';
@@ -11,7 +11,6 @@ import { useAccountStore } from '@/stores/account';
 import { useAlert } from '@/ui/components/AlertProvider';
 import { getHomeworkRouteId, getWeekNumberFromDate, useAllHomeworkFromCache } from '@/database/useHomework';
 import { useSettingsStore } from '@/stores/settings';
-import { checkConsent } from '@/utils/logger/consent';
 import { Animation } from '@/ui/utils/Animation';
 
 import HomeHeader from './atoms/HomeHeader';
@@ -40,7 +39,6 @@ const HomeScreen = () => {
   const bottomTabBarHeight = insets.bottom + 76;
   const homeColumns = Platform.OS === "web" && windowWidth >= 760 ? 2 : 1;
   const alert = useAlert();
-  const focused = useIsFocused();
 
   // Account
   const store = useAccountStore();
@@ -60,22 +58,6 @@ const HomeScreen = () => {
       store.initializeTransport(account.schoolName);
     }
   }, [account, accounts.length, router, store]);
-
-  const consentPrompted = React.useRef(false);
-
-  React.useEffect(() => {
-    // Only ask for consent once the user lands on home with an account (i.e. after onboarding)
-    if (!focused || accounts.length === 0 || consentPrompted.current) {
-      return;
-    }
-
-    consentPrompted.current = true;
-    checkConsent().then(consent => {
-      if (!consent.given) {
-        router.push("../consent");
-      }
-    });
-  }, [focused, accounts.length, router]);
 
   useHomeData();
   const { courses } = useTimetableWidgetData();

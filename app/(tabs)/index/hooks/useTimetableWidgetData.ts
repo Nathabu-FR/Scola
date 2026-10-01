@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { createMMKV } from "react-native-mmkv";
 
 import { useTimetable } from "@/database/useTimetable";
-import { COURSE_CANCELLED_LABEL, Course as SharedCourse, CourseStatus } from "@/services/shared/timetable";
+import { getAccountDataSourceIds } from "@/database/accountScope";
+import { COURSE_CANCELLED_LABEL, Course as SharedCourse, CourseStatus, getManualCourseStatus } from "@/services/shared/timetable";
 import { useAccountStore } from "@/stores/account";
 
 const widgetCacheStorage = createMMKV({ id: "home-widget-cache" });
@@ -53,7 +54,8 @@ const sameCourses = (a: SharedCourse[], b: SharedCourse[]) =>
       course.from.getTime() === other.from.getTime() &&
       course.to.getTime() === other.to.getTime() &&
       course.status === other.status &&
-      course.customStatus === other.customStatus
+      course.customStatus === other.customStatus &&
+      course.manualStatus === other.manualStatus
     );
   });
 
@@ -84,10 +86,7 @@ export const useTimetableWidgetData = (options: { showCancelled?: boolean } = {}
     [account?.id, showCancelled]
   );
 
-  const services = useMemo(() =>
-    account?.services?.map((service: { id: string }) => service.id) ?? [],
-    [account?.services]
-  );
+  const services = useMemo(() => getAccountDataSourceIds(account), [account]);
 
   const currentYear = now.getFullYear();
   const yearWeeks = useMemo(
@@ -139,8 +138,9 @@ export const useTimetableWidgetData = (options: { showCancelled?: boolean } = {}
       const cached = JSON.parse(cachedRaw) as TimetableWidgetCache;
       const courses = cached.courses
         .map(deserializeCourse)
+        .filter((course) => services.includes(course.createdByAccount) || course.createdByAccount.startsWith("ical_"))
         .filter((course) => course.to.getTime() > Date.now())
-        .filter((course) => showCancelled || (course.status !== CourseStatus.CANCELED && course.customStatus !== COURSE_CANCELLED_LABEL))
+        .filter((course) => showCancelled || (course.status !== CourseStatus.CANCELED && getManualCourseStatus(course) !== COURSE_CANCELLED_LABEL))
         .sort((a, b) => a.from.getTime() - b.from.getTime());
 
       if (courses.length > 0) {
@@ -151,7 +151,7 @@ export const useTimetableWidgetData = (options: { showCancelled?: boolean } = {}
     } finally {
       setLoading(false);
     }
-  }, [cacheKey, showCancelled]);
+  }, [cacheKey, services, showCancelled]);
 
   useEffect(() => {
     // An empty timetable also means "not read yet", so the seeded cache is kept
@@ -166,7 +166,7 @@ export const useTimetableWidgetData = (options: { showCancelled?: boolean } = {}
         date: day.date,
         courses: day.courses
           .filter((course) => course.to.getTime() > nowTimestamp)
-          .filter((course) => showCancelled || (course.status !== CourseStatus.CANCELED && course.customStatus !== COURSE_CANCELLED_LABEL))
+          .filter((course) => showCancelled || (course.status !== CourseStatus.CANCELED && getManualCourseStatus(course) !== COURSE_CANCELLED_LABEL))
           .sort((a, b) => a.from.getTime() - b.from.getTime())
       }))
       .filter((day) => day.courses.length > 0)

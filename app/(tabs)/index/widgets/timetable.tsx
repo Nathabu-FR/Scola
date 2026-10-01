@@ -5,7 +5,7 @@ import React from 'react';
 import { FlatList } from "react-native";
 import * as DateLocale from 'date-fns/locale';
 
-import { COURSE_CANCELLED_LABEL, CourseStatus } from "@/services/shared/timetable";
+import { CourseStatus, getManualCourseStatus } from "@/services/shared/timetable";
 import Course from "@/ui/components/Course";
 import { getSubjectColor } from "@/utils/subjects/colors";
 import { getSubjectName } from "@/utils/subjects/name";
@@ -51,27 +51,30 @@ const HomeTimeTableWidget = React.memo(() => {
       scrollEnabled={false}
       data={courses.slice(0, 3)}
       style={{ width: '100%', paddingHorizontal: 10, paddingBottom: 4 }}
-      renderItem={({ item }) => (
-        <Link
-          href={{ pathname: "/(modals)/course/[id]", params: { id: getCourseRouteId(item) } }}
-          asChild
-        >
-          <Course
-            key={item.id}
-            id={item.id}
-            name={getSubjectName(item.subject)}
-            teacher={item.teacher}
-            room={item.room}
-            color={getSubjectColor(item.subject)}
-            status={{ label: item.customStatus ? item.customStatus : getStatusText(item.status), canceled: item.status === CourseStatus.CANCELED || item.customStatus === COURSE_CANCELLED_LABEL }}
-            variant="primary"
-            start={Math.floor(item.from.getTime() / 1000)}
-            end={Math.floor(item.to.getTime() / 1000)}
-            readonly={!!item.createdByAccount}
-            compact={true}
-          />
-        </Link>
-      )}
+      renderItem={({ item }) => {
+        const manualStatus = getManualCourseStatus(item);
+        return (
+          <Link
+            href={{ pathname: "/(modals)/course/[id]", params: { id: getCourseRouteId(item) } }}
+            asChild
+          >
+            <Course
+              key={item.id}
+              id={item.id}
+              name={getSubjectName(item.subject)}
+              teacher={item.teacher}
+              room={item.room}
+              color={getSubjectColor(item.subject)}
+              status={{ label: manualStatus || item.customStatus || getStatusText(item.status), canceled: item.status === CourseStatus.CANCELED || manualStatus === COURSE_CANCELLED_LABEL, manual: Boolean(manualStatus) }}
+              variant="primary"
+              start={Math.floor(item.from.getTime() / 1000)}
+              end={Math.floor(item.to.getTime() / 1000)}
+              readonly={!!item.createdByAccount}
+              compact={true}
+            />
+          </Link>
+        );
+      }}
     />
   );
 });

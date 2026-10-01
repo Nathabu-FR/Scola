@@ -13,7 +13,7 @@ import ModalOverhead from "@/components/ModalOverhead";
 import { getCourseById, getCourseRouteId, updateCourseCustomStatus } from "@/database/useTimetable";
 import { getManager, initializeAccountManager } from "@/services/shared";
 import { Attachment } from "@/services/shared/attachment";
-import { COURSE_CANCELLED_LABEL, COURSE_TEACHER_ABSENT_LABEL, Course as SharedCourse, CourseResource } from "@/services/shared/timetable";
+import { COURSE_CANCELLED_LABEL, COURSE_TEACHER_ABSENT_LABEL, Course as SharedCourse, CourseResource, getManualCourseStatus } from "@/services/shared/timetable";
 import ActivityIndicator from "@/ui/components/ActivityIndicator";
 import Icon from "@/ui/components/Icon";
 import List from "@/ui/new/List";
@@ -66,15 +66,6 @@ export default function CourseModal() {
     getCourseById(id)
       .then(result => {
         if (cancelled || !result) return;
-        // Restaure le statut manuel posé sur un cours iCal (localStorage web).
-        if (result.createdByAccount.startsWith("ical_") && Platform.OS === "web" && typeof window !== "undefined") {
-          try {
-            const saved = window.localStorage.getItem(`ical-course-status:${result.id}`);
-            if (saved !== null) {
-              result.customStatus = saved || undefined;
-            }
-          } catch { /* stockage indisponible : on garde le statut réseau */ }
-        }
         if (!cancelled) setCourse(result);
       })
       .finally(() => {
@@ -132,6 +123,7 @@ export default function CourseModal() {
     color: getSubjectColor(course.subject),
   };
   const item = course;
+  const manualStatus = getManualCourseStatus(course);
   const startTime = Math.floor(course.from.getTime() / 1000);
   const endTime = Math.floor(course.to.getTime() / 1000);
   const openAttachment = (attachment: Attachment) => {
@@ -152,7 +144,7 @@ export default function CourseModal() {
         if (Platform.OS === "web" && typeof window !== "undefined") {
           window.localStorage.setItem(`ical-course-status:${course.id}`, customStatus ?? "");
         }
-        setCourse({ ...course, customStatus });
+        setCourse({ ...course, manualStatus: customStatus });
         return;
       }
       await updateCourseCustomStatus(getCourseRouteId(course), customStatus);
@@ -180,7 +172,7 @@ export default function CourseModal() {
             height: 500,
             width: "100%",
             zIndex: 0,
-            opacity: 0.6,
+            opacity: 0.22,
           }}
         />
       )}
@@ -190,7 +182,7 @@ export default function CourseModal() {
         ListHeaderComponent={
           <ModalOverhead
             subject={getSubjectName(item.subject)}
-            title={item.customStatus || getStatusText(item.status)}
+            title={manualStatus || item.customStatus || getStatusText(item.status)}
             color={Platform.OS === "ios" ? subjectInfo.color : colors.primary}
             emoji={subjectInfo.emoji}
             subjectVariant="h3"
@@ -209,7 +201,12 @@ export default function CourseModal() {
           />
         }
         style={{ backgroundColor: "transparent", zIndex: 2 }}
-        contentContainerStyle={{ padding: 16, paddingLeft: contentPaddingLeft, paddingRight: contentPaddingRight }}
+        contentContainerStyle={{
+          padding: 16,
+          paddingLeft: contentPaddingLeft,
+          paddingRight: contentPaddingRight,
+          ...(Platform.OS === "web" ? { width: "100%", maxWidth: 900, alignSelf: "center" } : {}),
+        }}
       >
         <View
           accessibilityRole="tablist"
@@ -247,7 +244,7 @@ export default function CourseModal() {
                   variant="body1"
                   weight="semibold"
                   align="center"
-                  style={{ color: selected ? colors.background : colors.text }}
+                  style={{ color: selected ? "#FFFFFF" : colors.text }}
                 >
                   {label}
                 </Typography>
@@ -280,7 +277,7 @@ export default function CourseModal() {
                 { label: COURSE_TEACHER_ABSENT_LABEL, value: COURSE_TEACHER_ABSENT_LABEL },
                 { label: "Effacer", value: undefined },
               ].map(option => {
-                const selected = course.customStatus === option.value;
+                const selected = manualStatus === option.value;
                 return (
                   <Pressable
                     key={option.label}
@@ -290,7 +287,7 @@ export default function CourseModal() {
                     onPress={() => void setManualCourseStatus(option.value)}
                     style={{ borderRadius: 999, borderWidth: 1, borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? colors.primary : colors.card, paddingHorizontal: 12, paddingVertical: 8, opacity: updatingStatus ? 0.6 : 1 }}
                   >
-                    <Typography variant="body2" weight="semibold" selectable={false} style={{ color: selected ? colors.background : colors.text }}>{option.label}</Typography>
+                    <Typography variant="body2" weight="semibold" selectable={false} style={{ color: selected ? "#FFFFFF" : colors.text }}>{option.label}</Typography>
                   </Pressable>
                 );
               })}

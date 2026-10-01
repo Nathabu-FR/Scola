@@ -1,10 +1,9 @@
 import { SplashScreen } from "expo-router";
-import { SCOLA_BRAND } from "@/constants/scolaBrand";
 import React from "react";
 import { Image } from "react-native";
 import Reanimated, { Easing, withDelay, withTiming } from "react-native-reanimated";
 
-export const ScolaSplashOut = () => {
+export const SplashOut = () => {
   "worklet";
   return {
     initialValues: {
@@ -35,17 +34,24 @@ const FakeSplash = ({ isAppReady, instant }: { isAppReady: boolean, instant?: bo
         top: 0,
         left: 0,
         zIndex: 9999,
-        backgroundColor: SCOLA_BRAND.navy,
+        backgroundColor: "#29947A",
         display: "flex",
         justifyContent: "center",
         alignItems: "center",
       }}
-      exiting={ScolaSplashOut}
+      exiting={SplashOut}
     >
       <Image
-        source={require('@/assets/images/logotype.png')}
-        style={{ width: 240, height: 53 }}
-        resizeMode="contain"
+        source={require('@/assets/images/splash.png')}
+        style={{
+          width: "100%",
+          height: "100%",
+          position: "absolute",
+          top: 0,
+          left: 0,
+          zIndex: -1,
+        }}
+        resizeMode="cover"
       />
     </Reanimated.View>
   );

@@ -97,7 +97,7 @@ const getSortings = (): { value: SortMethod; label: string; sf: SFSymbol; papico
   { value: 'date', label: t('Tasks_Sorting_Methods_DueDate'), sf: 'calendar', papicon: 'Calendar' },
   { value: 'subject', label: t('Tasks_Sorting_Methods_Subject'), sf: 'character', papicon: 'List' },
   { value: 'done', label: t('Tasks_Sorting_Methods_Done'), sf: 'checkmark.circle', papicon: 'Check' },
-  { value: 'undone', label: 'Non faits uniquement', sf: 'circle', papicon: 'Circle' },
+  { value: 'undone', label: 'Non faits uniquement', sf: 'circle', papicon: 'Check' },
 ];
 
 // The pager addresses weeks as an offset from the week the screen opened in;
@@ -486,11 +486,11 @@ const TasksView: React.FC = () => {
               },
             ] as any}
           >
-            <Papicons
-              name={showUndoneOnly ? "Check" : "Circle"}
-              size={19}
-              color={showUndoneOnly ? colors.primary : colors.text + "88"}
-            />
+            {showUndoneOnly ? (
+              <Papicons name="Check" size={19} color={colors.primary} />
+            ) : (
+              <View style={[styles.uncheckedFilterIcon, { borderColor: colors.text + "88" }]} />
+            )}
             <Typography variant="body1" weight="semibold" selectable={false}>
               Devoirs non terminés uniquement
             </Typography>
@@ -603,6 +603,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+  },
+  uncheckedFilterIcon: {
+    width: 18,
+    height: 18,
+    borderWidth: 2,
+    borderRadius: 9,
   },
   webToolbar: {
     minHeight: 48,

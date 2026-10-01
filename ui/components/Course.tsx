@@ -26,6 +26,7 @@ interface CourseProps {
   status?: {
     canceled?: boolean;
     label: string;
+    manual?: boolean;
   };
   variant?: Variant;
   start: number;
@@ -98,6 +99,7 @@ const Course = React.memo((props: CourseProps) => {
   const fStart = new Date(start * 1000);
   const fEnd = new Date(end * 1000);
   const hStart = fStart.getHours();
+  const [separatorTaps, setSeparatorTaps] = useState(0);
 
   let textColor = adjust(color ?? "#FFFFFF", dark ? 0.1 : -0.15);
   if (status?.canceled) { textColor = colors.text + "80"; }
@@ -128,8 +130,6 @@ const Course = React.memo((props: CourseProps) => {
 
   /** Séparateur */
   const renderSeparator = useCallback(() => {
-    const [taps, setTaps] = useState(0);
-
     const messageKeys = {
       morning: [
         "Course_Separator_Morning_Default",
@@ -153,10 +153,6 @@ const Course = React.memo((props: CourseProps) => {
       ]
     };
 
-    const increaseTaps = () => {
-      setTaps((prevTaps) => (prevTaps + 1) % 3);
-    };
-
     let timeKey;
     if (hStart < 11) {
       timeKey = 'morning';
@@ -168,7 +164,7 @@ const Course = React.memo((props: CourseProps) => {
       timeKey = 'night';
     }
 
-    const message = t(messageKeys[timeKey][taps]);
+    const message = t(messageKeys[timeKey][separatorTaps]);
 
     return (
       <View
@@ -180,7 +176,7 @@ const Course = React.memo((props: CourseProps) => {
         }}
       >
       <ListTouchable
-        onPress={() => increaseTaps()}
+        onPress={() => setSeparatorTaps(previous => (previous + 1) % 3)}
         style={{
           flex: 1,
         }}
@@ -208,7 +204,7 @@ const Course = React.memo((props: CourseProps) => {
       </ListTouchable>
       </View>
     )
-  }, [colors.card, colors.text, duration, hStart, skeleton]);
+  }, [colors.item, colors.text, duration, hStart, separatorTaps, skeleton]);
 
   /** statut (cours annulé ou magicInfo) */
   const renderStatus = useCallback(() => {
@@ -228,6 +224,13 @@ const Course = React.memo((props: CourseProps) => {
           >
             {status.label}
           </Typography>
+          {status.manual && (
+            <View style={styles.manualStatusBadge}>
+              <Typography variant="caption" style={{ color: colors.text }} numberOfLines={1}>
+                Ajout perso
+              </Typography>
+            </View>
+          )}
         </Stack>
       );
     }
@@ -434,7 +437,7 @@ const Course = React.memo((props: CourseProps) => {
                     }
                     style={[
                       styles.statusLabelContainer,
-                      { flexShrink: 1, maxWidth: "70%" },
+                      { flexShrink: 1, maxWidth: status.manual ? "58%" : "70%" },
                     ]}
                   >
                     <Typography
@@ -449,6 +452,13 @@ const Course = React.memo((props: CourseProps) => {
                       {status.label}
                     </Typography>
                   </Stack>
+                )}
+                {status.manual && (
+                  <View style={styles.manualStatusBadge}>
+                    <Typography variant="caption" style={{ color: textColor }} numberOfLines={1}>
+                      Ajout perso
+                    </Typography>
+                  </View>
                 )}
                 <Typography
                   variant="h4"
@@ -566,6 +576,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     flexShrink: 1,
     width: "auto",
+  },
+  manualStatusBadge: {
+    maxWidth: 92,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 12,
+    backgroundColor: "#FFFFFF26",
   },
   statusDuration: {
     fontSize: 15,

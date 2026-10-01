@@ -26,12 +26,12 @@ const FALLBACK_COLORS = {
   dark: {
     primary: "#65A8FF",
     tint: SCOLA_BRAND.cyan,
-    background: SCOLA_BRAND.navy,
-    overground: "#091C40",
-    text: "#F5F8FF",
-    card: "#0D244E",
-    item: "#132B57",
-    border: "#213F78",
+    background: "#000000",
+    overground: "#000000",
+    text: "#FFFFFF",
+    card: "#121212",
+    item: "#121212",
+    border: "#303030",
   },
 };
 

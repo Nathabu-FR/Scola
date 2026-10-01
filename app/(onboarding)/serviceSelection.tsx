@@ -16,6 +16,7 @@ import Typography from "@/ui/new/Typography";
 import { PapillonZoomIn, PapillonZoomOut } from "@/ui/utils/Transition";
 import adjust from "@/utils/adjustColor";
 import { useSafeHorizontalPadding } from "@/ui/hooks/useSafeHorizontalPadding";
+import OnboardingStepProgress from "@/components/onboarding/OnboardingStepProgress";
 
 import { GetSupportedServices } from './utils/constants';
 
@@ -57,10 +58,24 @@ export default function ServiceSelection() {
 
   const hasServiceRoute = services.find(service => service.name === selectedService)?.route || services.find(service => service.name === selectedService)?.onPress;
 
-  const loginToService = (serviceName: string) => {
-    const serviceRoute = services.find(service => service.name === serviceName)?.route;
+  const loginToService = (serviceName: string | null) => {
+    const selected = services.find(service => service.name === serviceName);
+    if (!selected) return;
+
+    // These providers have no folder index route: open their real first screen
+    // so the shared step indicator is shown from the start of the flow.
+    if (selected.name === "pronote") {
+      router.push("./services/pronote/locate" as RelativePathString);
+      return;
+    }
+    if (selected.name === "ed") {
+      router.push("./services/ed/credentials" as RelativePathString);
+      return;
+    }
+
+    const serviceRoute = selected.route;
     if(!serviceRoute) {
-      services.find(service => service.name === serviceName)?.onPress();
+      selected.onPress();
       return;
     }
     const newRoute = './services/' + serviceRoute;
@@ -110,10 +125,21 @@ export default function ServiceSelection() {
       <List
         ListHeaderComponent={() => (
           <Stack padding={[4, 0]} style={{ maxWidth: 500 }}>
-            <Typography variant="h2">{titleString}</Typography>
-            <Typography variant="action" color="textSecondary">
-              {t("ONBOARDING_SERVICE_SELECTION_DESCRIPTION")}
-            </Typography>
+            {type === "school" ? (
+              <OnboardingStepProgress
+                step={1}
+                total={selectedService === "ed" ? 2 : 3}
+                title={titleString}
+                description={t("ONBOARDING_SERVICE_SELECTION_DESCRIPTION")}
+              />
+            ) : (
+              <>
+                <Typography variant="h2">{titleString}</Typography>
+                <Typography variant="action" color="textSecondary">
+                  {t("ONBOARDING_SERVICE_SELECTION_DESCRIPTION")}
+                </Typography>
+              </>
+            )}
             <Divider height={18} ghost />
           </Stack>
         )}

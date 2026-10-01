@@ -8,6 +8,7 @@ import { getDatabaseInstance } from "./DatabaseProvider";
 import { mapBalancesToShared } from "./mappers/balances";
 import { Balance } from "./models/Balance";
 import { safeWrite } from "./utils/safeTransaction";
+import { getActiveAccountDataSourceIds } from "./accountScope";
 
 export async function removeBalanceFromDatabase(serviceId: string) {
   const db = getDatabaseInstance();
@@ -30,7 +31,10 @@ export async function addBalancesToDatabase(balances: SharedBalance[]) {
   const db = getDatabaseInstance();
   for (const balance of balances) {
     const id = generateId(balance.label + balance.createdByAccount)
-    const existing = await db.get('balances').query(Q.where('balanceId', id)).fetch();
+    const existing = await db.get<Balance>('balances').query(
+      Q.where('balanceId', id),
+      Q.where('createdByAccount', balance.createdByAccount)
+    ).fetch();
 
     if (existing.length === 0) {
       await safeWrite(db, async () => {
@@ -51,18 +55,18 @@ export async function addBalancesToDatabase(balances: SharedBalance[]) {
   }
 }
 
-export async function getBalancesFromCache(accountIds?: string | string[]): Promise<SharedBalance[]> {
+export async function getBalancesFromCache(
+  accountIds: string | string[] = getActiveAccountDataSourceIds()
+): Promise<SharedBalance[]> {
   try {
     const database = getDatabaseInstance();
     // Les soldes sont enregistrés sous l'identifiant du service source.
     // Le manager fournit les services rattachés au compte courant.
-    const sourceIds = accountIds === undefined
-      ? null
-      : new Set(Array.isArray(accountIds) ? accountIds : [accountIds]);
+    const sourceIds = new Set(Array.isArray(accountIds) ? accountIds : [accountIds]);
     const balances = await database.get<Balance>('balances').query().fetch();
 
     return balances
-      .filter(balance => sourceIds === null || sourceIds.has(balance.createdByAccount))
+      .filter(balance => sourceIds.has(balance.createdByAccount))
       .map(mapBalancesToShared)
   } catch (e) {
     warn(String(e));

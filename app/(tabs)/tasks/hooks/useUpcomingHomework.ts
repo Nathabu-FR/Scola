@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
+import { Q } from "@nozbe/watermelondb";
 
+import { getAccountDataSourceIds } from "@/database/accountScope";
 import { useDatabase } from "@/database/DatabaseProvider";
 import { useHomeworkForWeeks } from "@/database/useHomework";
 import { Homework } from "@/services/shared/homework";
@@ -41,10 +43,7 @@ export const useUpcomingHomework = (weekCount = DEFAULT_WEEK_COUNT): UpcomingHom
   const accounts = useAccountStore((state) => state.accounts);
   const lastUsedAccount = useAccountStore((state) => state.lastUsedAccount);
   const account = accounts.find((a) => a.id === lastUsedAccount);
-  const services = useMemo(
-    () => account?.services?.map((service: { id: string }) => service.id) ?? [],
-    [account?.services]
-  );
+  const services = useMemo(() => getAccountDataSourceIds(account), [account]);
 
   const homeworkByWeek = useHomeworkForWeeks(weeks, refresh);
 
@@ -53,7 +52,10 @@ export const useUpcomingHomework = (weekCount = DEFAULT_WEEK_COUNT): UpcomingHom
 
     const subscription = database
       .get("homework")
-      .query()
+      .query(Q.where(
+        "createdByAccount",
+        services.length > 0 ? Q.oneOf(services) : "__no_active_account__"
+      ))
       .observeWithColumns(["isDone", "dueDate"])
       .subscribe(() => {
         if (timer) {
@@ -72,7 +74,7 @@ export const useUpcomingHomework = (weekCount = DEFAULT_WEEK_COUNT): UpcomingHom
         clearTimeout(timer);
       }
     };
-  }, [database]);
+  }, [database, services]);
 
   return useMemo(() => {
     const startOfToday = new Date();

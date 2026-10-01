@@ -8,7 +8,7 @@ import { BusIcon, HeartIcon, InfoIcon } from "lucide-react-native";
 import React, { useCallback, useMemo } from "react";
 import { Alert, Image, Platform, Pressable, View } from "react-native";
 
-import { ClearDatabaseForAccount } from "@/database/DatabaseProvider";
+import { resetAccountManager } from "@/services/shared";
 import { useAccountStore } from "@/stores/account";
 import { openMockDataAccountChooser } from "@/services/mock/account";
 import AnimatedPressable from "@/ui/components/AnimatedPressable";
@@ -61,6 +61,7 @@ export default function SettingsIndex() {
   const logout = useCallback(() => {
     trackOptionalEvent("logged_out_of_account");
     const accounts = useAccountStore.getState().accounts;
+    resetAccountManager();
     for (const account of accounts) {
       useAccountStore.getState().removeAccount(account);
     }

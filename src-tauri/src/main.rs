@@ -77,7 +77,10 @@ fn pronote_initialization_script(info_url: &str, mobile_url: &str, device_uuid: 
           return;
         }} catch (_) {{}}
       }}
-      if (infoChecks >= 240) infoHandled = true;
+      if (infoChecks >= 240) {{
+        infoHandled = true;
+        report("connection-error", {{ message: "La page mobile de PRONOTE n’a pas répondu après 60 secondes." }});
+      }}
     }}
 
     if (!appHookCalled && window.GInterface && typeof window.GInterface.passerEnModeValidationAppliMobile === "function") {{
@@ -98,7 +101,7 @@ fn pronote_initialization_script(info_url: &str, mobile_url: &str, device_uuid: 
       const text = document.body.innerText.normalize("NFD").replace(/[\\u0300-\\u036f]/g, "").toLowerCase();
       if (text.includes("connexion impossible")) {{
         connectionErrorReported = true;
-        report("connection-error");
+        report("connection-error", {{ message: "L’ENT a refusé ou interrompu la connexion PRONOTE." }});
       }}
     }}
   }};
@@ -159,7 +162,11 @@ async fn open_pronote_login(app: tauri::AppHandle, url: String, device_uuid: Str
                     }
                 }
                 Some("connection-error") => {
-                    let _ = event_app.emit_to("main", "scola-pronote-connection-error", ());
+                    let detail = url.query_pairs()
+                        .find(|(key, _)| key == "data")
+                        .map(|(_, value)| value.into_owned())
+                        .unwrap_or_default();
+                    let _ = event_app.emit_to("main", "scola-pronote-connection-error", detail);
                 }
                 _ => {}
             }

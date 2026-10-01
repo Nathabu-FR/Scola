@@ -21,6 +21,7 @@ import Reanimated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import OnboardingBackButton from "@/components/onboarding/OnboardingBackButton";
+import OnboardingStepProgress from "@/components/onboarding/OnboardingStepProgress";
 import OnboardingInput from "@/components/onboarding/OnboardingInput";
 import OnboardingScrollingFlatList from "@/components/onboarding/OnboardingScrollingFlatList";
 import { useAccountStore } from "@/stores/account";
@@ -269,6 +270,14 @@ export default function EDLoginWithCredentials() {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingTop: finalHeaderHeight, paddingBottom: insets.bottom }}
       >
+        <View style={{ width: "100%", maxWidth: 640, alignSelf: "center", paddingHorizontal: 20 }}>
+          <OnboardingStepProgress
+            step={2}
+            total={2}
+            title={t("ONBOARDING_LOGIN_CREDENTIALS")}
+            description={t("ONBOARDING_HEADER_ED_LOGIN")}
+          />
+        </View>
         <LoginView
           color="#1788bc"
           serviceName="ÉcoleDirecte"

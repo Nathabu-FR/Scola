@@ -101,6 +101,16 @@ async function processIcalData(ical: any): Promise<{ parsedData: ParsedICalData;
   return { parsedData, shouldUpdateIcal };
 }
 
+function withSavedManualStatus(course: SharedCourse): SharedCourse {
+  if (typeof window === "undefined") return course;
+  try {
+    const status = window.localStorage.getItem(`ical-course-status:${course.id}`);
+    return status ? { ...course, manualStatus: status } : course;
+  } catch {
+    return course;
+  }
+}
+
 export async function getICalEventsForWeek(weekStart: Date, weekEnd: Date): Promise<SharedCourse[]> {
   const icals = await getAllIcals();
   const allEvents: SharedCourse[] = [];
@@ -119,7 +129,7 @@ export async function getICalEventsForWeek(weekStart: Date, weekEnd: Date): Prom
         schoolName: parsedData.schoolName
       });
 
-      allEvents.push(...convertedEvents);
+      allEvents.push(...convertedEvents.map(withSavedManualStatus));
     } catch (error) {
       console.error(`Error processing iCal ${ical.title}:`, error);
     }
@@ -136,7 +146,7 @@ export async function getICalCourseById(id: string): Promise<SharedCourse | unde
       const { parsedData } = await processIcalData(ical);
       const event = parsedData.events.find(candidate => candidate.uid === id);
       if (event) {
-        return convertICalEventToSharedCourse(event, {
+        return withSavedManualStatus(convertICalEventToSharedCourse(event, {
           icalId: ical.id,
           icalTitle: ical.title,
           isADE: parsedData.isADE,
@@ -144,7 +154,7 @@ export async function getICalCourseById(id: string): Promise<SharedCourse | unde
           intelligentParsing: (ical as any).intelligentParsing || false,
           isSchool: parsedData.isSchool ?? false,
           schoolName: parsedData.schoolName,
-        });
+        }));
       }
     } catch (error) {
       console.error(`Error processing iCal ${ical.title}:`, error);

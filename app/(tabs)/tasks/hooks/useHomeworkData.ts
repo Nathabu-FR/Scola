@@ -217,13 +217,17 @@ export const useHomeworkData = (weeks: number[], alert: any) => {
 
   const fetchWeek = useCallback(
     async (week: number, managerToUse = manager, force = false) => {
-      if (!managerToUse) { return; }
+      if (
+        !managerToUse ||
+        managerToUse.getAccount().id !== useAccountStore.getState().lastUsedAccount
+      ) { return; }
       if (inFlightWeeks.current.has(week)) { return; }
       if (!force && fetchedWeeks.current.has(week)) { return; }
 
       inFlightWeeks.current.add(week);
       try {
         const result = await fetchSharedHomeworkWeek(managerToUse, week, force);
+        if (managerToUse.getAccount().id !== useAccountStore.getState().lastUsedAccount) return;
         const fetched: Record<string, Homework> = {};
         for (const value of result) {
           const hw = normalizeHomework(value, managerToUse.getAccount().id);
@@ -241,6 +245,7 @@ export const useHomeworkData = (weeks: number[], alert: any) => {
         setFailures(managerToUse.getFailures(Capabilities.HOMEWORK));
         setLoadError(null);
       } catch (e) {
+        if (managerToUse.getAccount().id !== useAccountStore.getState().lastUsedAccount) return;
         error("Fetch error", String(e));
         setFailures(managerToUse.getFailures(Capabilities.HOMEWORK));
         setLoadError(e instanceof Error ? e : new Error(String(e)));
@@ -259,7 +264,22 @@ export const useHomeworkData = (weeks: number[], alert: any) => {
   }, [weeksKey, fetchWeek]);
 
   const managerRef = useRef(manager);
+  useEffect(() => {
+    const activeManager = getManager(true);
+    managerRef.current = activeManager;
+    setManager(activeManager);
+    setHomework({});
+    setRefreshingWeek(null);
+    setLoadError(null);
+    setFailures([]);
+    itemCache.current.clear();
+    weekCache.current = {};
+    fetchedWeeks.current.clear();
+    inFlightWeeks.current.clear();
+  }, [lastUsedAccount]);
+
   const handleManager = useCallback((updatedManager: AccountManager) => {
+    if (updatedManager.getAccount().id !== useAccountStore.getState().lastUsedAccount) return;
     // The subscription is re-established whenever `fetchWeek` changes, and fires
     // straight away with the manager already in hand: only an actually new
     // manager is worth re-fetching every week for.

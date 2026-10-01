@@ -12,6 +12,7 @@ import Divider from "@/ui/new/Divider";
 import List from "@/ui/new/List";
 import Typography from "@/ui/new/Typography";
 import { useSafeHorizontalPadding } from "@/ui/hooks/useSafeHorizontalPadding";
+import OnboardingStepProgress from "@/components/onboarding/OnboardingStepProgress";
 
 const PronoteSearchHeader = memo(({
 }: {
@@ -29,8 +30,12 @@ const PronoteSearchHeader = memo(({
 
   return (
     <Stack padding={[4, 0]}>
-      <Typography variant="h2">{t("ONBOARDING_URL")}</Typography>
-      <Typography variant="action" color="textSecondary">{t("ONBOARDING_PRONOTE_LOCATION_HELP")}</Typography>
+      <OnboardingStepProgress
+        step={2}
+        total={3}
+        title={t("ONBOARDING_URL")}
+        description={t("ONBOARDING_PRONOTE_LOCATION_HELP")}
+      />
       <Divider height={6} ghost />
       <Search icon="link" placeholder={t("ONBOARDING_URL_PLACEHOLDER")} style={{ width: "100%" }} value={url} setValue={setUrl} onTextChange={setUrl} autoFocus={url.trim().length === 0} />
 

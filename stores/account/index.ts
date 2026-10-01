@@ -32,6 +32,27 @@ export const useAccountStore = create<AccountsStorage>()(
         });
       },
       addAccount: account => {
+        const existing = get().accounts.find(item => item.id === account.id);
+        if (existing) {
+          const mergedServices = new Map(
+            existing.services.map(service => [service.id, service])
+          );
+          account.services.forEach(service => mergedServices.set(service.id, service));
+          set({
+            accounts: get().accounts.map(item => item.id === account.id
+              ? {
+                ...existing,
+                ...account,
+                customisation: account.customisation ?? existing.customisation,
+                teamModal: account.teamModal ?? existing.teamModal,
+                transport: account.transport ?? existing.transport,
+                services: [...mergedServices.values()],
+              }
+              : item),
+          });
+          return;
+        }
+
         set({ accounts: [...get().accounts, account] });
         trackOptionalEvent("new_account_logged_in");
       },
@@ -60,7 +81,10 @@ export const useAccountStore = create<AccountsStorage>()(
             if (account.id === accountId) {
               return {
                 ...account,
-                services: [...account.services, service],
+                services: [
+                  ...account.services.filter(existing => existing.id !== service.id),
+                  service,
+                ],
               };
             }
             return account;
@@ -111,7 +135,12 @@ export const useAccountStore = create<AccountsStorage>()(
           }),
         }),
       setLastUsedAccount: (accountId: string) =>
-        set({ lastUsedAccount: accountId }),
+        set({
+          lastUsedAccount:
+            accountId === "" || get().accounts.some(account => account.id === accountId)
+              ? accountId
+              : get().lastUsedAccount,
+        }),
       recordTeamModalHomeLaunch: (accountId: string) => {
         let shouldShow = false;
 

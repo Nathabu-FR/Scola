@@ -7,7 +7,7 @@ import { getWeekNumberFromDate } from '@/database/useHomework';
 import { AuthenticationError } from '@/services/errors/AuthenticationError';
 import { SecurityChallengeError } from '@/services/errors/SecurityChallengeError';
 import { ServiceUnavailableError } from '@/services/errors/ServiceUnavailableError';
-import { getManager, initializeAccountManager } from "@/services/shared";
+import { getManager, initializeAccountManager, resetAccountManager } from "@/services/shared";
 import { Services } from '@/stores/account/types';
 import { useSettingsStore } from '@/stores/settings';
 import { useAlert } from '@/ui/components/AlertProvider';
@@ -77,6 +77,7 @@ export const useHomeData = () => {
       });
 
       const remainingAccounts = accounts.filter(acc => acc.id !== currentAccount.id);
+      resetAccountManager();
       removeAccount(currentAccount);
 
       if (remainingAccounts.length === 0) {

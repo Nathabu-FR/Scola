@@ -8,6 +8,7 @@ import { getDatabaseInstance } from "./DatabaseProvider";
 import { mapAbsencesToShared, mapDelaysToShared, mapObservationsToShared,mapPunishmentsToShared } from "./mappers/attendance";
 import { Absence, Attendance, Delay, Observation, Punishment } from "./models/Attendance";
 import { safeWrite } from "./utils/safeTransaction";
+import { getActiveAccountDataSourceIds } from "./accountScope";
 
 export async function addAttendanceToDatabase(attendances: SharedAttendance[], period: string) {
   const db = getDatabaseInstance();
@@ -15,7 +16,10 @@ export async function addAttendanceToDatabase(attendances: SharedAttendance[], p
     const id = generateId(attendance.createdByAccount + period + attendance.kidName);
 
     // 1) Lectures HORS writer (tout await ici est autorisé).
-    const existing = await db.get('attendance').query(Q.where('attendanceId', id)).fetch();
+    const existing = await db.get<Attendance>('attendance').query(
+      Q.where('attendanceId', id),
+      Q.where('createdByAccount', attendance.createdByAccount)
+    ).fetch();
     const existingAttendance = (existing[0] as Attendance | undefined) ?? null;
     const [oldDelays, oldAbsences, oldObservations, oldPunishments] = existingAttendance
       ? await Promise.all([
@@ -125,13 +129,19 @@ export async function addAttendanceToDatabase(attendances: SharedAttendance[], p
 }
 
 
-export async function getAttendanceFromCache(period: string): Promise<SharedAttendance | undefined> {
+export async function getAttendanceFromCache(
+  period: string,
+  sourceIds: string[] = getActiveAccountDataSourceIds()
+): Promise<SharedAttendance | undefined> {
   try {
     const database = getDatabaseInstance();
 
     const attendance = await database
       .get<Attendance>('attendance')
-      .query(Q.where('period', period))
+      .query(
+        Q.where('period', period),
+        Q.where("createdByAccount", sourceIds.length > 0 ? Q.oneOf(sourceIds) : "__no_active_account__")
+      )
       .fetch();
 
     if (!attendance[0]) {

@@ -1,5 +1,5 @@
 export const SCOLA_BRAND = {
-  navy: "#061A3E",
+  navy: "#000000",
   blue: "#155EEF",
   cyan: "#13C9F4",
   yellow: "#FFC629",

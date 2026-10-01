@@ -1,23 +1,34 @@
 import { Model, Q } from "@nozbe/watermelondb";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Attachment } from "@/services/shared/attachment";
 import { News as SharedNews } from "@/services/shared/news";
+import { useAccountStore } from "@/stores/account";
 import { generateId } from "@/utils/generateId";
 import { info,warn } from "@/utils/logger/logger";
 
 import { getDatabaseInstance, useDatabase } from "./DatabaseProvider";
 import News from "./models/News";
+import { getAccountDataSourceIds, getActiveAccountDataSourceIds } from "./accountScope";
 import { parseJsonArray } from "./useHomework";
 import { safeWrite } from "./utils/safeTransaction";
 
 export function useNews(refresh = 0) {
   const database = useDatabase();
+  const accounts = useAccountStore(state => state.accounts);
+  const activeAccountId = useAccountStore(state => state.lastUsedAccount);
+  const sourceIds = useMemo(
+    () => getAccountDataSourceIds(accounts.find(account => account.id === activeAccountId)),
+    [accounts, activeAccountId]
+  );
+  const sourceKey = sourceIds.join("\u0000");
   const [news, setNews] = useState<SharedNews[]>([]);
 
   useEffect(() => {
-
-    const query = database.get<News>('news').query();
+    setNews([]);
+    const query = database.get<News>('news').query(
+      Q.where("createdByAccount", sourceIds.length > 0 ? Q.oneOf(sourceIds) : "__no_active_account__")
+    );
 
     const sub = query.observe().subscribe(news =>
       setNews(
@@ -26,9 +37,9 @@ export function useNews(refresh = 0) {
     );
 
     return () => sub.unsubscribe();
-  }, [refresh, database]);
+  }, [refresh, database, sourceIds, sourceKey]);
 
-  return news;
+  return news.filter(item => sourceIds.includes(item.createdByAccount));
 }
 
 export function getNewsRouteId(item: SharedNews): string {
@@ -37,19 +48,30 @@ export function getNewsRouteId(item: SharedNews): string {
 
 export async function getNewsById(id: string): Promise<SharedNews | undefined> {
   const database = getDatabaseInstance();
+  const sourceIds = getActiveAccountDataSourceIds();
+  if (sourceIds.length === 0) return undefined;
   const records = await database
     .get<News>('news')
-    .query(Q.where("newsId", id))
+    .query(Q.where("newsId", id), Q.where("createdByAccount", Q.oneOf(sourceIds)))
     .fetch();
   const cachedNews = records[0] ? mapNewsToShared(records[0]) : undefined;
 
   try {
     const { getManager } = await import("@/services/shared");
     const freshNews = await getManager()?.getNews();
-    return freshNews?.find(item => getNewsRouteId(item) === id) ?? cachedNews;
+    const activeSourceIds = getActiveAccountDataSourceIds();
+    const freshItem = freshNews?.find(item =>
+      activeSourceIds.includes(item.createdByAccount) && getNewsRouteId(item) === id
+    );
+    const cachedItem = cachedNews && activeSourceIds.includes(cachedNews.createdByAccount)
+      ? cachedNews
+      : undefined;
+    return freshItem ?? cachedItem;
   } catch (error) {
     warn(`Unable to refresh news ${id}: ${String(error)}`);
-    return cachedNews;
+    return cachedNews && getActiveAccountDataSourceIds().includes(cachedNews.createdByAccount)
+      ? cachedNews
+      : undefined;
   }
 }
 
@@ -63,7 +85,10 @@ export async function addNewsToDatabase(news: SharedNews[]) {
     const id = getNewsRouteId(item);
 
     const existingRecords = await db.get('news')
-      .query(Q.where("newsId", id))
+      .query(
+        Q.where("newsId", id),
+        Q.where("createdByAccount", item.createdByAccount ?? "")
+      )
       .fetch();
 
     if (existingRecords.length === 0) {
@@ -123,13 +148,15 @@ export async function addNewsToDatabase(news: SharedNews[]) {
 }
 
 
-export async function getNewsFromCache(): Promise<SharedNews[]> {
+export async function getNewsFromCache(
+  sourceIds: string[] = getActiveAccountDataSourceIds()
+): Promise<SharedNews[]> {
   try {
     const database = getDatabaseInstance();
 
     const news = await database
       .get<News>('news')
-      .query()
+      .query(Q.where("createdByAccount", sourceIds.length > 0 ? Q.oneOf(sourceIds) : "__no_active_account__"))
       .fetch();
 
     return news

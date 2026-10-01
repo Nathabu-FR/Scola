@@ -28,6 +28,7 @@ export const useHomeHeaderData = () => {
 
   const attendancesPeriodsRef = useRef<Period[]>([]);
   const [attendances, setAttendances] = useState<Attendance[]>([]);
+  const [attendanceAccountId, setAttendanceAccountId] = useState("");
   const news = useNews();
 
   const absencesCount = useMemo(() => {
@@ -43,8 +44,11 @@ export const useHomeHeaderData = () => {
 
   useEffect(() => {
     const updateAttendance = async (manager: AccountManager) => {
+      const managerAccountId = manager.getAccount().id;
       const periods = await manager.getAttendancePeriods();
+      if (useAccountStore.getState().lastUsedAccount !== managerAccountId) return;
       attendancesPeriodsRef.current = periods;
+      setAttendanceAccountId(managerAccountId);
 
       const currentPeriod = getCurrentPeriod(periods);
       if (!currentPeriod) {
@@ -53,13 +57,19 @@ export const useHomeHeaderData = () => {
       }
 
       const fetchedAttendances = await manager.getAttendanceForPeriod(currentPeriod.name);
-
+      if (useAccountStore.getState().lastUsedAccount !== managerAccountId) return;
       setAttendances(fetchedAttendances);
     };
 
     const unsubscribe = subscribeManagerUpdate((_) => {
       const manager = getManager();
-      updateAttendance(manager);
+      if (manager) {
+        void updateAttendance(manager);
+      } else {
+        attendancesPeriodsRef.current = [];
+        setAttendances([]);
+        setAttendanceAccountId("");
+      }
     });
 
     return () => unsubscribe();
@@ -67,8 +77,8 @@ export const useHomeHeaderData = () => {
 
   return {
     availableCanteenCards,
-    attendancesPeriods: attendancesPeriodsRef.current,
-    attendances,
+    attendancesPeriods: attendanceAccountId === lastUsedAccount ? attendancesPeriodsRef.current : [],
+    attendances: attendanceAccountId === lastUsedAccount ? attendances : [],
     absencesCount,
     news
   };

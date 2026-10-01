@@ -1,5 +1,5 @@
 import { Model, Q } from "@nozbe/watermelondb";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { getICalCourseById, getICalEventsForWeek } from "@/services/local/ical";
 import { Course as SharedCourse,CourseDay as SharedCourseDay } from "@/services/shared/timetable"
@@ -7,10 +7,12 @@ import { generateId } from "@/utils/generateId";
 import { warn } from "@/utils/logger/logger";
 
 import { getDatabaseInstance, useDatabase } from "./DatabaseProvider"
+import { getAccountDataSourceIds, getActiveAccountDataSourceIds } from "./accountScope";
 import { mapCourseToShared } from "./mappers/course";
 import Course from "./models/Timetable";
 import { getDateRangeOfWeek } from "./useHomework";
 import { safeWrite } from "./utils/safeTransaction";
+import { useAccountStore } from "@/stores/account";
 
 export function getCourseRouteId(course: SharedCourse): string {
   if (course.createdByAccount.startsWith('ical_')) return course.id;
@@ -25,11 +27,16 @@ export function getCourseRouteId(course: SharedCourse): string {
 
 export async function getCourseById(id: string): Promise<SharedCourse | undefined> {
   try {
+    const sourceIds = getActiveAccountDataSourceIds();
+    if (sourceIds.length === 0) return await getICalCourseById(id);
     const courses = await getDatabaseInstance()
       .get<Course>('courses')
-      .query(Q.where('courseId', id))
+      .query(Q.where('courseId', id), Q.where("createdByAccount", Q.oneOf(sourceIds)))
       .fetch();
-    return courses[0] ? mapCourseToShared(courses[0]) : await getICalCourseById(id);
+    const course = courses[0] ? mapCourseToShared(courses[0]) : undefined;
+    return course && getActiveAccountDataSourceIds().includes(course.createdByAccount)
+      ? course
+      : await getICalCourseById(id);
   } catch {
     return getICalCourseById(id);
   }
@@ -37,8 +44,10 @@ export async function getCourseById(id: string): Promise<SharedCourse | undefine
 
 export async function updateCourseCustomStatus(courseId: string, customStatus?: string) {
   const db = getDatabaseInstance();
+  const sourceIds = getActiveAccountDataSourceIds();
+  if (sourceIds.length === 0) throw new Error("Aucun compte actif.");
   const records = await db.get<Course>("courses")
-    .query(Q.where("courseId", courseId))
+    .query(Q.where("courseId", courseId), Q.where("createdByAccount", Q.oneOf(sourceIds)))
     .fetch();
   if (!records[0]) throw new Error("Ce cours n’est plus disponible dans ce compte.");
 
@@ -51,6 +60,12 @@ export async function updateCourseCustomStatus(courseId: string, customStatus?: 
 
 export function useTimetable(refresh = 0, weekNumber: number | number[] = 0, date: Date = new Date()) {
   const database = useDatabase();
+  const accounts = useAccountStore(state => state.accounts);
+  const activeAccountId = useAccountStore(state => state.lastUsedAccount);
+  const sourceIds = useMemo(
+    () => getAccountDataSourceIds(accounts.find(account => account.id === activeAccountId)),
+    [accounts, activeAccountId]
+  );
   const [timetable, setTimetable] = useState<SharedCourseDay[]>([]);
 
   const weeks = Array.isArray(weekNumber) ? weekNumber : [weekNumber];
@@ -58,13 +73,14 @@ export function useTimetable(refresh = 0, weekNumber: number | number[] = 0, dat
   const weeksKey = weeks.join(',');
 
   useEffect(() => {
+    setTimetable([]);
     let cancelled = false;
     let requestId = 0;
     const year = date.getFullYear();
 
     const fetchTimetable = async () => {
       const currentRequest = ++requestId;
-      const timetableFetched = await getCoursesFromCache(weeks, year);
+      const timetableFetched = await getCoursesFromCache(weeks, year, sourceIds);
       if (!cancelled && currentRequest === requestId) {
         setTimetable(timetableFetched);
       }
@@ -85,7 +101,7 @@ export function useTimetable(refresh = 0, weekNumber: number | number[] = 0, dat
       courseSubscription.unsubscribe();
       icalSubscription.unsubscribe();
     };
-  }, [refresh, database, weeksKey, date.getFullYear()]);
+  }, [refresh, database, weeksKey, date.getFullYear(), sourceIds]);
 
   return timetable;
 }
@@ -118,12 +134,12 @@ export async function addCourseDayToDatabase(courses: SharedCourseDay[]) {
       const oldId = generateId(item.from.toISOString() + item.to.toISOString() + item.subject + item.teacher + item.room + item.createdByAccount);
       const id = getCourseRouteId(item);
 
-      const oldExistingRecords = await db.get<Course>('courses')
+      const oldExistingRecords = (await db.get<Course>('courses')
         .query(Q.where('courseId', oldId))
-        .fetch();
-      const existingRecords = await db.get<Course>('courses')
+        .fetch()).filter(record => record.createdByAccount === item.createdByAccount);
+      const existingRecords = (await db.get<Course>('courses')
         .query(Q.where('courseId', id))
-        .fetch();
+        .fetch()).filter(record => record.createdByAccount === item.createdByAccount);
       items.push({ item, oldId, id, existingRecords, oldExistingRecords });
     }
     snapshots.push({ dayTimestamp, dbCourses, items });
@@ -238,14 +254,21 @@ function getWeeksRange(weeks: number[], year: number): { start: Date; end: Date 
   return { start, end };
 }
 
-export async function getCoursesFromCache(weeks: number[], year: number): Promise<SharedCourseDay[]> {
+export async function getCoursesFromCache(
+  weeks: number[],
+  year: number,
+  sourceIds: string[] = getActiveAccountDataSourceIds()
+): Promise<SharedCourseDay[]> {
   try {
     const database = getDatabaseInstance();
     const { start: minStart, end: maxEnd } = getWeeksRange(weeks, year);
 
     const courses = await database
       .get<Course>('courses')
-      .query(Q.where('from', Q.between(minStart.getTime(), maxEnd.getTime())))
+      .query(
+        Q.where('from', Q.between(minStart.getTime(), maxEnd.getTime())),
+        Q.where("createdByAccount", sourceIds.length > 0 ? Q.oneOf(sourceIds) : "__no_active_account__")
+      )
       .fetch();
 
     const dayMap: Record<number, SharedCourse[]> = {};

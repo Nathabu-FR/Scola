@@ -29,17 +29,49 @@ import uuid from "@/utils/uuid/uuid";
 import { useSafeHorizontalPadding } from "@/ui/hooks/useSafeHorizontalPadding";
 import { isTauriDesktop } from "@/utils/network/fetch";
 import { Papicons } from "@getpapillon/papicons";
+import OnboardingStepProgress from "@/components/onboarding/OnboardingStepProgress";
 
 import { Pronote2FAModal } from "./2fa";
 
 const asString = (value: unknown): string => {
   if (Array.isArray(value)) return asString(value[0]);
-  if (typeof value === "string") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim();
+    return normalized === "[object Object]" ? "" : normalized;
+  }
   if (value && typeof value === "object") {
     const school = value as Record<string, unknown>;
     return asString(school.name ?? school.context ?? school.city);
   }
   return "";
+};
+
+const formatPronoteDetail = (detail: string): string => {
+  if (/<\s*(?:!doctype|html|body)\b/i.test(detail)) {
+    const status = detail.match(/\b(\d{3})\b/)?.[1];
+    return `Le serveur de l’établissement a renvoyé une page d’erreur${status ? ` (HTTP ${status})` : ""}. Réessaie plus tard ou contacte ton établissement.`;
+  }
+  return detail.slice(0, 400);
+};
+
+const formatPronoteError = (cause: unknown): string => {
+  if (typeof cause === "string" && cause.trim()) {
+    return `Connexion Pronote impossible : ${formatPronoteDetail(cause.trim())}`;
+  }
+  if (!cause || typeof cause !== "object") {
+    return "La connexion Pronote via l’ENT a échoué. Réessaie ou utilise les identifiants directs.";
+  }
+
+  const error = cause as Record<string, unknown>;
+  const details = [error.message, error.description, error.reason, error.error, error.code]
+    .filter((value): value is string | number => typeof value === "string" || typeof value === "number")
+    .map(String)
+    .map(value => value.trim())
+    .filter(Boolean);
+  const detail = [...new Set(details)].join(" — ");
+  return details.length > 0
+    ? `Connexion Pronote impossible : ${formatPronoteDetail(detail)}`
+    : "La connexion Pronote via l’ENT a échoué. Réessaie ou utilise les identifiants directs.";
 };
 
 export default function PronoteDesktopLogin() {
@@ -56,6 +88,9 @@ export default function PronoteDesktopLogin() {
 
   const url = asString(params.url);
   const school = asString(params.school);
+  const schoolTitle = school || (() => {
+    try { return url ? new URL(url).hostname : ""; } catch { return ""; }
+  })();
   const relinkAccountId = asString(params.relinkAccountId);
   const relinkServiceId = asString(params.relinkServiceId);
   const relinkDeviceUUID = asString(params.relinkDeviceUUID);
@@ -196,11 +231,7 @@ export default function PronoteDesktopLogin() {
 
       await finishAccountSetup(session, refresh);
     } catch (cause) {
-      setErrorMessage(
-        cause instanceof Error
-          ? cause.message
-          : "La connexion Pronote a échoué. Vérifie ton identifiant et ton mot de passe."
-      );
+      setErrorMessage(formatPronoteError(cause));
     } finally {
       setLoading(false);
     }
@@ -208,6 +239,11 @@ export default function PronoteDesktopLogin() {
 
   const connectWithEntToken = async (loginState: { status?: number; login?: string; mdp?: string }) => {
     if (loginState.status !== 0 || !loginState.login || !loginState.mdp) {
+      if (isTauriDesktop()) {
+        void import("@tauri-apps/api/core")
+          .then(({ invoke }) => invoke("close_pronote_login"))
+          .catch(() => undefined);
+      }
       setLoading(false);
       setErrorMessage("L’ENT n’a pas transmis de session Pronote valide. Réessaie la connexion.");
       return;
@@ -269,11 +305,10 @@ export default function PronoteDesktopLogin() {
       await invoke("close_pronote_login").catch(() => undefined);
       await finishAccountSetup(session, refresh);
     } catch (cause) {
-      setErrorMessage(
-        cause instanceof Error
-          ? cause.message
-          : "La connexion Pronote via l’ENT a échoué. Réessaie."
-      );
+      void import("@tauri-apps/api/core")
+        .then(({ invoke }) => invoke("close_pronote_login"))
+        .catch(() => undefined);
+      setErrorMessage(formatPronoteError(cause));
     } finally {
       loginAttemptInProgress.current = false;
       setLoading(false);
@@ -309,20 +344,24 @@ export default function PronoteDesktopLogin() {
         }
         void connectWithEntToken(loginState);
       });
-      const unlistenError = await listen("scola-pronote-connection-error", () => {
+      const unlistenError = await listen<string>("scola-pronote-connection-error", event => {
+        void import("@tauri-apps/api/core")
+          .then(({ invoke }) => invoke("close_pronote_login"))
+          .catch(() => undefined);
         setLoading(false);
-        setErrorMessage("Pronote a signalé une erreur de connexion. Vérifie l’ENT de ton établissement.");
+        let details = "";
+        try {
+          const payload = JSON.parse(event.payload) as { message?: unknown };
+          if (typeof payload.message === "string") details = payload.message;
+        } catch { /* ancien événement sans détail */ }
+        setErrorMessage(details || "Pronote n’a pas renvoyé de session. Vérifie l’ENT de ton établissement et réessaie.");
       });
       unlistenTauriEvents.current = [unlistenLogin, unlistenError];
       // rename_all = "camelCase" côté Rust : le paramètre s'appelle deviceUuid.
       await invoke("open_pronote_login", { url, deviceUuid: deviceId });
     } catch (cause) {
       setLoading(false);
-      setErrorMessage(
-        cause instanceof Error
-          ? cause.message
-          : "Impossible d’ouvrir la fenêtre de connexion ENT."
-      );
+      setErrorMessage(formatPronoteError(cause));
     }
   };
 
@@ -354,10 +393,13 @@ export default function PronoteDesktopLogin() {
           contentContainerStyle={{ flexGrow: 1, alignItems: "center", justifyContent: "center", padding: 24, ...safePadding }}
         >
           <View style={{ width: "100%", maxWidth: 480, gap: 16 }}>
+            <OnboardingStepProgress
+              step={3}
+              total={3}
+              title={t("ONBOARDING_LOGIN_CREDENTIALS")}
+              description={schoolTitle || "Pronote"}
+            />
             <Typography variant="h2" align="center">PRONOTE</Typography>
-            <Typography variant="h3" align="center">
-              {school ? `Connexion à ${school}` : "Connexion à Pronote"}
-            </Typography>
 
             {!directMode ? (
               <>

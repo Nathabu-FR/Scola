@@ -16,6 +16,7 @@ import List from "@/ui/new/List";
 import Typography from "@/ui/new/Typography";
 import { GeographicSearchByUAI, GeographicSearchCities, isLikelyUAI } from "@/utils/native/georeverse";
 import { useSafeHorizontalPadding } from "@/ui/hooks/useSafeHorizontalPadding";
+import OnboardingStepProgress from "@/components/onboarding/OnboardingStepProgress";
 
 const convertPostalCode
 = (postalCode: string) => {
@@ -45,8 +46,12 @@ const PronoteSearchHeader = memo(({
   t: (key: string, options?: any) => string
 }) => (
   <Stack padding={[4, 0]}>
-    <Typography variant="h2">{t("ONBOARDING_SEARCH_TITLE")}</Typography>
-    <Typography variant="action" color="textSecondary">{t("ONBOARDING_PRONOTE_LOCATION_HELP")}</Typography>
+    <OnboardingStepProgress
+      step={2}
+      total={3}
+      title={t("ONBOARDING_SEARCH_TITLE")}
+      description={t("ONBOARDING_PRONOTE_LOCATION_HELP")}
+    />
     <Divider height={6} ghost />
     <Search placeholder={t("ONBOARDING_METHOD_SEARCH")} style={{ width: "100%" }} value={city} setValue={setCity} onTextChange={setCity} autoFocus={city.trim().length === 0} />
     

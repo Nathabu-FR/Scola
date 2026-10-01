@@ -15,6 +15,7 @@ import Divider from "@/ui/new/Divider";
 import List from "@/ui/new/List";
 import Typography from "@/ui/new/Typography";
 import { useSafeHorizontalPadding } from "@/ui/hooks/useSafeHorizontalPadding";
+import OnboardingStepProgress from "@/components/onboarding/OnboardingStepProgress";
 
 
 export interface School {
@@ -35,8 +36,12 @@ const PronoteSearchHeader = memo(({
   t: (key: string, options?: any) => string
 }) => (
   <Stack padding={[4, 0]}>
-    <Typography variant="h2">{t("ONBOARDING_SELECT_SCHOOL")}</Typography>
-    <Typography variant="action" color="textSecondary">{t("ONBOARDING_PRONOTE_LOCATION_HELP")}</Typography>
+    <OnboardingStepProgress
+      step={2}
+      total={3}
+      title={t("ONBOARDING_SELECT_SCHOOL")}
+      description={t("ONBOARDING_PRONOTE_LOCATION_HELP")}
+    />
     <Divider height={6} ghost />
     <Search placeholder={t("ONBOARDING_SEARCH_SCHOOL_PLACEHOLDER")} style={{ width: "100%" }} value={search} setValue={setSearch} onTextChange={setSearch} />
 
@@ -83,7 +88,7 @@ export default function PronoteLoginSelectEtab() {
   const filteredSchools = schools.filter(school => school.name.toLowerCase().includes(search.toLowerCase()));
 
   const selectSchool = (school: School) => {
-    navigation.navigate("browser", { url: school.url, school });
+    navigation.navigate("browser", { url: school.url, school: school.name });
   }
 
   return (

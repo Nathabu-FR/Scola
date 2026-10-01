@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useTimetable } from '@/database/useTimetable';
+import { getAccountDataSourceIds } from '@/database/accountScope';
 import { useLoadErrorAlert } from '@/hooks/useLoadErrorAlert';
 import { useManagerSubscription } from '@/hooks/useManagerSubscription';
 import type { AccountManager } from "@/services/shared";
@@ -29,7 +30,7 @@ export function useTimetableData(weekNumber: number, currentDate: Date = new Dat
   const lastUsedAccount = useAccountStore(state => state.lastUsedAccount);
   const account = accounts.find(item => item.id === lastUsedAccount);
   const services: string[] = useMemo(
-    () => account?.services?.map((service: { id: string }) => service.id) ?? [],
+    () => getAccountDataSourceIds(account),
     [account]
   );
 
@@ -44,6 +45,16 @@ export function useTimetableData(weekNumber: number, currentDate: Date = new Dat
     })).filter(day => day.courses.length > 0);
   }, [rawTimetable, services]);
 
+  useEffect(() => {
+    setManager(getManager(true));
+    fetchedWeeks.current.clear();
+    setError(null);
+    setFailures([]);
+    setIsLoading(false);
+    setManualRefreshing(false);
+    setRefresh(value => value + 1);
+  }, [lastUsedAccount]);
+
   const fetchWeeklyTimetable = useCallback(async (targetWeekNumber: number, forceRefresh = false) => {
     setIsLoading(true);
     if (fetchTimeoutRef.current) {
@@ -56,7 +67,8 @@ export function useTimetableData(weekNumber: number, currentDate: Date = new Dat
         setManualRefreshing(true);
       }
       try {
-        if (!manager) {
+        const managerToUse = getManager(true);
+        if (!managerToUse || managerToUse.getAccount().id !== lastUsedAccount) {
           debug('Manager is null, skipping timetable fetch');
           return;
         }
@@ -76,9 +88,11 @@ export function useTimetableData(weekNumber: number, currentDate: Date = new Dat
         if (toFetch.length > 0) {
           await Promise.all(
             toFetch.map((c) => {
-              return manager.getWeeklyTimetable(c.week, c.targetDate)
+              return managerToUse.getWeeklyTimetable(c.week, c.targetDate)
             })
           );
+
+          if (useAccountStore.getState().lastUsedAccount !== managerToUse.getAccount().id) return;
 
           setRefresh(prev => prev + 1);
           for (const candidate of toFetch) {
@@ -88,25 +102,29 @@ export function useTimetableData(weekNumber: number, currentDate: Date = new Dat
 
         // The manager falls back to the cache rather than throwing, so a service
         // that failed is only visible through its recorded failures.
-        setFailures(manager.getFailures(Capabilities.TIMETABLE));
+        setFailures(managerToUse.getFailures(Capabilities.TIMETABLE));
         setError(null);
       } catch (e) {
         log('Error fetching weekly timetable: ' + e);
-        setFailures(manager?.getFailures(Capabilities.TIMETABLE) ?? []);
-        setError(e instanceof Error ? e : new Error(String(e)));
+        const activeManager = getManager(true);
+        if (activeManager?.getAccount().id === lastUsedAccount) {
+          setFailures(activeManager.getFailures(Capabilities.TIMETABLE));
+          setError(e instanceof Error ? e : new Error(String(e)));
+        }
       } finally {
         setIsLoading(false);
         setManualRefreshing(false);
         fetchTimeoutRef.current = null;
       }
     }, 100);
-  }, [manager, safeDate]);
+  }, [manager, safeDate, lastUsedAccount]);
 
   useEffect(() => {
     fetchWeeklyTimetable(weekNumber);
   }, [weekNumber, fetchWeeklyTimetable]);
 
   const handleManager = useCallback((updatedManager: AccountManager) => {
+    if (updatedManager.getAccount().id !== useAccountStore.getState().lastUsedAccount) return;
     setManager(updatedManager);
     fetchedWeeks.current.clear();
     setError(null);

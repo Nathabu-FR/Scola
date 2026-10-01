@@ -59,8 +59,11 @@ export default function PronoteENTLogin() {
   const [loadingHidden, setLoadingHidden] = useState(false);
 
   useEffect(() => {
-    navigation.setOptions({ headerShown: false });
-  }, []);
+    navigation.setOptions({
+      headerShown: true,
+      headerTitle: `${t("STEP")} 3 ${t("STEP_OUTOF")} 3`,
+    });
+  }, [navigation, t]);
 
   useEffect(() => {
     if (browserVisible) {

@@ -1,7 +1,6 @@
-import { mapSubjectToShared } from "@/database/mappers/subject";
 import { Grade, Period, PeriodGrades } from "@/database/models/Grades";
 import { Attachment } from "@/services/shared/attachment";
-import { Grade as SharedGrade, Period as SharedPeriod, PeriodGrades as SharedPeriodGrades } from "@/services/shared/grade";
+import { Grade as SharedGrade, Period as SharedPeriod, PeriodGrades as SharedPeriodGrades, Subject as SharedSubject } from "@/services/shared/grade";
 
 export function mapPeriodToShared(period: Period): SharedPeriod {
   return {
@@ -16,14 +15,23 @@ export function mapPeriodToShared(period: Period): SharedPeriod {
 }
 
 export function mapGradeToShared(grade: Grade): SharedGrade {
+  const parseAttachment = (value?: string): Attachment | undefined => {
+    if (!value) return undefined;
+    try {
+      return JSON.parse(value) as Attachment;
+    } catch {
+      return undefined;
+    }
+  };
+
   return {
     id: grade.gradeId,
     subjectName: grade.subjectName,
     subjectId: grade.subjectId ?? "",
     description: grade.description,
     givenAt: new Date(grade.givenAt),
-    subjectFile: JSON.parse(grade.subjectFile ?? "") as Attachment,
-    correctionFile: JSON.parse(grade.correctionFile ?? "") as Attachment,
+    subjectFile: parseAttachment(grade.subjectFile),
+    correctionFile: parseAttachment(grade.correctionFile),
     bonus: grade.bonus,
     optional: grade.optional,
     outOf: grade.outOf,
@@ -37,11 +45,11 @@ export function mapGradeToShared(grade: Grade): SharedGrade {
   }
 }
 
-export function mapPeriodGradesToShared(data: PeriodGrades): SharedPeriodGrades {
+export function mapPeriodGradesToShared(data: PeriodGrades, subjects: SharedSubject[] = []): SharedPeriodGrades {
   return {
     studentOverall: data.studentOverall,
     classAverage: data.classAverage,
-    subjects: data.subjects.map(mapSubjectToShared),
+    subjects,
     createdByAccount: data.createdByAccount
   }
 }

@@ -59,6 +59,7 @@ import {
 } from "@/services/shared/types";
 import { useAccountStore } from "@/stores/account";
 import { Account, ServiceAccount, Services } from "@/stores/account/types";
+import { getAccountDataSourceIds } from "@/database/accountScope";
 import { debug, error, log, warn } from "@/utils/logger/logger";
 
 import {
@@ -215,7 +216,7 @@ export class AccountManager {
       async client => (client.getKids ? client.getKids() : []),
       {
         multiple: true,
-        fallback: async () => getKidsFromCache(),
+        fallback: async () => getKidsFromCache(getAccountDataSourceIds(this.account)),
         saveToCache: async (data: Kid[]) => {
           await addKidToDatabase(data);
         },
@@ -230,7 +231,7 @@ export class AccountManager {
         client.getHomeworks ? await client.getHomeworks(weekNumber) : [],
       {
         multiple: true,
-        fallback: async () => getHomeworksFromCache(weekNumber),
+        fallback: async () => getHomeworksFromCache(weekNumber, getAccountDataSourceIds(this.account)),
         saveToCache: async (data: Homework[]) => {
           await addHomeworkToDatabase(data);
         },
@@ -244,7 +245,7 @@ export class AccountManager {
       async client => (client.getNews ? await client.getNews() : []),
       {
         multiple: true,
-        fallback: async () => getNewsFromCache(),
+        fallback: async () => getNewsFromCache(getAccountDataSourceIds(this.account)),
         saveToCache: async (data: News[]) => {
           await addNewsToDatabase(data);
         },
@@ -266,7 +267,7 @@ export class AccountManager {
       {
         multiple: false,
         clientId,
-        fallback: async () => getGradePeriodsFromCache(period.name),
+        fallback: async () => getGradePeriodsFromCache(period.name, [clientId]),
         saveToCache: async (data: PeriodGrades) => {
           await addPeriodGradesToDatabase(data, period.name);
         },
@@ -281,7 +282,7 @@ export class AccountManager {
         client.getGradesPeriods ? await client.getGradesPeriods() : [],
       {
         multiple: true,
-        fallback: async () => getPeriodsFromCache(),
+        fallback: async () => getPeriodsFromCache(getAccountDataSourceIds(this.account)),
         saveToCache: async (data: Period[]) => {
           await addPeriodsToDatabase(data);
         },
@@ -303,7 +304,7 @@ export class AccountManager {
       },
       {
         multiple: true,
-        fallback: async () => [await getAttendanceFromCache(period)],
+        fallback: async () => [await getAttendanceFromCache(period, getAccountDataSourceIds(this.account))],
         saveToCache: async (data: Attendance[]) => {
           await addAttendanceToDatabase(data, period);
         },
@@ -318,7 +319,7 @@ export class AccountManager {
         client.getAttendancePeriods ? await client.getAttendancePeriods() : [],
       {
         multiple: true,
-        fallback: async () => getPeriodsFromCache(),
+        fallback: async () => getPeriodsFromCache(getAccountDataSourceIds(this.account)),
         saveToCache: async (data: Period[]) => {
           await addPeriodsToDatabase(data);
         },
@@ -335,7 +336,7 @@ export class AccountManager {
           : [],
       {
         multiple: true,
-        fallback: async () => getCanteenMenuFromCache(startDate),
+        fallback: async () => getCanteenMenuFromCache(startDate, getAccountDataSourceIds(this.account)),
         saveToCache: async (data: CanteenMenu[]) => {
           await addCanteenMenuToDatabase(data);
         },
@@ -349,7 +350,7 @@ export class AccountManager {
       async client => (client.getChats ? await client.getChats() : []),
       {
         multiple: true,
-        fallback: async () => getChatsFromCache(),
+        fallback: async () => getChatsFromCache(getAccountDataSourceIds(this.account)),
         saveToCache: async (data: Chat[]) => {
           await addChatsToDatabase(data);
         },
@@ -409,7 +410,7 @@ export class AccountManager {
           : [],
       {
         multiple: true,
-        fallback: async () => getCoursesFromCache([weekNumber], date.getFullYear()),
+        fallback: async () => getCoursesFromCache([weekNumber], date.getFullYear(), getAccountDataSourceIds(this.account)),
         saveToCache: async (data: CourseDay[]) => {
           // L'oubli d'await laissait des écritures EDT en vol pendant le
           // fetchData suivant → « capability 1 failed » + Writer occupé.
@@ -498,7 +499,7 @@ export class AccountManager {
         // accountId du plugin) : sans ce filtre, getBalancesFromCache()
         // mélangeait les cartes entre comptes.
         fallback: async () =>
-          getBalancesFromCache(this.account.services.map(service => service.id)),
+          getBalancesFromCache(getAccountDataSourceIds(this.account)),
         saveToCache: async (data: Balance[]) => {
           await addBalancesToDatabase(data);
         },
@@ -518,7 +519,7 @@ export class AccountManager {
       {
         multiple: true,
         clientId,
-        fallback: async () => getCanteenTransactionsFromCache(),
+        fallback: async () => getCanteenTransactionsFromCache(getAccountDataSourceIds(this.account)),
         saveToCache: async (data: CanteenHistoryItem[]) => {
           await addCanteenTransactionToDatabase(data);
         },
@@ -607,17 +608,17 @@ export class AccountManager {
       const sourceIds = new Set(
         options?.clientId !== undefined
           ? [options.clientId]
-          : this.account.services.map(service => service.id)
+          : getAccountDataSourceIds(this.account)
       );
       const belongsToAccount = (item: unknown): boolean => {
         if (typeof item !== "object" || item === null) return true;
         const record = item as { createdByAccount?: unknown; custom?: unknown };
-        if (typeof record.createdByAccount !== "string") return true;
-        if (sourceIds.has(record.createdByAccount)) return true;
-        return options?.clientId === undefined &&
-          capability === Capabilities.HOMEWORK &&
-          record.createdByAccount === this.account.id &&
-          record.custom === true;
+        if (typeof record.createdByAccount !== "string") {
+          // Messages and recipients inherit their owner from the chat query;
+          // they have no owner column of their own.
+          return options?.clientId !== undefined;
+        }
+        return sourceIds.has(record.createdByAccount);
       };
 
       if (Array.isArray(fallbackResult)) {
@@ -861,7 +862,10 @@ export const subscribeManagerUpdate = (
   listener: (manager: AccountManager) => void
 ) => {
   managerListeners.push(listener);
-  if (globalManager) {
+  if (
+    globalManager &&
+    globalManager.account.id === useAccountStore.getState().lastUsedAccount
+  ) {
     listener(globalManager);
   }
   return () => {
@@ -914,8 +918,12 @@ export const initializeAccountManager = async (
     }
 
     await manager.refreshAllAccounts();
-    globalManager = manager;
-    notifyManagerListeners(manager);
+    // A slower refresh for a profile that is no longer selected must not
+    // replace the active manager after a newer switch has completed.
+    if (useAccountStore.getState().lastUsedAccount === targetId) {
+      globalManager = manager;
+      notifyManagerListeners(manager);
+    }
     return manager;
   })();
 
@@ -928,11 +936,25 @@ export const initializeAccountManager = async (
   }
 };
 
-export const getManager = (silent = false): AccountManager => {
+export const getManager = (silent = false): AccountManager | null => {
+  const { accounts, lastUsedAccount: activeAccountId } = useAccountStore.getState();
+  const activeAccount = accounts.find(account => account.id === activeAccountId);
+  if (!activeAccount || (globalManager && globalManager.account.id !== activeAccountId)) {
+    return null;
+  }
   if (!globalManager && !silent) {
     warn(
       "Account manager not initialized. Call initializeAccountManager first."
     );
   }
+  // A profile can lose or gain a service without changing its own id. Keep
+  // the manager's fallback scope and client list aligned with the live store.
+  if (globalManager && globalManager.account !== activeAccount) {
+    globalManager.syncAccount(activeAccount);
+  }
   return globalManager;
+};
+
+export const resetAccountManager = (): void => {
+  globalManager = null;
 };

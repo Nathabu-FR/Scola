@@ -131,6 +131,10 @@ export default function AttendanceView() {
                     }
 
                     const manager = getManager()
+                    if (!manager) {
+                      error("Le compte actif n’est pas prêt. Réessaie dans un instant.");
+                      return;
+                    }
                     const attendancesFetched = await manager.getAttendanceForPeriod(selectedPeriod.name)
 
                     setAttendances(attendancesFetched)

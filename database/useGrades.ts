@@ -1,13 +1,16 @@
 import { Model, Q } from "@nozbe/watermelondb";
 
-import { Grade as SharedGrade, Period as SharedPeriod, PeriodGrades as SharedPeriodGrades } from "@/services/shared/grade";
+import { Grade as SharedGrade, Period as SharedPeriod, PeriodGrades as SharedPeriodGrades, Subject as SharedSubject } from "@/services/shared/grade";
 import { generateId } from "@/utils/generateId";
 import { error, warn } from "@/utils/logger/logger";
 
 import { getDatabaseInstance } from "./DatabaseProvider";
-import { mapPeriodGradesToShared,mapPeriodToShared } from "./mappers/grade";
+import { mapPeriodToShared } from "./mappers/grade";
+import { mapSubjectToShared } from "./mappers/subject";
 import { Grade, Period, PeriodGrades } from "./models/Grades";
+import Subject from "./models/Subject";
 import { safeWrite } from "./utils/safeTransaction";
+import { getActiveAccountDataSourceIds } from "./accountScope";
 
 export async function addPeriodsToDatabase(periods: SharedPeriod[]) {
   const db = getDatabaseInstance();
@@ -19,7 +22,7 @@ export async function addPeriodsToDatabase(periods: SharedPeriod[]) {
     const id = generateId(item.name + item.createdByAccount);
 
     const existing = await db.get('periods')
-      .query(Q.where("periodId", id))
+      .query(Q.where("periodId", id), Q.where("createdByAccount", item.createdByAccount))
       .fetch();
 
     if (existing.length === 0) {
@@ -48,13 +51,15 @@ export async function addPeriodsToDatabase(periods: SharedPeriod[]) {
 }
 
 
-export async function getPeriodsFromCache(): Promise<SharedPeriod[]> {
+export async function getPeriodsFromCache(
+  sourceIds: string[] = getActiveAccountDataSourceIds()
+): Promise<SharedPeriod[]> {
   try {
     const database = getDatabaseInstance();
 
     const period = await database
       .get<Period>('periods')
-      .query()
+      .query(Q.where("createdByAccount", sourceIds.length > 0 ? Q.oneOf(sourceIds) : "__no_active_account__"))
       .fetch();
 
     return period
@@ -71,7 +76,10 @@ export async function addGradesToDatabase(grades: SharedGrade[], subject: string
   for (const item of grades) {
     const id = generateId(item.createdByAccount + item.description + item.givenAt)
 
-    const existing = await db.get('grades').query(Q.where('gradeId', id)).fetch();
+    const existing = await db.get<Grade>('grades').query(
+      Q.where('gradeId', id),
+      Q.where('createdByAccount', item.createdByAccount)
+    ).fetch();
 
     if(existing.length === 0) {
       await safeWrite(db, async () => {
@@ -103,43 +111,143 @@ export async function addGradesToDatabase(grades: SharedGrade[], subject: string
 
 export async function addPeriodGradesToDatabase(item: SharedPeriodGrades, period: string) {
   const db = getDatabaseInstance();
-  const id = generateId(period);
-
-  // Lecture HORS writer (fetch + await interdits dans le writer WatermelonDB).
-  const existing = await db.get('periodgrades').query(
-    Q.where("id", id)
+  const periodGradeId = generateId(item.createdByAccount + period);
+  const periods = await db.get<Period>("periods").query(
+    Q.where("name", period),
+    Q.where("createdByAccount", item.createdByAccount)
   ).fetch();
+  const periodRow = periods[0];
+  const existingRows = await db.get<PeriodGrades>("periodgrades").query(
+    Q.where("periodGradeId", periodGradeId),
+    Q.where("createdByAccount", item.createdByAccount)
+  ).fetch();
+  const existing = existingRows[0];
+  const oldSubjects = existing
+    ? await db.get<Subject>("subjects").query(Q.where("periodGradeId", existing.id)).fetch()
+    : [];
+  const oldGrades = await Promise.all(oldSubjects.map(subject =>
+    db.get<Grade>("grades").query(Q.where("subjectId", subject.id)).fetch()
+  ));
 
   await safeWrite(db, async () => {
-    if (existing.length > 0) {
-      await existing[0].update((record: Model) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const prepared: any[] = [];
+    let periodGradeRowId = existing?.id;
+
+    if (existing) {
+      prepared.push(existing.prepareUpdate((record: Model) => {
         const periodGrade = record as PeriodGrades;
         Object.assign(periodGrade, {
+          periodGradeId,
+          periodId: periodRow?.id ?? "",
           createdByAccount: item.createdByAccount,
-          studentOverallRaw: JSON.stringify(item.studentOverall),
-          classAverageRaw: JSON.stringify(item.classAverage)
+          studentOverallRaw: JSON.stringify(item.studentOverall ?? {}),
+          classAverageRaw: JSON.stringify(item.classAverage ?? {}),
         });
-      });
+      }));
     } else {
-      await db.get('periodgrades').create((record: Model) => {
+      const preparedPeriod = db.get<PeriodGrades>("periodgrades").prepareCreate((record: Model) => {
         const periodGrade = record as PeriodGrades;
         Object.assign(periodGrade, {
-          id: id,
+          periodGradeId,
+          periodId: periodRow?.id ?? "",
           createdByAccount: item.createdByAccount,
-          studentOverallRaw: JSON.stringify(item.studentOverall),
-          classAverageRaw: JSON.stringify(item.classAverage)
+          studentOverallRaw: JSON.stringify(item.studentOverall ?? {}),
+          classAverageRaw: JSON.stringify(item.classAverage ?? {}),
         });
       });
+      periodGradeRowId = preparedPeriod.id;
+      prepared.push(preparedPeriod);
     }
+
+    for (const grade of oldGrades.flat()) prepared.push(grade.prepareMarkAsDeleted());
+    for (const subject of oldSubjects) prepared.push(subject.prepareMarkAsDeleted());
+
+    for (const subject of item.subjects ?? []) {
+      const preparedSubject = db.get<Subject>("subjects").prepareCreate((record: Model) => {
+        const row = record as Subject;
+        Object.assign(row, {
+          name: subject.name,
+          subjects: JSON.stringify(subject.grades ?? []),
+          studentAverage: JSON.stringify(subject.studentAverage ?? {}),
+          classAverage: JSON.stringify(subject.classAverage ?? {}),
+          maximum: JSON.stringify(subject.maximum ?? {}),
+          minimum: JSON.stringify(subject.minimum ?? {}),
+          outOf: JSON.stringify(subject.outOf ?? {}),
+          periodGradeId: periodGradeRowId,
+        });
+      });
+      prepared.push(preparedSubject);
+
+      for (const grade of subject.grades ?? []) {
+        const gradeId = generateId(item.createdByAccount + (grade.id || grade.description) + (grade.givenAt?.getTime() ?? 0));
+        prepared.push(db.get<Grade>("grades").prepareCreate((record: Model) => {
+          const row = record as Grade;
+          Object.assign(row, {
+            gradeId,
+            createdByAccount: item.createdByAccount,
+            subjectName: subject.name,
+            subjectId: preparedSubject.id,
+            description: grade.description ?? "",
+            givenAt: grade.givenAt?.getTime() ?? 0,
+            subjectFile: JSON.stringify(grade.subjectFile ?? null),
+            correctionFile: JSON.stringify(grade.correctionFile ?? null),
+            bonus: grade.bonus ?? false,
+            optional: grade.optional ?? false,
+            coefficient: grade.coefficient ?? 1,
+            outOf: JSON.stringify(grade.outOf ?? {}),
+            studentScore: JSON.stringify(grade.studentScore ?? {}),
+            averageScore: JSON.stringify(grade.averageScore ?? {}),
+            minScore: JSON.stringify(grade.minScore ?? {}),
+            maxScore: JSON.stringify(grade.maxScore ?? {}),
+          });
+        }));
+      }
+    }
+
+    if (prepared.length > 0) await db.batch(...prepared);
   }, 10000, 'addPeriodGradesToDatabase');
 }
 
-export async function getGradePeriodsFromCache(period: string): Promise<SharedPeriodGrades | null> {
-  const rows = await getDatabaseInstance()
-    .get<PeriodGrades>('periodgrades')
-    .query(Q.where('periodGradeId', period))
-    .fetch();
+export async function getGradePeriodsFromCache(
+  period: string,
+  sourceIds: string[] = getActiveAccountDataSourceIds()
+): Promise<SharedPeriodGrades | null> {
+  if (sourceIds.length === 0) return null;
 
-  if (rows.length === 0) { return null; }
-  return mapPeriodGradesToShared(rows[0]);
+  const db = getDatabaseInstance();
+  const periodRows = await db.get<Period>("periods").query(
+    Q.where("name", period),
+    Q.where("createdByAccount", Q.oneOf(sourceIds))
+  ).fetch();
+
+  for (const periodRow of periodRows) {
+    const periodGrades = await db.get<PeriodGrades>("periodgrades").query(
+      Q.where("periodId", periodRow.id),
+      Q.where("createdByAccount", periodRow.createdByAccount)
+    ).fetch();
+    const periodGrade = periodGrades[0];
+    if (!periodGrade) continue;
+
+    const subjectRows = await db.get<Subject>("subjects").query(
+      Q.where("periodGradeId", periodGrade.id)
+    ).fetch();
+    const subjects: SharedSubject[] = await Promise.all(subjectRows.map(async subject => {
+      const grades = await db.get<Grade>("grades").query(
+        Q.where("subjectId", subject.id),
+        Q.where("createdByAccount", periodRow.createdByAccount)
+      ).fetch();
+      return mapSubjectToShared(subject, grades);
+    }));
+
+    return {
+      studentOverall: periodGrade.studentOverall,
+      classAverage: periodGrade.classAverage,
+      subjects,
+      createdByAccount: periodGrade.createdByAccount,
+      fromCache: true,
+    };
+  }
+
+  return null;
 }

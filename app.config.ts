@@ -1,5 +1,8 @@
 import PackageJSON from "./package.json" with { type: "json" };
-import { SCOLA_BRAND } from "./constants/scolaBrand";
+
+// Keep Expo's Node-loaded config self-contained: Node cannot resolve the
+// TypeScript-only constants/scolaBrand module from the compiled app.config.js.
+const SCOLA_BRAND_NAVY = "#061A3E";
 
 // versionCode: seconds since 2020-01-01 UTC — unique, strictly increasing, well under the 2.1e9 cap
 const androidVersionCode = Math.floor(Date.now() / 1000) - 1577836800;
@@ -93,7 +96,7 @@ export default {
       ],
       adaptiveIcon: {
         foregroundImage: "./assets/images/adaptive-icon.png",
-        backgroundColor: SCOLA_BRAND.navy,
+        backgroundColor: SCOLA_BRAND_NAVY,
         monochromeImage: "./assets/images/monochrome-icon.png",
       },
       supportsTablet: true,
@@ -128,7 +131,7 @@ export default {
       [
         "expo-splash-screen",
         {
-          backgroundColor: SCOLA_BRAND.navy,
+          backgroundColor: SCOLA_BRAND_NAVY,
           image: "./assets/images/logotype.png",
           imageWidth: 240,
         },

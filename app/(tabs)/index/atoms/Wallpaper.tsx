@@ -12,8 +12,10 @@ const Wallpaper = ({ height = 400, dim = true }) => {
     const currentWallpaper = settingsStore.wallpaper;
 
     const [image, setImage] = useState<string | null>(null);
+    const [imageAttempt, setImageAttempt] = useState(0);
 
     useEffect(() => {
+      setImageAttempt(0);
       if (currentWallpaper?.dataUri) {
         setImage(currentWallpaper.dataUri);
         return;
@@ -33,6 +35,17 @@ const Wallpaper = ({ height = 400, dim = true }) => {
       }
     }, [currentWallpaper]);
 
+    const thumbnail = currentWallpaper?.thumbnail;
+    const imageSource = imageAttempt === 0
+      ? image
+        ? { uri: image }
+        : thumbnail
+          ? { uri: thumbnail }
+          : require('@/assets/images/wallpapers/clouds.jpg')
+      : imageAttempt === 1 && thumbnail
+        ? { uri: thumbnail }
+        : require('@/assets/images/wallpapers/clouds.jpg');
+
     return (
       <MaskedView
         style={[styles.container, { height }]}
@@ -45,7 +58,8 @@ const Wallpaper = ({ height = 400, dim = true }) => {
         }
       >
         <Image
-          source={image ? { uri: image } : require('@/assets/images/wallpapers/clouds.jpg')}
+          source={imageSource}
+          onError={() => setImageAttempt(attempt => Math.min(attempt + 1, 2))}
           style={[styles.image, { height }]}
         />
 

@@ -57,6 +57,8 @@ export default function RequestDetails() {
     <View style={{ padding: 16, paddingTop: height, flex: 1, backgroundColor: colors.overground }}>
       <TabHeader
         modal
+        showAndroidBackButton
+        backButtonColor={colors.primary}
         onHeightChanged={setHeight}
         title={<TabHeaderTitle color={colors.primary} subtitle={url?.pathname} chevron={false} />}
       />

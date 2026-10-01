@@ -12,7 +12,7 @@ type MainTabErrorBoundaryProps = {
   children: React.ReactNode;
 };
 
-const MainTabErrorFallback = () => {
+const MainTabErrorFallback = ({ error, reset }: { error: Error | null; reset: () => void }) => {
   const router = useRouter();
   return (
     <View style={styles.container}>
@@ -31,6 +31,20 @@ const MainTabErrorFallback = () => {
       <Typography color='white' variant='h4' align='center'>Mince ! Quelque chose s'est vraiment très mal passé.</Typography>
       <Typography color='#FFFFFF99' variant='body1' align='center'>Veuillez relancer l'application. Si cela continue, contactez-nous via le support.</Typography>
 
+      {__DEV__ && error && (
+        <Typography color='#FFFFFF99' variant='caption' align='center' numberOfLines={3} selectable>
+          {error.message}
+        </Typography>
+      )}
+
+      <Pressable
+        accessibilityRole="button"
+        onPress={reset}
+        style={styles.retryButton}
+      >
+        <Typography color="white" variant="body1" weight="semibold">Réessayer</Typography>
+      </Pressable>
+
       <Button
         color='#FFFFFF'
         variant='secondary'
@@ -38,7 +52,7 @@ const MainTabErrorFallback = () => {
         onPress={() => {
           Linking.openURL('https://docs.papillon.bzh/support')
         }}
-        style={{ marginTop: 16 }}
+        style={{ marginTop: 8 }}
         label={`Centre d'aide`}
       />
     </View>
@@ -47,7 +61,7 @@ const MainTabErrorFallback = () => {
 
 export default function MainTabErrorBoundary({ children }: MainTabErrorBoundaryProps) {
   return (
-    <ErrorBoundary fallback={<MainTabErrorFallback />}>
+    <ErrorBoundary fallback={({ error, reset }) => <MainTabErrorFallback error={error} reset={reset} />}>
       {children}
     </ErrorBoundary>
   );
@@ -76,5 +90,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF26',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  retryButton: {
+    minHeight: 48,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+    borderRadius: 24,
+    backgroundColor: SCOLA_BRAND.blue,
   },
 });

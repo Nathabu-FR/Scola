@@ -73,7 +73,7 @@ export default function DevMode() {
           <Stack direction="horizontal" gap={10}>
             <Papicons
               name={isSecure ? "Lock" : "Unlock"}
-              color={isSecure ? "#6BAE00" : "#C50017"}
+              color={isSecure ? colors.primary : "#C50017"}
             />
             <Papicons name={classification.icon} opacity={0.8} color={colors.text} />
           </Stack>

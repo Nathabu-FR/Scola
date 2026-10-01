@@ -23,6 +23,7 @@ interface TabHeaderProps {
   modal?: boolean,
   backgroundColor?: string,
   showAndroidBackButton?: boolean,
+  backButtonColor?: string,
 };
 
 const TabHeader: React.FC<TabHeaderProps> = ({
@@ -34,6 +35,7 @@ const TabHeader: React.FC<TabHeaderProps> = ({
   modal,
   backgroundColor,
   showAndroidBackButton,
+  backButtonColor,
 }) => {
   const isModal = Platform.OS === 'ios' ? modal : false;
   const theme = useTheme();
@@ -121,7 +123,7 @@ const TabHeader: React.FC<TabHeaderProps> = ({
               onPress={() => router.canGoBack() ? router.back() : router.replace("/")}
               style={{ width: 36, height: 36, alignItems: "center", justifyContent: "center" }}
             >
-              <Papicons name="ArrowLeft" size={22} color={colors.primary} />
+              <Papicons name="ArrowLeft" size={22} color={backButtonColor || colors.primary} />
             </Pressable>
           )}
           {showAndroidBackButton && Platform.OS === 'android' && (

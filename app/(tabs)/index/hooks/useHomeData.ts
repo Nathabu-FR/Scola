@@ -45,6 +45,9 @@ export const useHomeData = () => {
       return;
     }
     const gradePeriods = await manager.getGradesPeriods();
+    if (gradePeriods.length === 0) {
+      return;
+    }
     const currentPeriod = getCurrentPeriod(gradePeriods);
 
     if (currentPeriod) {

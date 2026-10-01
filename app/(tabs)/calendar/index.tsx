@@ -270,6 +270,7 @@ function TabOneScreen() {
           >
             <Typography variant="body2" weight="semibold">{t("Tab_Calendar_Icals")}</Typography>
           </Pressable>
+          <Typography variant="body2" weight="semibold">{dayLabel}</Typography>
         </View>
       )}
 
@@ -281,7 +282,7 @@ function TabOneScreen() {
             onPress={() => calendarRef.current?.toggle()}
           />
         </Stack.Toolbar>
-      ) : (
+      ) : Platform.OS === "ios" ? (
         <Stack.Toolbar placement="left">
           <Stack.Toolbar.Button
             icon="calendar"
@@ -290,24 +291,26 @@ function TabOneScreen() {
             {dayLabel}
           </Stack.Toolbar.Button>
         </Stack.Toolbar>
-      )}
+      ) : null}
 
-      <Stack.Title asChild>
-        <View style={[styles.titleContainer, { width: screenWidth - (Platform.OS === "android" ? 72 : 140) }]}>
-          {TITLE_LAYER_OFFSETS.map(offset => {
-            const pageIndex = settledIndex + offset;
-            return (
-              <TitleLayer
-                key={pageIndex}
-                page={scrollPage}
-                pageIndex={pageIndex}
-                labels={getDayLabels(getDateFromIndex(pageIndex))}
-                slideDistance={screenWidth * TITLE_SLIDE_RATIO}
-              />
-            );
-          })}
-        </View>
-      </Stack.Title>
+      {Platform.OS === "ios" && (
+        <Stack.Title asChild>
+          <View style={[styles.titleContainer, { width: screenWidth - (Platform.OS === "android" ? 72 : 140) }]}>
+            {TITLE_LAYER_OFFSETS.map(offset => {
+              const pageIndex = settledIndex + offset;
+              return (
+                <TitleLayer
+                  key={pageIndex}
+                  page={scrollPage}
+                  pageIndex={pageIndex}
+                  labels={getDayLabels(getDateFromIndex(pageIndex))}
+                  slideDistance={screenWidth * TITLE_SLIDE_RATIO}
+                />
+              );
+            })}
+          </View>
+        </Stack.Title>
+      )}
 
       {isAndroid ? (
         <Stack.Toolbar placement="right" asChild>
@@ -318,7 +321,7 @@ function TabOneScreen() {
             onPressAction={() => router.push({ pathname: "./calendar/icals", params: {} })}
           />
         </Stack.Toolbar>
-      ) : (
+      ) : Platform.OS === "ios" ? (
         <Stack.Toolbar placement="right">
           <Stack.Toolbar.Menu>
             <Stack.Toolbar.Icon sf="ellipsis" />
@@ -331,7 +334,7 @@ function TabOneScreen() {
             </Stack.Toolbar.MenuAction>
           </Stack.Toolbar.Menu>
         </Stack.Toolbar>
-      )}
+      ) : null}
 
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <Reanimated.FlatList

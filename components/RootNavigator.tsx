@@ -185,16 +185,6 @@ function RootNavigatorContent() {
         />
 
         <Stack.Screen
-          name="(modals)/team"
-          options={{
-            headerShown: false,
-            presentation: "formSheet",
-            sheetGrabberVisible: true,
-            sheetAllowedDetents: "fitToContents",
-          }}
-        />
-
-        <Stack.Screen
           name="(features)/soon"
           options={{
             headerShown: Platform.OS !== "ios",

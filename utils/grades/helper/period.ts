@@ -2,6 +2,12 @@ import { Period } from "@/services/shared/grade";
 import { warn } from "@/utils/logger/logger";
 
 export function getCurrentPeriod(periods: Period[]): Period | undefined {
+  // Some accounts have no grade periods. This is expected and unrelated to
+  // timetable loading, so it should not look like an application error.
+  if (!Array.isArray(periods) || periods.length === 0) {
+    return undefined;
+  }
+
   const now = new Date().getTime();
   const excludedNames = [
     "Bac blanc",
@@ -35,11 +41,7 @@ export function getCurrentPeriod(periods: Period[]): Period | undefined {
     return periods[0];
   }
 
-  // `periods` is guaranteed empty here (the branch above already handles a
-  // non-empty array), so `periods[0]` was silently returning `undefined`
-  // while the return type claimed a `Period` was always given back. Every
-  // caller already treats a falsy result as "no current period", so this
-  // just makes that contract honest.
-  warn("Unable to find the current period and unable to fallback...");
+  // Every remaining period was explicitly excluded above. Callers already
+  // treat an absent current period as "no grade period available".
   return undefined;
 }

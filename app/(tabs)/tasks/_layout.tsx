@@ -18,6 +18,7 @@ export default function Layout() {
         name="index"
         options={{
           ...androidHeaderProps,
+          headerTitle: t("Tab_Tasks"),
           // The custom title on this screen suppresses the bar's own scroll-edge
           // material, so iOS 26 gets our progressive blur instead. Everywhere
           // else the header keeps a plain opaque background.

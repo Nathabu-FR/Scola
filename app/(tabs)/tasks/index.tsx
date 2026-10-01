@@ -22,6 +22,7 @@ import { TipIds } from '@/constants/Tips';
 import { getDateRangeOfWeek, getWeekNumberFromDate } from '@/database/useHomework';
 import { retireTip } from '@/stores/tips';
 import { useAlert } from "@/ui/components/AlertProvider";
+import Search from '@/ui/components/Search';
 import Tip from '@/ui/components/Tip';
 import MainTabErrorBoundary from '@/ui/components/MainTabErrorBoundary';
 import Typography from '@/ui/new/Typography';
@@ -186,6 +187,10 @@ const TasksView: React.FC = () => {
   const hasHomeworkError = Boolean(homeworkError) || homeworkFailures.length > 0;
 
   const {
+    searchTerm,
+    setSearchTerm,
+    showUndoneOnly,
+    setShowUndoneOnly,
     sortMethod,
     setSortMethod,
     collapsedGroups,
@@ -193,6 +198,7 @@ const TasksView: React.FC = () => {
   } = useTaskFilters();
 
   const sortings = useMemo(() => getSortings(), [i18n.language]);
+  const [showWebSortings, setShowWebSortings] = useState(false);
 
   const [pageOffsets, setPageOffsets] = useState(INITIAL_PAGE_OFFSETS);
   useEffect(() => {
@@ -327,31 +333,33 @@ const TasksView: React.FC = () => {
         <Stack.Toolbar placement="left" asChild>
           <AndroidHeaderButton icon="Calendar" accessibilityLabel={weekLabel} onPress={toggleWeekPicker} />
         </Stack.Toolbar>
-      ) : (
+      ) : Platform.OS === "ios" ? (
         <Stack.Toolbar placement="left">
           <Stack.Toolbar.Button icon="calendar" onPress={toggleWeekPicker}>
             {weekLabel}
           </Stack.Toolbar.Button>
         </Stack.Toolbar>
-      )}
+      ) : null}
 
-      <Stack.Title asChild>
-        <View style={[styles.titleContainer, { width: screenWidth - (Platform.OS === "android" ? 72 : 140) }]}>
-          {TITLE_LAYER_OFFSETS.map(offset => {
-            const pageIndex = settledIndex + offset;
-            return (
-              <TitleLayer
-                key={pageIndex}
-                offset={offsetX}
-                pageOffset={pageIndex - INITIAL_INDEX}
-                pageWidth={windowWidth}
-                labels={getWeekLabels(getWeekFromIndex(pageIndex), defaultWeek)}
-                slideDistance={screenWidth * TITLE_SLIDE_RATIO}
-              />
-            );
-          })}
-        </View>
-      </Stack.Title>
+      {Platform.OS === "ios" && (
+        <Stack.Title asChild>
+          <View style={[styles.titleContainer, { width: screenWidth - (Platform.OS === "android" ? 72 : 140) }]}>
+            {TITLE_LAYER_OFFSETS.map(offset => {
+              const pageIndex = settledIndex + offset;
+              return (
+                <TitleLayer
+                  key={pageIndex}
+                  offset={offsetX}
+                  pageOffset={pageIndex - INITIAL_INDEX}
+                  pageWidth={windowWidth}
+                  labels={getWeekLabels(getWeekFromIndex(pageIndex), defaultWeek)}
+                  slideDistance={screenWidth * TITLE_SLIDE_RATIO}
+                />
+              );
+            })}
+          </View>
+        </Stack.Title>
+      )}
 
       {isAndroid ? (
         <Stack.Toolbar placement="right" asChild>
@@ -383,7 +391,7 @@ const TasksView: React.FC = () => {
             }}
           />
         </Stack.Toolbar>
-      ) : (
+      ) : Platform.OS === "ios" ? (
         <Stack.Toolbar placement="right">
           <Stack.Toolbar.Menu>
             <Stack.Toolbar.Icon sf="line.3.horizontal.decrease" />
@@ -407,9 +415,62 @@ const TasksView: React.FC = () => {
             </Stack.Toolbar.MenuAction>
           </Stack.Toolbar.Menu>
         </Stack.Toolbar>
+      ) : null}
+
+      {Platform.OS === "web" && (
+        <View style={styles.webToolbar}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={toggleWeekPicker}
+            style={[styles.webToolbarButton, { backgroundColor: colors.card }]}
+          >
+            <Papicons name="Calendar" size={18} color={colors.primary} />
+            <Typography variant="body2" weight="semibold">{weekLabel}</Typography>
+          </Pressable>
+          <Typography variant="title" weight="semibold">{settledLabels.main}</Typography>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setShowWebSortings(value => !value)}
+            style={[styles.webToolbarButton, { backgroundColor: colors.card }]}
+          >
+            <Papicons name="Filter" size={18} color={colors.primary} />
+            <Typography variant="body2" weight="semibold">{t('Task_Sorting_Title')}</Typography>
+          </Pressable>
+        </View>
+      )}
+
+      {Platform.OS === "web" && showWebSortings && (
+        <View style={[styles.webSortMenu, { backgroundColor: colors.card }]}>
+          {sortings.map(sorting => (
+            <Pressable
+              key={sorting.value}
+              accessibilityRole="button"
+              accessibilityState={{ selected: sortMethod === sorting.value }}
+              onPress={() => {
+                setSortMethod(sorting.value);
+                setShowWebSortings(false);
+              }}
+              style={styles.webSortOption}
+            >
+              <Typography
+                variant="body2"
+                weight={sortMethod === sorting.value ? "semibold" : "regular"}
+                color={sortMethod === sorting.value ? colors.primary : undefined}
+              >
+                {sorting.label}
+              </Typography>
+            </Pressable>
+          ))}
+        </View>
       )}
 
       <View style={styles.container}>
+        <Search
+          placeholder={t('Tasks_Search_Placeholder')}
+          value={searchTerm}
+          setValue={setSearchTerm}
+          style={{ alignSelf: "center", marginTop: 8, marginBottom: 4 }}
+        />
         {(Platform.OS === "web" || Platform.OS === "android") && (
           <Pressable
             accessibilityRole="checkbox"
@@ -542,6 +603,41 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+  },
+  webToolbar: {
+    minHeight: 48,
+    marginHorizontal: 16,
+    marginTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  webToolbarButton: {
+    minHeight: 40,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  webSortMenu: {
+    position: "absolute",
+    top: 54,
+    right: 16,
+    minWidth: 190,
+    paddingVertical: 6,
+    borderRadius: 14,
+    zIndex: 30,
+    elevation: 8,
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+  },
+  webSortOption: {
+    minHeight: 40,
+    paddingHorizontal: 14,
+    justifyContent: "center",
   },
   pager: {
     flex: 1,

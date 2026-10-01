@@ -15,6 +15,58 @@ import { notificationAsync, NotificationFeedbackType } from "expo-haptics";
 // Cache reads are coalesced over this window: fetching five weeks would
 // otherwise re-query every one of them five times over.
 const REFRESH_COALESCE_MS = 120;
+const SHARED_HOMEWORK_CACHE_TTL_MS = 5 * 60 * 1000;
+
+type SharedHomeworkRequest = {
+  expiresAt: number;
+  pending: boolean;
+  promise: Promise<Homework[]>;
+};
+
+// Home and Tasks can be mounted at the same time and ask for overlapping weeks.
+// Share their service requests so opening Tasks does not download the same week
+// a second time immediately after the home screen already loaded it.
+const sharedHomeworkRequests = new WeakMap<AccountManager, Map<string, SharedHomeworkRequest>>();
+
+const fetchSharedHomeworkWeek = (
+  manager: AccountManager,
+  week: number,
+  force: boolean
+): Promise<Homework[]> => {
+  const key = `${manager.getAccount().id}:${new Date().getFullYear()}:${week}`;
+  let weeks = sharedHomeworkRequests.get(manager);
+  if (!weeks) {
+    weeks = new Map();
+    sharedHomeworkRequests.set(manager, weeks);
+  }
+
+  const cached = weeks.get(key);
+  if (cached && (cached.pending || (!force && cached.expiresAt > Date.now()))) {
+    return cached.promise;
+  }
+
+  const request: SharedHomeworkRequest = {
+    expiresAt: 0,
+    pending: true,
+    promise: Promise.resolve([]),
+  };
+  request.promise = manager.getHomeworks(week).then(
+    homeworks => {
+      request.pending = false;
+      request.expiresAt = Date.now() + SHARED_HOMEWORK_CACHE_TTL_MS;
+      return homeworks;
+    },
+    error => {
+      request.pending = false;
+      if (weeks?.get(key) === request) {
+        weeks.delete(key);
+      }
+      throw error;
+    }
+  );
+  weeks.set(key, request);
+  return request.promise;
+};
 
 const homeworkKey = (homework: Homework) =>
   generateId(
@@ -23,6 +75,39 @@ const homeworkKey = (homework: Homework) =>
     homework.createdByAccount +
     new Date(homework.dueDate).toDateString()
   );
+
+// Older caches and third-party services can omit fields that the Homework
+// type normally guarantees. One malformed row must not crash the whole Tasks
+// tab while rendering a week.
+const normalizeHomework = (value: unknown, fallbackAccountId: string): Homework | undefined => {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const homework = value as Partial<Homework>;
+  const dueDate = homework.dueDate instanceof Date
+    ? homework.dueDate
+    : new Date(String(homework.dueDate ?? ""));
+  if (!Number.isFinite(dueDate.getTime())) {
+    return undefined;
+  }
+
+  return {
+    ...homework,
+    id: typeof homework.id === "string" ? homework.id : "",
+    subject: typeof homework.subject === "string" ? homework.subject : "",
+    content: typeof homework.content === "string" ? homework.content : "",
+    dueDate,
+    isDone: homework.isDone === true,
+    attachments: Array.isArray(homework.attachments) ? homework.attachments : [],
+    evaluation: homework.evaluation === true,
+    custom: homework.custom === true,
+    createdByAccount:
+      typeof homework.createdByAccount === "string" && homework.createdByAccount
+        ? homework.createdByAccount
+        : fallbackAccountId,
+  } as Homework;
+};
 
 // Every cache read rebuilds its objects from the database, so identity alone
 // says nothing about whether anything changed. Comparing the fields that reach
@@ -79,19 +164,23 @@ export const useHomeworkData = (weeks: number[], alert: any) => {
 
     for (const [key, list] of Object.entries(cacheByWeek)) {
       const week = Number(key);
-      const items = list
-        .filter(h =>
-          services.includes(h.createdByAccount) ||
-          (h.custom && h.createdByAccount === account?.id)
-        )
-        .map(cached => {
-          const merged = (cached.id ? homework[cached.id] : undefined) ?? cached;
-          const id = merged.id ?? homeworkKey(merged);
-          const previous = previousItems.get(id);
-          const item = previous && isSameHomework(previous, merged) ? previous : merged;
-          nextItems.set(id, item);
-          return item;
-        });
+      const items = list.flatMap(value => {
+        const cached = normalizeHomework(value, account?.id ?? "");
+        if (
+          !cached ||
+          (!services.includes(cached.createdByAccount) &&
+            !(cached.custom && cached.createdByAccount === account?.id))
+        ) {
+          return [];
+        }
+
+        const merged = (cached.id ? homework[cached.id] : undefined) ?? cached;
+        const id = merged.id || homeworkKey(merged);
+        const previous = previousItems.get(id);
+        const item = previous && isSameHomework(previous, merged) ? previous : merged;
+        nextItems.set(id, item);
+        return [item];
+      });
 
       const previous = previousWeeks[week];
       nextWeeks[week] = previous && isSameList(previous, items) ? previous : items;
@@ -134,11 +223,15 @@ export const useHomeworkData = (weeks: number[], alert: any) => {
 
       inFlightWeeks.current.add(week);
       try {
-        const result: Homework[] = await managerToUse.getHomeworks(week);
+        const result = await fetchSharedHomeworkWeek(managerToUse, week, force);
         const fetched: Record<string, Homework> = {};
-        for (const hw of result) {
+        for (const value of result) {
+          const hw = normalizeHomework(value, managerToUse.getAccount().id);
+          if (!hw) {
+            continue;
+          }
           const id = homeworkKey(hw);
-          fetched[id] = { ...hw, id: hw.id ?? id };
+          fetched[id] = { ...hw, id: hw.id || id };
         }
         fetchedWeeks.current.add(week);
         setHomework(prev => ({ ...prev, ...fetched }));

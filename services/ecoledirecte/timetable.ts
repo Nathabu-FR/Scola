@@ -1,8 +1,6 @@
 import { Client, TimetableCourse, TimetableCourseType } from "@blockshub/blocksdirecte";
 
 import { getDateRangeOfWeek } from "@/database/useHomework";
-import { warn } from "@/utils/logger/logger";
-
 import { Course, CourseDay, CourseStatus, CourseType } from "../shared/timetable";
 
 export async function fetchEDTimetable(session: Client, accountId: string, weekNumber: number): Promise<CourseDay[]> {
@@ -33,9 +31,10 @@ export async function fetchEDTimetable(session: Client, accountId: string, weekN
       date: new Date(day),
       courses
     }));
-  } catch(error) {
-    warn(String(error))
-    return []
+  } catch (error) {
+    // Let AccountManager run its cache fallback. Returning [] here makes a
+    // failed request look successful and hides the previously cached timetable.
+    throw error;
   }
 }
 

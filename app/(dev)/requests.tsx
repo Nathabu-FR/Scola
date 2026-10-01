@@ -35,7 +35,7 @@ export default function Requests() {
       case "DELETE":
         return "#C50017"
       default:
-        return "#37BB12"
+        return colors.primary
     }
   }
 
@@ -45,11 +45,13 @@ export default function Requests() {
     >
       <TabHeader
         modal
+        showAndroidBackButton
+        backButtonColor="#FFFFFF"
         onHeightChanged={setHeight}
-        backgroundColor="#37BB12"
+        backgroundColor={colors.primary}
         title={
           <TabHeaderTitle
-            color={colors.primary}
+            color="#FFFFFF"
             leading="Liste des requêtes"
             subtitle={local.host}
             chevron={false}
@@ -83,8 +85,8 @@ export default function Requests() {
               <Typography numberOfLines={2}>{request.url}</Typography>
               <List.Trailing>
                 <Stack direction="horizontal" vAlign="center" hAlign="center">
-                  <View style={{ paddingVertical: 3, paddingHorizontal: 7, borderWidth: 2, borderColor: "#37BB12", borderRadius: 100}}>
-                    <Typography color="#37BB12" weight="bold">{responses.find(item => key in item)?.[key]?.status ?? "—"}</Typography>
+                  <View style={{ paddingVertical: 3, paddingHorizontal: 7, borderWidth: 2, borderColor: colors.primary, borderRadius: 100}}>
+                    <Typography color={colors.primary} weight="bold">{responses.find(item => key in item)?.[key]?.status ?? "—"}</Typography>
                   </View>
                   <Papicons name="ChevronRight" opacity={0.8} color={colors.text} />
                 </Stack>

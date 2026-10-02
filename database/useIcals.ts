@@ -35,9 +35,11 @@ export function useAddIcal() {
 export function useRemoveIcal() {
   const database = useDatabase();
   return useCallback(async (id: string) => {
+    // find() HORS writer : un await dans le writer fait perdre le contexte
+    // (« can only be called from inside of a Writer »).
+    const ical = await database.get('icals').find(id);
     await safeWrite(database, async () => {
-      const ical = await database.get('icals').find(id);
-      await ical.destroyPermanently();
+      await database.batch(ical.prepareDestroyPermanently());
     }, 10000, 'useRemoveIcal');
   }, [database]);
 }
@@ -45,8 +47,8 @@ export function useRemoveIcal() {
 export function useUpdateIcalParsing() {
   const database = useDatabase();
   return useCallback(async (id: string, intelligentParsing: boolean) => {
+    const ical = await database.get('icals').find(id);
     await safeWrite(database,async () => {
-      const ical = await database.get('icals').find(id);
       await ical.update((ical: any) => {
         ical.intelligentParsing = intelligentParsing;
       });

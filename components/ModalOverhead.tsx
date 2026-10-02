@@ -61,6 +61,7 @@ const ModalOverhead = ({ style, overhead, overtitle, color, emoji, subject, subj
         <Typography
           variant="body1"
           align="center"
+          color={theme.colors.text}
         >
           {title}
         </Typography>

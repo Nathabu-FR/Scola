@@ -1,16 +1,9 @@
 import { SplashScreen } from "expo-router";
-import { VideoSource } from 'expo-video';
 import React from "react";
 import { Image } from "react-native";
 import Reanimated, { Easing, withDelay, withTiming } from "react-native-reanimated";
 
-const assetId = require('@/assets/video/splash.mp4');
-
-const videoSource: VideoSource = {
-  assetId
-};
-
-export const PapillonSplashOut = () => {
+export const SplashOut = () => {
   "worklet";
   return {
     initialValues: {
@@ -46,7 +39,7 @@ const FakeSplash = ({ isAppReady, instant }: { isAppReady: boolean, instant?: bo
         justifyContent: "center",
         alignItems: "center",
       }}
-      exiting={PapillonSplashOut}
+      exiting={SplashOut}
     >
       <Image
         source={require('@/assets/images/splash.png')}

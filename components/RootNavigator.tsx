@@ -18,14 +18,6 @@ import { screenOptions } from '@/utils/theme/ScreenOptions';
 import { useAndroidHeaderProps } from './AndroidHeaderBackground';
 import MainTabErrorBoundary from '@/ui/components/MainTabErrorBoundary';
 
-const DEVMODE_SUBSCREENS = [
-  { name: "(dev)/logs", title: "Journaux" },
-  { name: "(dev)/network", title: "Requêtes réseau" },
-  { name: "(dev)/papillonkit", title: "PapillonKit" },
-  { name: "(dev)/papillonkit-tests", title: "Tests PapillonKit" },
-  { name: "(dev)/magic", title: "Papillon Magic+" },
-];
-
 function RootNavigatorContent() {
   const theme = useTheme();
   const androidHeaderProps = useAndroidHeaderProps();
@@ -79,29 +71,34 @@ function RootNavigatorContent() {
           name="(dev)/request"
           options={DEVMODE_REQUESTS_SCREEN_OPTIONS}
         />
-        {DEVMODE_SUBSCREENS.map(screen => (
-          <Stack.Screen
-            key={screen.name}
-            name={screen.name}
-            options={{ ...DEVMODE_SCREEN_OPTIONS, headerTitle: screen.title }}
-          />
-        ))}
         <Stack.Screen name="alert" options={ALERT_SCREEN_OPTIONS} />
 
         <Stack.Screen
           name="(modals)/wallpaper"
           options={{
-            presentation: "formSheet",
-            sheetGrabberVisible: true,
-            sheetAllowedDetents: [0.5, 1],
+            presentation: Platform.OS === "web" ? "modal" : "formSheet",
+            ...(Platform.OS !== "web" ? {
+              sheetGrabberVisible: true,
+              sheetAllowedDetents: [0.5, 1],
+              sheetLargestUndimmedDetentIndex: 0,
+            } : {}),
             headerLargeTitle: false,
-            sheetLargestUndimmedDetentIndex: 0,
             headerTransparent: Platform.OS === "ios",
             headerTitle: t("Modal_Wallpaper_Title"),
             contentStyle: {
               backgroundColor: theme.colors.card,
             },
             ...androidHeaderProps,
+          }}
+        />
+
+        <Stack.Screen
+          name="(modals)/tasks/create"
+          options={{
+            headerShown: false,
+            presentation: Platform.OS === "web" ? "modal" : "formSheet",
+            sheetGrabberVisible: Platform.OS !== "web",
+            sheetAllowedDetents: [0.75, 1],
           }}
         />
 
@@ -177,12 +174,13 @@ function RootNavigatorContent() {
         />
 
         <Stack.Screen
-          name="(modals)/team"
+          name="(features)/messages"
           options={{
-            headerShown: false,
-            presentation: "formSheet",
-            sheetGrabberVisible: true,
-            sheetAllowedDetents: "fitToContents",
+            headerShown: true,
+            headerTitle: "Messagerie",
+            headerLargeTitle: false,
+            presentation: Platform.OS === "web" ? "modal" : "card",
+            ...androidHeaderProps,
           }}
         />
 

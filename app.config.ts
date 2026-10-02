@@ -1,11 +1,16 @@
 import PackageJSON from "./package.json" with { type: "json" };
 
+// Keep Expo's Node-loaded config self-contained: Node cannot resolve the
+// TypeScript-only constants/scolaBrand module from the compiled app.config.js.
+const ANDROID_ICON_BACKGROUND = "#ffffff";
+const NATIVE_SPLASH_BACKGROUND = "#29947A";
+
 // versionCode: seconds since 2020-01-01 UTC — unique, strictly increasing, well under the 2.1e9 cap
 const androidVersionCode = Math.floor(Date.now() / 1000) - 1577836800;
 
 export default {
   expo: {
-    name: "Papillon",
+    name: "Scola",
     slug: "papillon",
     version: PackageJSON.version,
     orientation: "default",
@@ -21,7 +26,6 @@ export default {
       associatedDomains: ["applinks:getpapillon.xyz"],
       icon: "./assets/app.icon",
       minimumOSVersion: "17.6",
-      deploymentTarget: "17.6",
       infoPlist: {
         AppGroupIdentifier: "group.xyz.getpapillon",
         CFBundleURLTypes: [
@@ -93,7 +97,7 @@ export default {
       ],
       adaptiveIcon: {
         foregroundImage: "./assets/images/adaptive-icon.png",
-        backgroundColor: "#ffffff",
+        backgroundColor: ANDROID_ICON_BACKGROUND,
         monochromeImage: "./assets/images/monochrome-icon.png",
       },
       supportsTablet: true,
@@ -101,7 +105,13 @@ export default {
     },
     web: {
       bundler: "metro",
-      output: "static",
+      // "single": plain client-rendered SPA bundle, no Node-side static
+      // pre-rendering pass. Desktop (Electron) doesn't need per-route SSR/SEO,
+      // and several native-only libraries (native tab bar, WatermelonDB, the
+      // Magic model) only break when evaluated in that Node pre-render step —
+      // not in an actual browser. Real web hosting can still opt back into
+      // "static" later once/if those are individually made SSR-safe.
+      output: process.env.SCOLA_TARGET === "desktop" ? "single" : "static",
       favicon: "./assets/images/favicon.png",
     },
     plugins: [
@@ -122,7 +132,7 @@ export default {
       [
         "expo-splash-screen",
         {
-          backgroundColor: "#29947A",
+          backgroundColor: NATIVE_SPLASH_BACKGROUND,
           image: "./assets/images/logotype.png",
           imageWidth: 240,
         },
@@ -131,7 +141,7 @@ export default {
         "expo-image-picker",
         {
           photosPermission:
-            "Papillon utilise ta galerie pour te permettre de personnaliser ta photo de profil",
+            "Scola utilise ta galerie pour te permettre de personnaliser ta photo de profil",
         },
       ],
       "expo-web-browser",
@@ -148,9 +158,9 @@ export default {
         "expo-location",
         {
           locationWhenInUsePermission:
-            "Papillon utilise ton emplacement pour trouver les établissements autour de toi.",
+            "Scola utilise ton emplacement pour trouver les établissements autour de toi.",
           cameraPermission:
-            "Papillon utilise ta caméra pour scanner des QR-codes pour te connecter, pour capturer des documents, ou pour des fonctionnalités amusantes telles que les réactions.",
+            "Scola utilise ta caméra pour scanner des QR-codes pour te connecter, pour capturer des documents, ou pour des fonctionnalités amusantes telles que les réactions.",
         },
       ],
       [
@@ -161,6 +171,48 @@ export default {
             enforceNavigationBarContrast: false,
           },
         },
+      ],
+      [
+        "expo-widgets",
+        {
+          "bundleIdentifier": "xyz.getpapillon.ios.widgets",
+          "groupIdentifier": "group.xyz.getpapillon.ios",
+          "enablePushNotifications": true,
+          "widgets": [
+            {
+              "name": "Calendar",
+              "displayName": "Emploi du temps",
+              "description": "Affiche tes prochains cours et événements",
+              "ios": {
+                "supportedFamilies": ["systemSmall", "systemMedium"]
+              }
+            },
+            {
+              "name": "Tasks",
+              "displayName": "Tâches",
+              "description": "Affiche tes tâches à faire",
+              "ios": {
+                "supportedFamilies": ["systemSmall", "systemMedium", "systemLarge"]
+              }
+            },
+            {
+              "name": "Notes",
+              "displayName": "Notes",
+              "description": "Affiche tes dernières notes",
+              "ios": {
+                "supportedFamilies": ["systemSmall", "systemMedium", "systemLarge"]
+              }
+            },
+            {
+              "name": "Averages",
+              "displayName": "Moyenne générale",
+              "description": "Affiche ta moyenne générale",
+              "ios": {
+                "supportedFamilies": ["systemSmall", "systemMedium", "systemLarge"]
+              }
+            }
+          ]
+        }
       ],
       [
         "expo-build-properties",
@@ -177,7 +229,7 @@ export default {
           },
         },
       ],
-      "@getpapillon/papillonkit",
+      "./plugins/with-widget-fonts",
       "./plugins/with-ios-native-files",
       "./plugins/with-android-gradle-properties-newline",
     ],

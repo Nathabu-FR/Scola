@@ -25,11 +25,15 @@ export const useScreenOptions = (): any => {
       fontFamily: font("semibold"),
       fontSize: 17,
     },
+    // Android and web/desktop (Electron, Tauri) both rely on this custom
+    // back button since their native header chevron is turned off elsewhere
+    // (see headerBackVisible below and the per-layout overrides) — only iOS
+    // keeps the platform-native one.
     headerBackIcon: Platform.OS == 'android' ? {
       type: "image",
       source: require("@/assets/icons/back.svg"),
     } : undefined,
-    headerLeft: Platform.OS == 'android' ? () => <AndroidBackButton /> : undefined,
-    headerBackVisible: Platform.OS == 'android' ? false : undefined
+    headerLeft: (Platform.OS == 'android' || Platform.OS === 'web') ? () => <AndroidBackButton /> : undefined,
+    headerBackVisible: (Platform.OS == 'android' || Platform.OS === 'web') ? false : undefined
   }), [font]);
 };

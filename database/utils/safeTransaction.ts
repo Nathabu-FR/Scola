@@ -8,8 +8,9 @@ export async function safeWrite<T>(
   timeoutMs: number = 10000,
   operationName: string = 'unnamed'
 ): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const timeoutPromise = new Promise<never>((_, reject) => {
-    setTimeout(() => {
+    timeoutId = setTimeout(() => {
       reject(new Error(`🍉 Database write operation "${operationName}" timed out after ${timeoutMs}ms`));
     }, timeoutMs);
   });
@@ -23,6 +24,8 @@ export async function safeWrite<T>(
   } catch (err) {
     error(`🍉 Failed safe write operation "${operationName}":`, String(err));
     throw err;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
   }
 }
 
@@ -32,8 +35,9 @@ export async function safeRead<T>(
   timeoutMs: number = 5000,
   operationName: string = 'unnamed'
 ): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const timeoutPromise = new Promise<never>((_, reject) => {
-    setTimeout(() => {
+    timeoutId = setTimeout(() => {
       reject(new Error(`🍉 Database read operation "${operationName}" timed out after ${timeoutMs}ms`));
     }, timeoutMs);
   });
@@ -48,6 +52,8 @@ export async function safeRead<T>(
   } catch (err) {
     error(`🍉 Failed safe read operation "${operationName}":`, String(err));
     throw err;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
   }
 }
 

@@ -9,6 +9,7 @@ import { mapCanteenMenuToShared, mapCanteenTransactionToShared } from "./mappers
 import CanteenHistoryItem from "./models/CanteenHistory";
 import CanteenMenu from "./models/CanteenMenu";
 import { safeWrite } from "./utils/safeTransaction";
+import { getActiveAccountDataSourceIds } from "./accountScope";
 
 
 export async function addCanteenMenuToDatabase(menus: SharedCanteenMenu[]) {
@@ -21,7 +22,10 @@ export async function addCanteenMenuToDatabase(menus: SharedCanteenMenu[]) {
 
   for (const item of menus) {
     const id = generateId(item.createdByAccount + item.date);
-    const existing = await db.get('canteenmenus').query(Q.where('menuId', id)).fetch();
+    const existing = await db.get<CanteenMenu>('canteenmenus').query(
+      Q.where('menuId', id),
+      Q.where('createdByAccount', item.createdByAccount)
+    ).fetch();
 
     if (existing.length === 0) {
       menusToCreate.push({ id, item });
@@ -32,8 +36,12 @@ export async function addCanteenMenuToDatabase(menus: SharedCanteenMenu[]) {
     await safeWrite(
       db,
       async () => {
-        const promises = menusToCreate.map(({ id, item }) =>
-          db.get('canteenmenus').create((record: Model) => {
+        // prepare + batch : les create() en Promise.all() dans le writer
+        // perdaient le contexte (« can only be called from inside of a Writer »).
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const prepared: any[] = [];
+        for (const { id, item } of menusToCreate) {
+          prepared.push(db.get('canteenmenus').prepareCreate((record: Model) => {
             const menu = record as CanteenMenu;
             Object.assign(menu, {
               menuId: id,
@@ -42,9 +50,9 @@ export async function addCanteenMenuToDatabase(menus: SharedCanteenMenu[]) {
               dinner: JSON.stringify(item.dinner),
               createdByAccount: item.createdByAccount
             });
-          })
-        );
-        await Promise.all(promises);
+          }));
+        }
+        await db.batch(...prepared);
       },
       10000,
       `add_canteen_menus_${menusToCreate.length}_items`
@@ -54,14 +62,20 @@ export async function addCanteenMenuToDatabase(menus: SharedCanteenMenu[]) {
   }
 }
 
-export async function getCanteenMenuFromCache(startDate: Date): Promise<SharedCanteenMenu[]> {
+export async function getCanteenMenuFromCache(
+  startDate: Date,
+  sourceIds: string[] = getActiveAccountDataSourceIds()
+): Promise<SharedCanteenMenu[]> {
   try {
     const database = getDatabaseInstance();
     const { start, end } = getWeekRangeForDate(startDate);
 
     const menus = await database
       .get<CanteenMenu>('canteenmenus')
-      .query(Q.where('date', Q.between(start.getTime(), end.getTime())))
+      .query(
+        Q.where('date', Q.between(start.getTime(), end.getTime())),
+        Q.where("createdByAccount", sourceIds.length > 0 ? Q.oneOf(sourceIds) : "__no_active_account__")
+      )
       .fetch();
 
     return menus
@@ -84,7 +98,8 @@ export async function addCanteenTransactionToDatabase(transactions: SharedCantee
   for (const item of transactions) {
     const id = generateId(item.createdByAccount + item.date + item.amount + item.label + item.currency);
     const existing = await db.get('canteentransactions').query(
-      Q.where('transactionId', id)
+      Q.where('transactionId', id),
+      Q.where('createdByAccount', item.createdByAccount)
     ).fetch();
 
     if (existing.length === 0) {
@@ -96,8 +111,10 @@ export async function addCanteenTransactionToDatabase(transactions: SharedCantee
     await safeWrite(
       db,
       async () => {
-        const promises = transactionsToCreate.map(({ id, item }) =>
-          db.get('canteentransactions').create((record: Model) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const prepared: any[] = [];
+        for (const { id, item } of transactionsToCreate) {
+          prepared.push(db.get('canteentransactions').prepareCreate((record: Model) => {
             const transaction = record as CanteenHistoryItem;
             Object.assign(transaction, {
               createdByAccount: item.createdByAccount,
@@ -107,9 +124,9 @@ export async function addCanteenTransactionToDatabase(transactions: SharedCantee
               currency: item.currency,
               amount: item.amount
             });
-          })
-        );
-        await Promise.all(promises);
+          }));
+        }
+        await db.batch(...prepared);
       },
       10000,
       `add_canteen_transactions_${transactionsToCreate.length}_items`
@@ -119,13 +136,15 @@ export async function addCanteenTransactionToDatabase(transactions: SharedCantee
   }
 }
 
-export async function getCanteenTransactionsFromCache(): Promise<SharedCanteenHistoryItem[]> {
+export async function getCanteenTransactionsFromCache(
+  sourceIds: string[] = getActiveAccountDataSourceIds()
+): Promise<SharedCanteenHistoryItem[]> {
   try {
     const database = getDatabaseInstance();
 
     const transactions = await database
       .get<CanteenHistoryItem>('canteentransactions')
-      .query()
+      .query(Q.where("createdByAccount", sourceIds.length > 0 ? Q.oneOf(sourceIds) : "__no_active_account__"))
       .fetch();
 
     return transactions

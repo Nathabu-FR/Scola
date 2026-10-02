@@ -1,7 +1,13 @@
 import { Period } from "@/services/shared/grade";
-import { error, warn } from "@/utils/logger/logger";
+import { warn } from "@/utils/logger/logger";
 
-export function getCurrentPeriod(periods: Period[]): Period {
+export function getCurrentPeriod(periods: Period[]): Period | undefined {
+  // Some accounts have no grade periods. This is expected and unrelated to
+  // timetable loading, so it should not look like an application error.
+  if (!Array.isArray(periods) || periods.length === 0) {
+    return undefined;
+  }
+
   const now = new Date().getTime();
   const excludedNames = [
     "Bac blanc",
@@ -35,6 +41,7 @@ export function getCurrentPeriod(periods: Period[]): Period {
     return periods[0];
   }
 
-  error("Unable to find the current period and unable to fallback...");
-  return periods[0];
+  // Every remaining period was explicitly excluded above. Callers already
+  // treat an absent current period as "no grade period available".
+  return undefined;
 }

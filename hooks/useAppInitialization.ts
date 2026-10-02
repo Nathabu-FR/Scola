@@ -14,6 +14,7 @@ import { warn } from '@/utils/logger/logger';
 import { posthog } from '@/utils/logger/posthog';
 import ModelManager from '@/utils/magic/ModelManager';
 import { FONT_CONFIG } from '@/constants/LayoutScreenOptions';
+import { installTauriFetch } from "@/utils/network/fetch";
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -71,6 +72,14 @@ export function useAppInitialization() {
 
     setUpTips().catch(err => {
       warn(`TipKit configuration failed: ${err}`);
+    });
+  }, []);
+
+  // Install the native Tauri HTTP transport before school SDKs are used.
+  // In particular, @blockshub/blocksdirecte calls global fetch() directly.
+  useEffect(() => {
+    installTauriFetch().catch(err => {
+      warn(`Tauri HTTP transport initialization failed: ${err}`);
     });
   }, []);
 

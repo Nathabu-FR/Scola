@@ -1,5 +1,5 @@
 import { Model, Q } from "@nozbe/watermelondb";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { getICalCourseById, getICalEventsForWeek } from "@/services/local/ical";
 import { Course as SharedCourse,CourseDay as SharedCourseDay } from "@/services/shared/timetable"
@@ -7,36 +7,63 @@ import { generateId } from "@/utils/generateId";
 import { warn } from "@/utils/logger/logger";
 
 import { getDatabaseInstance, useDatabase } from "./DatabaseProvider"
+import { getAccountDataSourceIds, getActiveAccountDataSourceIds } from "./accountScope";
 import { mapCourseToShared } from "./mappers/course";
 import Course from "./models/Timetable";
 import { getDateRangeOfWeek } from "./useHomework";
 import { safeWrite } from "./utils/safeTransaction";
+import { useAccountStore } from "@/stores/account";
 
 export function getCourseRouteId(course: SharedCourse): string {
+  // Les identifiants fournis par les services scolaires sont stables.
+  // L'ancienne version reconstruisait l'ID avec l'horaire, la matière et le
+  // professeur : un changement de professeur créait donc un nouveau cours et
+  // faisait disparaître les statuts ajoutés localement.
   if (course.createdByAccount.startsWith('ical_')) return course.id;
-  return generateId(
-    course.from.toISOString() +
-      course.to.toISOString() +
-      course.subject +
-      course.teacher +
-      course.createdByAccount
-  );
+  return generateId(course.createdByAccount + ':' + course.id);
 }
 
 export async function getCourseById(id: string): Promise<SharedCourse | undefined> {
   try {
+    const sourceIds = getActiveAccountDataSourceIds();
+    if (sourceIds.length === 0) return await getICalCourseById(id);
     const courses = await getDatabaseInstance()
       .get<Course>('courses')
-      .query(Q.where('courseId', id))
+      .query(Q.where('courseId', id), Q.where("createdByAccount", Q.oneOf(sourceIds)))
       .fetch();
-    return courses[0] ? mapCourseToShared(courses[0]) : await getICalCourseById(id);
+    const course = courses[0] ? mapCourseToShared(courses[0]) : undefined;
+    return course && getActiveAccountDataSourceIds().includes(course.createdByAccount)
+      ? course
+      : await getICalCourseById(id);
   } catch {
     return getICalCourseById(id);
   }
 }
 
+export async function updateCourseCustomStatus(courseId: string, customStatus?: string) {
+  const db = getDatabaseInstance();
+  const sourceIds = getActiveAccountDataSourceIds();
+  if (sourceIds.length === 0) throw new Error("Aucun compte actif.");
+  const records = await db.get<Course>("courses")
+    .query(Q.where("courseId", courseId), Q.where("createdByAccount", Q.oneOf(sourceIds)))
+    .fetch();
+  if (!records[0]) throw new Error("Ce cours n’est plus disponible dans ce compte.");
+
+  await safeWrite(db, async () => {
+    await records[0].update((record: Model) => {
+      (record as Course).customStatus = customStatus;
+    });
+  }, 10000, "updateCourseCustomStatus");
+}
+
 export function useTimetable(refresh = 0, weekNumber: number | number[] = 0, date: Date = new Date()) {
   const database = useDatabase();
+  const accounts = useAccountStore(state => state.accounts);
+  const activeAccountId = useAccountStore(state => state.lastUsedAccount);
+  const sourceIds = useMemo(
+    () => getAccountDataSourceIds(accounts.find(account => account.id === activeAccountId)),
+    [accounts, activeAccountId]
+  );
   const [timetable, setTimetable] = useState<SharedCourseDay[]>([]);
 
   const weeks = Array.isArray(weekNumber) ? weekNumber : [weekNumber];
@@ -44,13 +71,14 @@ export function useTimetable(refresh = 0, weekNumber: number | number[] = 0, dat
   const weeksKey = weeks.join(',');
 
   useEffect(() => {
+    setTimetable([]);
     let cancelled = false;
     let requestId = 0;
     const year = date.getFullYear();
 
     const fetchTimetable = async () => {
       const currentRequest = ++requestId;
-      const timetableFetched = await getCoursesFromCache(weeks, year);
+      const timetableFetched = await getCoursesFromCache(weeks, year, sourceIds);
       if (!cancelled && currentRequest === requestId) {
         setTimetable(timetableFetched);
       }
@@ -71,35 +99,65 @@ export function useTimetable(refresh = 0, weekNumber: number | number[] = 0, dat
       courseSubscription.unsubscribe();
       icalSubscription.unsubscribe();
     };
-  }, [refresh, database, weeksKey, date.getFullYear()]);
+  }, [refresh, database, weeksKey, date.getFullYear(), sourceIds]);
 
   return timetable;
 }
 
 export async function addCourseDayToDatabase(courses: SharedCourseDay[]) {
   const db = getDatabaseInstance();
+
+  // 1) Toutes les lectures HORS writer (les awaits dans un writer WatermelonDB
+  // font perdre le contexte et provoquent « markAsDeleted() can only be called
+  // from inside of a Writer »).
+  type DaySnapshot = {
+    dayTimestamp: number;
+    dbCourses: Course[];
+    items: { item: SharedCourseDay["courses"][number]; oldId: string; id: string; existingRecords: Course[]; oldExistingRecords: Course[] }[];
+  };
+  const snapshots: DaySnapshot[] = [];
+  const oneDayMs = 24 * 60 * 60 * 1000;
+  for (const day of courses) {
+    const dayTimestamp = day.date.getTime();
+
+    const dbCourses = await db.get<Course>('courses')
+      .query(
+        Q.where('from', Q.between(dayTimestamp, dayTimestamp + oneDayMs))
+      )
+      .fetch();
+
+    const items: DaySnapshot["items"] = [];
+    for (const item of day.courses) {
+      // MIGRATION TO AVOID DUPES, DO NOT DELETE
+      const oldId = generateId(item.from.toISOString() + item.to.toISOString() + item.subject + item.teacher + item.room + item.createdByAccount);
+      const id = getCourseRouteId(item);
+
+      const oldExistingRecords = (await db.get<Course>('courses')
+        .query(Q.where('courseId', oldId))
+        .fetch()).filter(record => record.createdByAccount === item.createdByAccount);
+      const existingRecords = (await db.get<Course>('courses')
+        .query(Q.where('courseId', id))
+        .fetch()).filter(record => record.createdByAccount === item.createdByAccount);
+      items.push({ item, oldId, id, existingRecords, oldExistingRecords });
+    }
+    snapshots.push({ dayTimestamp, dbCourses, items });
+  }
+
+  // 2) Un seul writer : tout est préparé (create/update/delete) puis batché
+  // d'un coup, sans aucun await intermédiaire.
   await safeWrite(
     db,
     async () => {
-      for (const day of courses) {
-        const dayTimestamp = day.date.getTime();
-        const oneDayMs = 24 * 60 * 60 * 1000;
-
-        const dbCourses = await db.get<Course>('courses')
-          .query(
-            Q.where('from', Q.between(dayTimestamp, dayTimestamp + oneDayMs))
-          )
-          .fetch();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const prepared: any[] = [];
+      for (const snapshot of snapshots) {
+        const { dbCourses, items } = snapshot;
 
         const dayCourseIds = new Set(
-          day.courses.map(course => {
-            const oldId = generateId(course.from.toISOString() + course.to.toISOString() + course.subject + course.teacher + course.room + course.createdByAccount);
-            const newId = generateId(course.from.toISOString() + course.to.toISOString() + course.subject + course.teacher + course.createdByAccount);
-            return [oldId, newId];
-          }).flat()
+          items.map(({ oldId, id }) => [oldId, id]).flat()
         );
         const refreshedServiceIds = new Set(
-          day.courses.map(course => course.createdByAccount)
+          items.map(({ item }) => item.createdByAccount)
         );
 
         const coursesToDelete = dbCourses.filter(
@@ -109,29 +167,19 @@ export async function addCourseDayToDatabase(courses: SharedCourseDay[]) {
         );
 
         for (const course of coursesToDelete) {
-          await course.markAsDeleted();
+          prepared.push(course.prepareMarkAsDeleted());
         }
 
-        for (const item of day.courses) {
-          // MIGRATION TO AVOID DUPES, DO NOT DELETE
-          const oldId = generateId(item.from.toISOString() + item.to.toISOString() + item.subject + item.teacher + item.room + item.createdByAccount);
-          const id = getCourseRouteId(item);
-
-          const oldExistingRecords = await db.get('courses')
-            .query(Q.where('courseId', oldId))
-            .fetch();
-          const existingRecords = await db.get('courses')
-            .query(Q.where('courseId', id))
-            .fetch();
-
+        for (const { item, oldId, id, existingRecords, oldExistingRecords } of items) {
           if (oldId !== id) {
             for (const oldRecord of oldExistingRecords) {
-              await oldRecord.markAsDeleted();
+              prepared.push(oldRecord.prepareMarkAsDeleted());
             }
           }
 
           if (existingRecords.length === 0) {
-            await db.get('courses').create((record: Model) => {
+            const migratedCustomStatus = item.customStatus ?? oldExistingRecords[0]?.customStatus;
+            prepared.push(db.get('courses').prepareCreate((record: Model) => {
               const course = record as Course;
               Object.assign(course, {
                 createdByAccount: item.createdByAccount,
@@ -146,14 +194,17 @@ export async function addCourseDayToDatabase(courses: SharedCourseDay[]) {
                 group: item.group,
                 backgroundColor: item.backgroundColor,
                 status: item.status,
-                customStatus: item.customStatus,
+                // Preserve a local status while migrating from the old
+                // unstable ID scheme. Otherwise a teacher change silently
+                // removes « Professeur absent » / « Cours annulé ».
+                customStatus: migratedCustomStatus,
                 url: item.url,
                 kidName: item.kidName,
               });
-            });
+            }));
           } else {
             const courseToUpdate = existingRecords[0];
-            await courseToUpdate.update((model: Model) => {
+            prepared.push(courseToUpdate.prepareUpdate((model: Model) => {
               const course = model as Course;
               Object.assign(course, {
                 subject: item.subject ?? course.subject,
@@ -170,9 +221,13 @@ export async function addCourseDayToDatabase(courses: SharedCourseDay[]) {
                 url: item.url ?? course.url,
                 kidName: item.kidName ?? course.kidName,
               });
-            });
+            }));
           }
         }
+      }
+
+      if (prepared.length > 0) {
+        await db.batch(...prepared);
       }
     },
     15000,
@@ -201,14 +256,21 @@ function getWeeksRange(weeks: number[], year: number): { start: Date; end: Date 
   return { start, end };
 }
 
-export async function getCoursesFromCache(weeks: number[], year: number): Promise<SharedCourseDay[]> {
+export async function getCoursesFromCache(
+  weeks: number[],
+  year: number,
+  sourceIds: string[] = getActiveAccountDataSourceIds()
+): Promise<SharedCourseDay[]> {
   try {
     const database = getDatabaseInstance();
     const { start: minStart, end: maxEnd } = getWeeksRange(weeks, year);
 
     const courses = await database
       .get<Course>('courses')
-      .query(Q.where('from', Q.between(minStart.getTime(), maxEnd.getTime())))
+      .query(
+        Q.where('from', Q.between(minStart.getTime(), maxEnd.getTime())),
+        Q.where("createdByAccount", sourceIds.length > 0 ? Q.oneOf(sourceIds) : "__no_active_account__")
+      )
       .fetch();
 
     const dayMap: Record<number, SharedCourse[]> = {};

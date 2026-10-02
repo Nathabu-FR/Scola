@@ -8,12 +8,16 @@ import { getDatabaseInstance } from "./DatabaseProvider";
 import { mapChatsToShared, mapMessagesToShared, mapRecipientsToShared } from "./mappers/chats";
 import { Chat, Message, Recipient } from "./models/Chat";
 import { safeWrite } from "./utils/safeTransaction";
+import { getActiveAccountDataSourceIds } from "./accountScope";
 
 export async function addChatsToDatabase(chats: SharedChat[]) {
   const db = getDatabaseInstance();
   for (const item of chats) {
     const id = generateId(item.createdByAccount + item.subject + item.date)
-    const existing = await db.get('chats').query(Q.where('chatId', id)).fetch();
+    const existing = await db.get<Chat>('chats').query(
+      Q.where('chatId', id),
+      Q.where('createdByAccount', item.createdByAccount)
+    ).fetch();
 
     if (existing.length === 0) {
       await safeWrite(db, async () => {
@@ -96,10 +100,14 @@ export async function addMessagesToDatabase(chat: SharedChat, messages: SharedMe
   }
 }
 
-export async function getChatsFromCache(): Promise<SharedChat[]> {
+export async function getChatsFromCache(
+  sourceIds: string[] = getActiveAccountDataSourceIds()
+): Promise<SharedChat[]> {
   try {
     const database = getDatabaseInstance();
-    const chats = await database.get<Chat>('chats').query();
+    const chats = await database.get<Chat>('chats').query(
+      Q.where("createdByAccount", sourceIds.length > 0 ? Q.oneOf(sourceIds) : "__no_active_account__")
+    ).fetch();
 
     return mapChatsToShared(chats)
   } catch (e) {
@@ -109,13 +117,16 @@ export async function getChatsFromCache(): Promise<SharedChat[]> {
 
 export async function getRecipientsFromCache(chat: SharedChat): Promise<SharedRecipient[]> {
   try {
+    if (!getActiveAccountDataSourceIds().includes(chat.createdByAccount)) return [];
     const database = getDatabaseInstance();
     const chatId = generateId(chat.createdByAccount + chat.subject + chat.date);
     const recipients = await database.get<Recipient>('recipients').query(
       Q.where('chatId', chatId)
     ).fetch();
 
-    return mapRecipientsToShared(recipients);
+    return getActiveAccountDataSourceIds().includes(chat.createdByAccount)
+      ? mapRecipientsToShared(recipients)
+      : [];
   } catch (e) {
     error(String(e));
   }
@@ -123,13 +134,16 @@ export async function getRecipientsFromCache(chat: SharedChat): Promise<SharedRe
 
 export async function getMessagesFromCache(chat: SharedChat): Promise<SharedMessage[]> {
   try {
+    if (!getActiveAccountDataSourceIds().includes(chat.createdByAccount)) return [];
     const database = getDatabaseInstance();
     const chatId = generateId(chat.createdByAccount + chat.subject + chat.date);
     const messages = await database.get<Message>('messages').query(
       Q.where('chatId', chatId)
     ).fetch();
 
-    return mapMessagesToShared(messages);
+    return getActiveAccountDataSourceIds().includes(chat.createdByAccount)
+      ? mapMessagesToShared(messages)
+      : [];
   } catch (e) {
     error(String(e));
   }

@@ -1,5 +1,5 @@
 import { Model, Q } from "@nozbe/watermelondb";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Attachment } from "@/services/shared/attachment";
 import { Homework as SharedHomework } from "@/services/shared/homework";
@@ -8,6 +8,8 @@ import { warn } from "@/utils/logger/logger";
 
 import { getDatabaseInstance, useDatabase } from "./DatabaseProvider";
 import Homework from "./models/Homework";
+import { getAccountDataSourceIds, getActiveAccountDataSourceIds } from "./accountScope";
+import { useAccountStore } from "@/stores/account";
 import { safeWrite } from "./utils/safeTransaction";
 
 function mapHomeworkToShared(homework: Homework): SharedHomework {
@@ -28,6 +30,7 @@ function mapHomeworkToShared(homework: Homework): SharedHomework {
 }
 
 export function getHomeworkRouteId(homework: SharedHomework): string {
+  if (homework.custom && homework.id) return homework.id;
   return generateId(
     homework.subject +
       homework.content +
@@ -38,9 +41,11 @@ export function getHomeworkRouteId(homework: SharedHomework): string {
 
 export async function getHomeworkById(id: string): Promise<SharedHomework | undefined> {
   const database = getDatabaseInstance();
+  const sourceIds = getActiveAccountDataSourceIds();
+  if (sourceIds.length === 0) return undefined;
   const records = await database
     .get<Homework>("homework")
-    .query(Q.where("homeworkId", id))
+    .query(Q.where("homeworkId", id), Q.where("createdByAccount", Q.oneOf(sourceIds)))
     .fetch();
   const cachedHomework = records[0] ? mapHomeworkToShared(records[0]) : undefined;
 
@@ -52,24 +57,44 @@ export async function getHomeworkById(id: string): Promise<SharedHomework | unde
     const freshHomeworks = await manager?.getHomeworks(
       getWeekNumberFromDate(cachedHomework.dueDate)
     );
-    return freshHomeworks?.find(homework => getHomeworkRouteId(homework) === id) ?? cachedHomework;
+    const activeSourceIds = getActiveAccountDataSourceIds();
+    const freshHomework = freshHomeworks?.find(homework =>
+      activeSourceIds.includes(homework.createdByAccount) && getHomeworkRouteId(homework) === id
+    );
+    const cachedItem = activeSourceIds.includes(cachedHomework.createdByAccount)
+      ? cachedHomework
+      : undefined;
+    return freshHomework ?? cachedItem;
   } catch (error) {
     warn(`Unable to refresh homework ${id}: ${String(error)}`);
-    return cachedHomework;
+    return getActiveAccountDataSourceIds().includes(cachedHomework.createdByAccount)
+      ? cachedHomework
+      : undefined;
   }
 }
 
 export function useHomeworkForWeek(weekNumber: number, refresh = 0) {
   const database = useDatabase();
+  const accounts = useAccountStore(state => state.accounts);
+  const activeAccountId = useAccountStore(state => state.lastUsedAccount);
+  const sourceIds = useMemo(
+    () => getAccountDataSourceIds(accounts.find(account => account.id === activeAccountId)),
+    [accounts, activeAccountId]
+  );
   const [homeworks, setHomeworks] = useState<SharedHomework[]>([]);
 
   useEffect(() => {
+    setHomeworks([]);
+    let cancelled = false;
     const fetchHomeworks = async () => {
-      const homeworksFetched = await getHomeworksFromCache(weekNumber);
-      setHomeworks(homeworksFetched);
+      const homeworksFetched = await getHomeworksFromCache(weekNumber, sourceIds);
+      if (!cancelled) setHomeworks(homeworksFetched);
     };
-    fetchHomeworks();
-  }, [weekNumber, refresh, database]);
+    if (sourceIds.length > 0) {
+      void fetchHomeworks();
+    }
+    return () => { cancelled = true; };
+  }, [weekNumber, refresh, database, sourceIds]);
 
   return homeworks;
 }
@@ -80,58 +105,99 @@ export function useHomeworkForWeek(weekNumber: number, refresh = 0) {
 // empty page before the query resolves.
 export function useHomeworkForWeeks(weekNumbers: number[], refresh = 0) {
   const database = useDatabase();
+  const accounts = useAccountStore(state => state.accounts);
+  const activeAccountId = useAccountStore(state => state.lastUsedAccount);
+  const sourceIds = useMemo(
+    () => getAccountDataSourceIds(accounts.find(account => account.id === activeAccountId)),
+    [accounts, activeAccountId]
+  );
   const [homeworks, setHomeworks] = useState<Record<number, SharedHomework[]>>({});
   const weeksKey = weekNumbers.join(",");
 
   useEffect(() => {
-    let cancelled = false;
+    setHomeworks({});
     const weeks = weeksKey.length > 0 ? weeksKey.split(",").map(Number) : [];
-
-    const fetchHomeworks = async () => {
-      const entries = await Promise.all(
-        weeks.map(async week => [week, await getHomeworksFromCache(week)] as const)
-      );
-      if (cancelled) {
-        return;
-      }
-      setHomeworks(previous => {
-        const next: Record<number, SharedHomework[]> = {};
-        // Anything further than one window away is dropped: the map would grow
-        // for the whole session otherwise.
-        const keep = Math.max(...weeks.map(week => Math.abs(week - weeks[0]))) + 1;
-        for (const [key, value] of Object.entries(previous)) {
-          if (Math.abs(Number(key) - weeks[0]) <= keep) {
-            next[Number(key)] = value;
-          }
-        }
-        for (const [week, value] of entries) {
-          next[week] = value;
-        }
-        return next;
-      });
-    };
-
-    if (weeks.length > 0) {
-      fetchHomeworks();
+    if (weeks.length === 0 || sourceIds.length === 0) {
+      setHomeworks({});
+      return;
     }
+
+    let cancelled = false;
+    const subscriptions = weeks.map(week => {
+      const { start, end } = getDateRangeOfWeek(week);
+      return database
+        .get<Homework>("homework")
+        .query(
+          Q.where("dueDate", Q.between(start.getTime(), end.getTime())),
+          Q.where("createdByAccount", Q.oneOf(sourceIds))
+        )
+        .observe()
+        .subscribe(records => {
+          if (cancelled) return;
+          const list = records
+            .map(mapHomeworkToShared)
+            .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
+          setHomeworks(previous => ({ ...previous, [week]: list }));
+        });
+    });
 
     return () => {
       cancelled = true;
+      subscriptions.forEach(subscription => subscription.unsubscribe());
     };
-  }, [weeksKey, refresh, database]);
+  }, [weeksKey, refresh, database, sourceIds]);
+
+  return homeworks;
+}
+
+/** Observe every cached assignment so the home screen can rank open work across week boundaries. */
+export function useAllHomeworkFromCache() {
+  const database = useDatabase();
+  const accounts = useAccountStore(state => state.accounts);
+  const activeAccountId = useAccountStore(state => state.lastUsedAccount);
+  const sourceIds = useMemo(
+    () => getAccountDataSourceIds(accounts.find(account => account.id === activeAccountId)),
+    [accounts, activeAccountId]
+  );
+  const [homeworks, setHomeworks] = useState<SharedHomework[]>([]);
+
+  useEffect(() => {
+    setHomeworks([]);
+    if (sourceIds.length === 0) {
+      setHomeworks([]);
+      return;
+    }
+    const subscription = database
+      .get<Homework>("homework")
+      .query(Q.where("createdByAccount", Q.oneOf(sourceIds)))
+      .observe()
+      .subscribe(records => {
+        setHomeworks(
+          records
+            .map(mapHomeworkToShared)
+            .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())
+        );
+      });
+
+    return () => subscription.unsubscribe();
+  }, [database, sourceIds]);
 
   return homeworks;
 }
 
 export async function getHomeworksFromCache(
-  weekNumber: number
+  weekNumber: number,
+  sourceIds: string[] = getActiveAccountDataSourceIds()
 ): Promise<SharedHomework[]> {
   try {
     const database = getDatabaseInstance();
     const { start, end } = getDateRangeOfWeek(weekNumber);
     const homeworks = await database
       .get<Homework>("homework")
-      .query(Q.where("dueDate", Q.between(start.getTime(), end.getTime())))
+      .query(
+        Q.where("dueDate", Q.between(start.getTime(), end.getTime())),
+        Q.where("createdByAccount", sourceIds.length > 0 ? Q.oneOf(sourceIds) : "__no_active_account__")
+      )
       .fetch();
 
     return homeworks
@@ -144,6 +210,7 @@ export async function getHomeworksFromCache(
 }
 
 export async function addHomeworkToDatabase(homeworks: SharedHomework[]) {
+  if (homeworks.length === 0) return;
   const db = getDatabaseInstance();
 
   const weekNumber = getWeekNumberFromDate(homeworks[0].dueDate);
@@ -169,8 +236,21 @@ export async function addHomeworkToDatabase(homeworks: SharedHomework[]) {
       !homeworkIds.includes(dbHomework.homeworkId)
   );
 
-  for (const homework of homeworksToDelete) {
-    await homework.markAsDeleted();
+  // Batch WatermelonDB : markAsDeleted() doit rester dans le Writer synchrone.
+  // On prépare hors writer puis on batch, plutôt que d'appeler en boucle
+  // des sub-writers (le log « can only be called from inside of a Writer »
+  // venait d'écritures concurrentes imbriquées).
+  if (homeworksToDelete.length > 0) {
+    await safeWrite(
+      db,
+      async () => {
+        await db.batch(
+          ...homeworksToDelete.map(homework => homework.prepareMarkAsDeleted())
+        );
+      },
+      10000,
+      "removeStaleHomeworks"
+    );
   }
 
   for (const hw of homeworks) {
@@ -179,15 +259,25 @@ export async function addHomeworkToDatabase(homeworks: SharedHomework[]) {
 
     const existing = await db
       .get("homework")
-      .query(Q.where("homeworkId", id))
+      .query(Q.where("homeworkId", id), Q.where("createdByAccount", hw.createdByAccount))
       .fetch();
     const oldExisting = await db
       .get("homework")
-      .query(Q.where("homeworkId", oldId))
+      .query(Q.where("homeworkId", oldId), Q.where("createdByAccount", hw.createdByAccount))
       .fetch();
 
-    for (const oldRecord of oldExisting) {
-      await oldRecord.markAsDeleted();
+    if (oldExisting.length > 0) {
+      await safeWrite(
+        db,
+        async () => {
+          await db.batch(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ...oldExisting.map(oldRecord => (oldRecord as any).prepareMarkAsDeleted())
+          );
+        },
+        10000,
+        "removeMigratedHomework"
+      );
     }
 
     if (existing.length === 0) {
@@ -244,20 +334,69 @@ export async function addHomeworkToDatabase(homeworks: SharedHomework[]) {
   }
 }
 
+export async function addCustomHomeworkToDatabase(homework: SharedHomework) {
+  const db = getDatabaseInstance();
+  const id = homework.id || getHomeworkRouteId(homework);
+  // Lecture HORS writer : un await dans le writer WatermelonDB fait perdre
+  // le contexte (« can only be called from inside of a Writer »).
+  const existing = await db
+    .get<Homework>("homework")
+    .query(
+      Q.where("homeworkId", id),
+      Q.where("createdByAccount", homework.createdByAccount)
+    )
+    .fetch();
+
+  await safeWrite(db, async () => {
+    const assignHomework = (record: Model) => {
+      const row = record as Homework;
+      Object.assign(row, {
+        homeworkId: id,
+        subject: homework.subject,
+        content: homework.content,
+        dueDate: homework.dueDate.getTime(),
+        isDone: homework.isDone,
+        returnFormat: homework.returnFormat,
+        attachments: JSON.stringify(homework.attachments),
+        evaluation: false,
+        custom: true,
+        createdByAccount: homework.createdByAccount,
+        kidName: homework.kidName,
+        fromCache: true,
+      });
+    };
+
+    if (existing.length > 0) {
+      await existing[0].update(assignHomework);
+    } else {
+      await db.get("homework").create(assignHomework);
+    }
+  }, 10000, "addCustomHomeworkToDatabase");
+}
+
 export async function updateHomeworkIsDone(
   homeworkId: string,
   isDone: boolean
 ) {
   const db = getDatabaseInstance();
+  const sourceIds = getActiveAccountDataSourceIds();
+  if (sourceIds.length === 0) {
+    throw new Error("Aucun compte actif pour modifier ce devoir.");
+  }
 
+  // Lecture HORS writer (même raison que ci-dessus : pas d'await dans le writer).
   const existing = await db
-    .get("homework")
-    .query(Q.where("homeworkId", homeworkId))
+    .get<Homework>("homework")
+    .query(
+      Q.where("homeworkId", homeworkId),
+      Q.where("createdByAccount", Q.oneOf(sourceIds))
+    )
     .fetch();
 
   if (existing.length === 0) {
-    warn(`Homework with ID ${homeworkId} not found`);
-    return;
+    const message = `Homework with ID ${homeworkId} not found`;
+    warn(message);
+    throw new Error(message);
   }
 
   const recordToUpdate = existing[0];
@@ -273,6 +412,28 @@ export async function updateHomeworkIsDone(
     10000,
     "updateHomeworkIsDone"
   );
+}
+
+export async function deleteCustomHomeworkFromDatabase(
+  homeworkId: string,
+  accountId: string
+) {
+  const db = getDatabaseInstance();
+  const records = await db
+    .get<Homework>("homework")
+    .query(Q.where("homeworkId", homeworkId), Q.where("createdByAccount", accountId))
+    .fetch();
+  const record = records[0];
+  if (!record || !record.custom) {
+    throw new Error("Ce devoir personnel n’existe plus pour ce compte.");
+  }
+
+  // deleteCustomHomework passé en batch préparé : le markAsDeleted() direct
+  // dans le writer levait « can only be called from inside of a Writer »
+  // quand une autre écriture tournait en parallèle.
+  await safeWrite(db, async () => {
+    await db.batch(record.prepareMarkAsDeleted());
+  }, 10000, "deleteCustomHomework");
 }
 
 export function getDateRangeOfWeek(

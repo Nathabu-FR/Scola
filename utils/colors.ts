@@ -1,4 +1,5 @@
 import { t } from "i18next";
+import { SCOLA_BRAND } from "@/constants/scolaBrand";
 
 export enum Colors {
   PINK,
@@ -11,14 +12,14 @@ export enum Colors {
 
 export const AppColors = [
   {
-    mainColor: "#DD007D",
-    backgroundColor: "#FAD9EC",
-    nameKey: "Rose",
-    colorEnum: Colors.PINK,
+    mainColor: SCOLA_BRAND.blue,
+    backgroundColor: "#E7EEFF",
+    nameKey: "Bleu",
+    colorEnum: Colors.BLUE,
   },
   {
-    mainColor: "#E8B048",
-    backgroundColor: "#FCF3E4",
+    mainColor: SCOLA_BRAND.yellow,
+    backgroundColor: "#FFF5D9",
     nameKey: "Jaune",
     colorEnum: Colors.YELLOW,
   },
@@ -29,20 +30,20 @@ export const AppColors = [
     colorEnum: Colors.GREEN,
   },
   {
-    mainColor: "#C400DD",
-    backgroundColor: "#F6D9FA",
+    mainColor: SCOLA_BRAND.violet,
+    backgroundColor: "#EFE8FF",
     nameKey: "Violet",
     colorEnum: Colors.PURPLE,
   },
   {
-    mainColor: "#48B7E8",
-    backgroundColor: "#E4F4FC",
-    nameKey: "Bleu",
-    colorEnum: Colors.BLUE,
+    mainColor: SCOLA_BRAND.coral,
+    backgroundColor: "#FCE8ED",
+    nameKey: "Rose",
+    colorEnum: Colors.PINK,
   },
   {
-    mainColor: "#6D6D6D",
-    backgroundColor: "#E9E9E9",
+    mainColor: SCOLA_BRAND.navy,
+    backgroundColor: "#E9EDF6",
     nameKey: "Noir",
     colorEnum: Colors.BLACK,
   },

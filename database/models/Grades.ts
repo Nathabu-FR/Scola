@@ -82,7 +82,7 @@ export class PeriodGrades extends Model {
     subjects: { type: 'has_many', foreignKey: 'periodGradeId' },
   };
 
-  @field('periodGradeId') id: string;
+  @field('periodGradeId') periodGradeId: string;
   @field('createdByAccount') createdByAccount: string;
   @field('studentOverall') studentOverallRaw: string;
   @field('classAverage') classAverageRaw: string;

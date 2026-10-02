@@ -1,9 +1,8 @@
 import Subject from "@/database/models/Subject";
-import { Subject as SharedSubject } from "@/services/shared/grade";
+import { Grade as SharedGrade, Subject as SharedSubject } from "@/services/shared/grade";
+import { Grade } from "@/database/models/Grades";
 
-export function mapSubjectToShared(subject: Subject): SharedSubject {
-  // Lazily required to avoid a require cycle with ./grade.ts, which imports
-  // mapSubjectToShared from this file.
+export function mapSubjectToShared(subject: Subject, grades: Grade[] = []): SharedSubject {
   const { mapGradeToShared } = require("@/database/mappers/grade") as typeof import("@/database/mappers/grade");
   return {
     id: subject.id,
@@ -13,6 +12,6 @@ export function mapSubjectToShared(subject: Subject): SharedSubject {
     maximum: subject.maximum,
     minimum: subject.minimum,
     outOf: subject.outOf,
-    grades: subject.grades.map(mapGradeToShared)
+    grades: grades.map(mapGradeToShared) as SharedGrade[]
   }
 }

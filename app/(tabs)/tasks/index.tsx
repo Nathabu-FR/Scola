@@ -573,7 +573,7 @@ const TasksView: React.FC = () => {
         style={{
           position: "absolute",
           right: 22,
-          bottom: Platform.OS === "web" ? 74 : insets.bottom + 18,
+          bottom: Platform.OS === "web" ? 14 : insets.bottom + 18,
           zIndex: 20,
           width: 56,
           height: 56,

@@ -19,7 +19,9 @@ export function getCourseRouteId(course: SharedCourse): string {
   // L'ancienne version reconstruisait l'ID avec l'horaire, la matière et le
   // professeur : un changement de professeur créait donc un nouveau cours et
   // faisait disparaître les statuts ajoutés localement.
-  if (course.createdByAccount.startsWith('ical_')) return course.id;
+  // Cached records keep their persisted key, including records from the old
+  // timetable ID format. Regenerating it made stale courses impossible to open.
+  if (course.createdByAccount.startsWith('ical_') || course.fromCache) return course.id;
   return generateId(course.createdByAccount + ':' + course.id);
 }
 
@@ -194,6 +196,7 @@ export async function addCourseDayToDatabase(courses: SharedCourseDay[]) {
                 group: item.group,
                 backgroundColor: item.backgroundColor,
                 status: item.status,
+                resourceId: item.resourceId,
                 // Preserve a local status while migrating from the old
                 // unstable ID scheme. Otherwise a teacher change silently
                 // removes « Professeur absent » / « Cours annulé ».
@@ -217,6 +220,7 @@ export async function addCourseDayToDatabase(courses: SharedCourseDay[]) {
                 group: item.group ?? course.group,
                 backgroundColor: item.backgroundColor ?? course.backgroundColor,
                 status: item.status ?? course.status,
+                resourceId: item.resourceId ?? course.resourceId,
                 customStatus: item.customStatus ?? course.customStatus,
                 url: item.url ?? course.url,
                 kidName: item.kidName ?? course.kidName,

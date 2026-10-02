@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo } from "react";
-import { RefreshControl, StyleSheet } from "react-native";
+import { Platform, RefreshControl, StyleSheet } from "react-native";
 import Reanimated, { LinearTransition } from "react-native-reanimated";
 
 import { Homework } from "@/services/shared/homework";
@@ -110,7 +110,8 @@ const TasksList: React.FC<TasksListProps> = ({
         paddingLeft: 16,
         // A large right inset (landscape notch) already gives enough breathing room.
         paddingRight: insets.right > 10 ? 0 : 16,
-        paddingBottom: 16,
+        // Leave room for the floating add button on desktop.
+        paddingBottom: Platform.OS === "web" ? 88 : 16,
       }}
       contentInsetAdjustmentBehavior="automatic"
       showsVerticalScrollIndicator={false}

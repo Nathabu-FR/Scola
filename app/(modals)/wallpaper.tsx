@@ -25,6 +25,34 @@ import TypographyNew from "@/ui/new/Typography"
 
 const COLLECTIONS_SOURCE = "https://raw.githubusercontent.com/PapillonApp/datasets/refs/heads/main/wallpapers/index.json";
 
+const optimizeWebWallpaper = async (
+  uri: string,
+  mimeType?: string | null,
+  base64?: string | null
+): Promise<string> => {
+  const source = uri || (base64 ? `data:${mimeType || "image/jpeg"};base64,${base64}` : "");
+  if (!source) throw new Error("Impossible de lire cette image.");
+
+  const image = new window.Image();
+  await new Promise<void>((resolve, reject) => {
+    image.onload = () => resolve();
+    image.onerror = () => reject(new Error("Impossible de lire cette image."));
+    image.src = source;
+    if (image.complete && image.naturalWidth > 0) resolve();
+  });
+
+  const scale = Math.min(1, 1920 / Math.max(image.naturalWidth, image.naturalHeight));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+  canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Impossible de traiter cette image.");
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+  const webp = canvas.toDataURL("image/webp", 0.82);
+  return webp.startsWith("data:image/webp") ? webp : canvas.toDataURL("image/jpeg", 0.82);
+};
+
 interface Collection {
   name: string;
   icon?: string;
@@ -158,7 +186,7 @@ const WallpaperModal = () => {
       const result = await ImagePicker.launchImageLibraryAsync({
         allowsEditing: true,
         aspect: [4, 3],
-        quality: 1,
+        quality: 0.82,
         base64: Platform.OS === "web",
       });
       if (result.canceled) return;
@@ -166,14 +194,11 @@ const WallpaperModal = () => {
       const asset = result.assets[0];
       const wallpaperId = `custom:${Date.now()}`;
       if (Platform.OS === "web") {
-        if (!asset.base64) {
-          setError("Le navigateur n’a pas pu lire cette image. Essaie un autre fichier.");
-          return;
-        }
+        const dataUri = await optimizeWebWallpaper(asset.uri, asset.mimeType, asset.base64);
         mutateProperty("personalization", {
           wallpaper: {
             id: wallpaperId,
-            dataUri: `data:${asset.mimeType || "image/jpeg"};base64,${asset.base64}`,
+            dataUri,
           },
         });
         setError(null);

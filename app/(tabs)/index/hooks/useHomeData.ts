@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { t } from 'i18next';
 import { instance } from "@blockshub/pawnote-lts";
 import { useCallback, useEffect } from 'react';
+import { InteractionManager } from 'react-native';
 
 import { getWeekNumberFromDate } from '@/database/useHomework';
 import { AuthenticationError } from '@/services/errors/AuthenticationError';
@@ -223,6 +224,9 @@ export const useHomeData = () => {
   }, [alert, fetchEDT, fetchGrades, settingsstore.showAlertAtLogin, lastUsedAccount, removeAccount]);
 
   useEffect(() => {
-    initialize();
+    const task = InteractionManager.runAfterInteractions(() => {
+      void initialize();
+    });
+    return () => task.cancel();
   }, [initialize]);
 };

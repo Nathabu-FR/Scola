@@ -20,5 +20,6 @@ export default class Course extends Model {
   @field('backgroundColor') backgroundColor?: string;
   @field('status') status?: number;
   @field('customStatus') customStatus?: string;
+  @field('resourceId') resourceId?: string;
   @field('url') url?: string;
 }

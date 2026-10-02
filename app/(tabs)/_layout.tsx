@@ -101,7 +101,7 @@ function DesktopTabLayout() {
   const visibleTabCount = ["home", "calendar", "tasks", "grades"].filter(
     tab => !disabledTabs.includes(tab)
   ).length;
-  const tabBarWidth = Math.max(320, visibleTabCount * 112);
+  const tabBarWidth = Math.max(320, visibleTabCount * 120);
 
   return (
     <Tabs
@@ -111,19 +111,28 @@ function DesktopTabLayout() {
         tabBarInactiveTintColor: theme.colors.text + '99',
         tabBarLabelStyle: { fontFamily: font('medium'), fontSize: 13 },
         tabBarStyle: {
-          position: 'absolute',
-          bottom: 14,
+          // Keep the web tab bar in layout so long lists finish above it.
           alignSelf: 'center',
           width: tabBarWidth,
-          maxWidth: '92%',
-          height: 48,
-          borderRadius: 24,
+          maxWidth: '90%',
+          height: 64,
+          marginTop: 8,
+          marginBottom: 12,
+          paddingHorizontal: 6,
+          paddingVertical: 5,
+          borderRadius: 32,
           borderTopWidth: 0,
           backgroundColor: theme.dark ? '#191919ee' : '#ffffffe8',
           shadowOpacity: 0.18,
           shadowRadius: 18,
           elevation: 10,
         },
+        tabBarItemStyle: {
+          marginHorizontal: 4,
+          marginVertical: 4,
+          borderRadius: 24,
+        },
+        tabBarActiveBackgroundColor: theme.colors.text + (theme.dark ? '18' : '12'),
       }}
     >
       <Tabs.Screen name="index" options={{ title: t('Tab_Home'), href: disabledTabs.includes('home') ? null : undefined, tabBarIcon: ({ color }) => <PapiconTabIcon name="Home" color={color} /> }} />
@@ -135,7 +144,7 @@ function DesktopTabLayout() {
 }
 
 function PapiconTabIcon({ name, color }: { name: string; color: string }) {
-  return <Papicons name={name as any} size={19} color={color} />;
+  return <Papicons name={name as any} size={21} color={color} />;
 }
 
 export default function TabLayout() {

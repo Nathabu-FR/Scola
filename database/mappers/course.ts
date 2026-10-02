@@ -18,6 +18,7 @@ export function mapCourseToShared(course: Course): SharedCourse {
     backgroundColor: course.backgroundColor,
     status: course.status,
     customStatus: course.customStatus,
+    resourceId: course.resourceId,
     url: course.url,
     kidName: course.kidName
   }

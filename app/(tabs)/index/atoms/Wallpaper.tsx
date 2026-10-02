@@ -1,14 +1,18 @@
 import MaskedView from '@react-native-masked-view/masked-view';
 import { File, Paths } from 'expo-file-system';
 import React, { useEffect, useState } from 'react';
-import { Image, StyleSheet } from 'react-native';
+import { Image, Platform, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useTheme } from 'expo-router/react-navigation';
+import { useTheme } from 'expo-router/react-navigation';
 
 import { useSettingsStore } from '@/stores/settings';
 
 const Wallpaper = ({ height = 400, dim = true }) => {
   try {
     const settingsStore = useSettingsStore(state => state.personalization);
+    const { colors } = useTheme();
+    const { colors } = useTheme();
     const currentWallpaper = settingsStore.wallpaper;
 
     const [image, setImage] = useState<string | null>(null);
@@ -46,6 +50,39 @@ const Wallpaper = ({ height = 400, dim = true }) => {
         ? { uri: thumbnail }
         : require('@/assets/images/wallpapers/clouds.jpg');
 
+    const wallpaperImage = (
+      <>
+        <Image
+          source={imageSource}
+          onError={() => setImageAttempt(attempt => Math.min(attempt + 1, 2))}
+          resizeMode="cover"
+          style={[styles.image, { height }]}
+        />
+
+        {dim &&
+          <LinearGradient
+            colors={['rgba(0, 0, 0, 0.7)', 'rgba(0, 0, 0, 0)']}
+            locations={[0, 1]}
+            style={[styles.dimGradient, { height: height / 2 }]}
+          />
+        }
+      </>
+    );
+
+    if (Platform.OS === 'web') {
+      return (
+        <View style={[styles.container, { height }]}>
+          {wallpaperImage}
+          <LinearGradient
+            pointerEvents="none"
+            colors={['transparent', colors.overground]}
+            locations={[0, 1]}
+            style={[styles.webFade, { top: height * 0.45, height: height * 0.55 }]}
+          />
+        </View>
+      );
+    }
+
     return (
       <MaskedView
         style={[styles.container, { height }]}
@@ -57,19 +94,7 @@ const Wallpaper = ({ height = 400, dim = true }) => {
           />
         }
       >
-        <Image
-          source={imageSource}
-          onError={() => setImageAttempt(attempt => Math.min(attempt + 1, 2))}
-          style={[styles.image, { height }]}
-        />
-
-        {dim &&
-          <LinearGradient
-            colors={['rgba(0, 0, 0, 0.7)', 'rgba(0, 0, 0, 0)']}
-            locations={[0, 1]}
-            style={[styles.dimGradient, { height: height / 2 }]}
-          />
-        }
+        {wallpaperImage}
       </MaskedView>
     );
   } catch (error) {
@@ -99,6 +124,11 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     zIndex: 1
+  },
+  webFade: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
   }
 });
 

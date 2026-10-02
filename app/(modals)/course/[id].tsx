@@ -47,6 +47,8 @@ export default function CourseModal() {
   });
   const [course, setCourse] = useState<SharedCourse>();
   const [loading, setLoading] = useState(true);
+  const [courseLoadError, setCourseLoadError] = useState(false);
+  const [courseLoadAttempt, setCourseLoadAttempt] = useState(0);
   const [activeTab, setActiveTab] = useState<"details" | "content">("details");
   const [sessionContents, setSessionContents] = useState<CourseResource[]>([]);
   const [loadingContents, setLoadingContents] = useState(false);
@@ -63,10 +65,18 @@ export default function CourseModal() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setCourseLoadError(false);
     getCourseById(id)
       .then(result => {
-        if (cancelled || !result) return;
-        if (!cancelled) setCourse(result);
+        if (cancelled) return;
+        setCourse(result);
+        setCourseLoadError(!result);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCourse(undefined);
+          setCourseLoadError(true);
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -74,9 +84,11 @@ export default function CourseModal() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, courseLoadAttempt]);
 
   useEffect(() => {
+    if (activeTab !== "content") return;
+
     if (!course?.resourceId) {
       setSessionContents([]);
       setLoadingContents(false);
@@ -106,14 +118,31 @@ export default function CourseModal() {
     return () => {
       cancelled = true;
     };
-  }, [course]);
+  }, [course, activeTab]);
 
   if (loading) {
     return <>{backHeader}<View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}><ActivityIndicator /></View></>;
   }
 
   if (!course) {
-    return <>{backHeader}<View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}><Typography variant="title">{t("Tab_Calendar")}</Typography></View></>;
+    return (
+      <>
+        {backHeader}
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24, gap: 12, backgroundColor: colors.overground }}>
+          <Typography variant="title">{courseLoadError ? "Ce cours n’est plus disponible" : t("Tab_Calendar")}</Typography>
+          {courseLoadError ? (
+            <>
+              <Typography variant="body1" color="textSecondary" align="center">
+                Actualise l’emploi du temps, puis réessaie d’ouvrir ce cours.
+              </Typography>
+              <Pressable accessibilityRole="button" onPress={() => setCourseLoadAttempt(attempt => attempt + 1)}>
+                <Typography variant="body1" weight="semibold" style={{ color: colors.primary }}>Réessayer</Typography>
+              </Pressable>
+            </>
+          ) : null}
+        </View>
+      </>
+    );
   }
 
   const subjectInfo: SubjectInfo = {

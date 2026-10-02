@@ -18,8 +18,10 @@ import Reanimated, { runOnJS, useAnimatedScrollHandler, useAnimatedStyle, useSha
 import { AndroidHeaderButton, AndroidHeaderMenu } from "@/components/AndroidHeaderItems";
 
 import { CalendarDay } from "./components/CalendarDay";
-import { useCalendarState } from "./hooks/useCalendarState";
+import { CALENDAR_WINDOW_SIZE, useCalendarState } from "./hooks/useCalendarState";
 import { useTimetableData } from "./hooks/useTimetableData";
+
+const CALENDAR_DAYS = Array.from({ length: CALENDAR_WINDOW_SIZE }, (_, index) => index);
 
 const isAndroid = Platform.OS === "android";
 
@@ -113,10 +115,10 @@ function TabOneScreen() {
     currentIndex,
     flatListRef,
     getDateFromIndex,
-    getIndexFromDate,
     handleDateChange,
     onMomentumScrollEnd,
     onScroll,
+    recenterAtIndex,
     isResizingRef,
     INITIAL_INDEX,
     windowWidth
@@ -197,13 +199,32 @@ function TabOneScreen() {
   }, [windowWidth]);
 
   const handleMomentumScrollEnd = useCallback((e: any) => {
+    if (isResizingRef.current) return;
     onMomentumScrollEnd(e);
-    settleAt(e.nativeEvent.contentOffset.x);
-  }, [onMomentumScrollEnd, settleAt]);
+    const offsetX = e.nativeEvent.contentOffset.x;
+    const index = Math.round(offsetX / windowWidth);
+    if (recenterAtIndex(index, getDateFromIndex(index))) {
+      scrollPage.value = INITIAL_INDEX;
+      lastEmittedPage.value = INITIAL_INDEX;
+      settleAt(INITIAL_INDEX * windowWidth);
+      return;
+    }
+    settleAt(offsetX);
+  }, [onMomentumScrollEnd, settleAt, windowWidth, recenterAtIndex, getDateFromIndex, scrollPage, lastEmittedPage, isResizingRef, INITIAL_INDEX]);
 
   const handleScrollEndDrag = useCallback((e: any) => {
-    settleAt(e.nativeEvent.contentOffset.x);
-  }, [settleAt]);
+    if (isResizingRef.current) return;
+    const offsetX = e.nativeEvent.contentOffset.x;
+    const index = Math.round(offsetX / windowWidth);
+    const velocityX = e.nativeEvent.velocity?.x ?? 0;
+    if (Math.abs(velocityX) < 0.01 && recenterAtIndex(index, getDateFromIndex(index))) {
+      scrollPage.value = INITIAL_INDEX;
+      lastEmittedPage.value = INITIAL_INDEX;
+      settleAt(INITIAL_INDEX * windowWidth);
+      return;
+    }
+    settleAt(offsetX);
+  }, [settleAt, windowWidth, recenterAtIndex, getDateFromIndex, scrollPage, lastEmittedPage, isResizingRef, INITIAL_INDEX]);
 
   // Kept referentially stable so the memoized Calendar is not re-rendered, and
   // its SwiftUI host not re-fed props, on every day crossing.
@@ -215,8 +236,10 @@ function TabOneScreen() {
 
   const handlePickDate = useCallback((picked: Date) => {
     handleDateChange(picked);
-    setSettledIndex(getIndexFromDate(picked));
-  }, [handleDateChange, getIndexFromDate]);
+    scrollPage.value = INITIAL_INDEX;
+    lastEmittedPage.value = INITIAL_INDEX;
+    setSettledIndex(INITIAL_INDEX);
+  }, [handleDateChange, scrollPage, lastEmittedPage, INITIAL_INDEX]);
 
   const renderDay = useCallback(({ index }: { index: number }) => {
     const dayDate = getDateFromIndex(index);
@@ -339,7 +362,7 @@ function TabOneScreen() {
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <Reanimated.FlatList
           ref={flatListRef}
-          data={Array.from({ length: 20001 })}
+          data={CALENDAR_DAYS}
           horizontal
           pagingEnabled={false}
           showsHorizontalScrollIndicator={false}

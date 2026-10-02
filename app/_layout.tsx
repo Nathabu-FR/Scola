@@ -73,6 +73,8 @@ export default function RootLayout() {
   }, [analyticsView]);
 
   useEffect(() => {
+    // fetch en place AVANT notre surcharge : c'est lui qu'on remet au démontage.
+    const originalFetch = window.fetch;
     let nativeFetchInProgress = false;
 
     const shouldUseTauriTransport = (url: string) => {
@@ -99,7 +101,7 @@ export default function RootLayout() {
       }
     };
 
-    window.fetch = async (...args) => {
+    const patchedFetch: typeof window.fetch = async (...args) => {
       const id = uuid();
       let request: Request | null = null;
       if (args[0] instanceof Request && args[1] === undefined) {
@@ -136,10 +138,17 @@ export default function RootLayout() {
       return response;
     };
 
+    window.fetch = patchedFetch;
+
     return () => {
-      window.fetch = originalFetch;
-    }
-  }, [])
+      // On ne restaure que si notre fetch est toujours celui en place :
+      // installTauriFetch() (useAppInitialization) peut l'avoir remplacé entre-temps
+      // par le client natif Tauri, qu'il ne faut surtout pas écraser.
+      if (window.fetch === patchedFetch) {
+        window.fetch = originalFetch;
+      }
+    };
+  }, []);
 
   if (!fontsLoaded) {
     return null;

@@ -5,7 +5,7 @@ import React from 'react';
 import { FlatList } from "react-native";
 import * as DateLocale from 'date-fns/locale';
 
-import { CourseStatus, getManualCourseStatus } from "@/services/shared/timetable";
+import { COURSE_CANCELLED_LABEL, CourseStatus, getManualCourseStatus } from "@/services/shared/timetable";
 import Course from "@/ui/components/Course";
 import { getSubjectColor } from "@/utils/subjects/colors";
 import { getSubjectName } from "@/utils/subjects/name";

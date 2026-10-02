@@ -66,7 +66,7 @@ const HomeScreen = () => {
 
   const homeworkWeeks = React.useMemo(() => {
     const today = new Date();
-    const weeks = Array.from({ length: 8 }, (_, index) => {
+    const weeks = Array.from({ length: 4 }, (_, index) => {
       const date = new Date(today);
       date.setDate(today.getDate() + index * 7);
       return getWeekNumberFromDate(date);
@@ -201,7 +201,7 @@ HomeEmptyState.displayName = "HomeEmptyState";
 
 const HomeViewContainer = ({ children }) => {
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: 'transparent' }} edges={["left", "right"]}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: 'transparent', zIndex: 1 }} edges={["left", "right"]}>
       {children}
     </SafeAreaView>
   );

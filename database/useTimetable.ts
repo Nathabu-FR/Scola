@@ -15,14 +15,12 @@ import { safeWrite } from "./utils/safeTransaction";
 import { useAccountStore } from "@/stores/account";
 
 export function getCourseRouteId(course: SharedCourse): string {
+  // Les identifiants fournis par les services scolaires sont stables.
+  // L'ancienne version reconstruisait l'ID avec l'horaire, la matière et le
+  // professeur : un changement de professeur créait donc un nouveau cours et
+  // faisait disparaître les statuts ajoutés localement.
   if (course.createdByAccount.startsWith('ical_')) return course.id;
-  return generateId(
-    course.from.toISOString() +
-      course.to.toISOString() +
-      course.subject +
-      course.teacher +
-      course.createdByAccount
-  );
+  return generateId(course.createdByAccount + ':' + course.id);
 }
 
 export async function getCourseById(id: string): Promise<SharedCourse | undefined> {
@@ -180,6 +178,7 @@ export async function addCourseDayToDatabase(courses: SharedCourseDay[]) {
           }
 
           if (existingRecords.length === 0) {
+            const migratedCustomStatus = item.customStatus ?? oldExistingRecords[0]?.customStatus;
             prepared.push(db.get('courses').prepareCreate((record: Model) => {
               const course = record as Course;
               Object.assign(course, {
@@ -195,7 +194,10 @@ export async function addCourseDayToDatabase(courses: SharedCourseDay[]) {
                 group: item.group,
                 backgroundColor: item.backgroundColor,
                 status: item.status,
-                customStatus: item.customStatus,
+                // Preserve a local status while migrating from the old
+                // unstable ID scheme. Otherwise a teacher change silently
+                // removes « Professeur absent » / « Cours annulé ».
+                customStatus: migratedCustomStatus,
                 url: item.url,
                 kidName: item.kidName,
               });

@@ -84,7 +84,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     left: 0,
-    zIndex: -9
+    zIndex: 0,
+    pointerEvents: 'none' 
   },
   image: {
     width: '100%',

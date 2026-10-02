@@ -51,11 +51,10 @@ export const COURSE_TEACHER_ABSENT_LABEL = "Professeur absent";
 
 export function getManualCourseStatus(course: Pick<Course, "manualStatus" | "customStatus" | "status">): string | undefined {
   if (course.manualStatus) return course.manualStatus;
-  if (course.status !== CourseStatus.CANCELED && course.customStatus === COURSE_CANCELLED_LABEL) {
-    return COURSE_CANCELLED_LABEL;
-  }
-  if (course.customStatus === COURSE_TEACHER_ABSENT_LABEL) {
-    return COURSE_TEACHER_ABSENT_LABEL;
-  }
+  // Keep the two user-facing manual labels stable even when the provider also
+  // marks the course as canceled. The previous status check made « Cours
+  // annulé » disappear during a refresh when the provider returned CANCELED.
+  if (course.customStatus === COURSE_CANCELLED_LABEL) return COURSE_CANCELLED_LABEL;
+  if (course.customStatus === COURSE_TEACHER_ABSENT_LABEL) return COURSE_TEACHER_ABSENT_LABEL;
   return undefined;
 }

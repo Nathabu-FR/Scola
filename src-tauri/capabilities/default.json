@@ -13,6 +13,9 @@
       "identifier": "http:default",
       "allow": [
         {
+          "url": "http://ipc.localhost/**"
+        },
+        {
           "url": "https://api.ecoledirecte.com/**"
         },
         {

@@ -169,11 +169,11 @@ export async function addPeriodGradesToDatabase(item: SharedPeriodGrades, period
         Object.assign(row, {
           name: subject.name,
           subjects: JSON.stringify(subject.grades ?? []),
-          studentAverage: JSON.stringify(subject.studentAverage ?? {}),
-          classAverage: JSON.stringify(subject.classAverage ?? {}),
-          maximum: JSON.stringify(subject.maximum ?? {}),
-          minimum: JSON.stringify(subject.minimum ?? {}),
-          outOf: JSON.stringify(subject.outOf ?? {}),
+          studentAverageRaw: JSON.stringify(subject.studentAverage ?? {}),
+          classAverageRaw: JSON.stringify(subject.classAverage ?? {}),
+          maximumRaw: JSON.stringify(subject.maximum ?? {}),
+          minimumRaw: JSON.stringify(subject.minimum ?? {}),
+          outOfRaw: JSON.stringify(subject.outOf ?? {}),
           periodGradeId: periodGradeRowId,
         });
       });

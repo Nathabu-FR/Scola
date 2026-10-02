@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createMMKV } from "react-native-mmkv";
 
 import { useTimetable } from "@/database/useTimetable";
+import { getWeekNumberFromDate } from "@/database/useHomework";
 import { getAccountDataSourceIds } from "@/database/accountScope";
 import { COURSE_CANCELLED_LABEL, Course as SharedCourse, CourseStatus, getManualCourseStatus } from "@/services/shared/timetable";
 import { useAccountStore } from "@/stores/account";
@@ -88,15 +89,38 @@ export const useTimetableWidgetData = (options: { showCancelled?: boolean } = {}
 
   const services = useMemo(() => getAccountDataSourceIds(account), [account]);
 
-  const currentYear = now.getFullYear();
-  const yearWeeks = useMemo(
-    () => Array.from({ length: 54 }, (_, index) => index + 1),
-    []
-  );
-  const nextYearDate = useMemo(() => new Date(currentYear + 1, 0, 1), [currentYear]);
+  // The home widget only needs upcoming lessons. Querying all 54 weeks of the
+  // current year plus all 54 weeks of the next year made startup scan the
+  // entire timetable database twice. Keep a small rolling window instead.
+  const upcomingWeekGroups = useMemo(() => {
+    const groups = new Map<number, Set<number>>();
+    for (let offset = 0; offset < 8; offset += 1) {
+      const date = new Date(now);
+      date.setDate(date.getDate() + offset * 7);
+      const year = date.getFullYear();
+      const week = getWeekNumberFromDate(date);
+      if (!groups.has(year)) groups.set(year, new Set());
+      groups.get(year)!.add(week);
+    }
+    return Array.from(groups.entries()).map(([year, weeks]) => ({
+      year,
+      weeks: Array.from(weeks).sort((a, b) => a - b),
+    }));
+  }, [now]);
 
-  const currentYearTimetable = useTimetable(undefined, yearWeeks, now);
-  const nextYearTimetable = useTimetable(undefined, yearWeeks, nextYearDate);
+  const currentYearGroup = upcomingWeekGroups.find(group => group.year === now.getFullYear());
+  const nextYearGroup = upcomingWeekGroups.find(group => group.year !== now.getFullYear())
+    ?? { year: now.getFullYear() + 1, weeks: [1] };
+  const currentYearTimetable = useTimetable(
+    undefined,
+    currentYearGroup?.weeks ?? [getWeekNumberFromDate(now)],
+    now
+  );
+  const nextYearTimetable = useTimetable(
+    undefined,
+    nextYearGroup.weeks,
+    new Date(nextYearGroup.year, 0, 1)
+  );
 
   const weeklyTimetable = useMemo(() =>
     [...currentYearTimetable, ...nextYearTimetable]

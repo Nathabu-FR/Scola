@@ -419,14 +419,32 @@ const TasksView: React.FC = () => {
 
       {Platform.OS === "web" && (
         <View style={styles.webToolbar}>
-          <Pressable
-            accessibilityRole="button"
-            onPress={toggleWeekPicker}
-            style={[styles.webToolbarButton, { backgroundColor: colors.card }]}
-          >
-            <Papicons name="Calendar" size={18} color={colors.primary} />
-            <Typography variant="body2" weight="semibold">{weekLabel}</Typography>
-          </Pressable>
+          <View style={styles.webWeekControls}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Semaine précédente"
+              onPress={() => handlePickWeek(selectedWeek - 1)}
+              style={[styles.webWeekArrow, { backgroundColor: colors.card }]}
+            >
+              <Papicons name="ArrowLeft" size={18} color={colors.text} />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              onPress={toggleWeekPicker}
+              style={[styles.webToolbarButton, { backgroundColor: colors.card }]}
+            >
+              <Papicons name="Calendar" size={18} color={colors.primary} />
+              <Typography variant="body2" weight="semibold">{weekLabel}</Typography>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Semaine suivante"
+              onPress={() => handlePickWeek(selectedWeek + 1)}
+              style={[styles.webWeekArrow, { backgroundColor: colors.card }]}
+            >
+              <Papicons name="ArrowRight" size={18} color={colors.text} />
+            </Pressable>
+          </View>
           <Typography variant="title" weight="semibold">{settledLabels.main}</Typography>
           <Pressable
             accessibilityRole="button"
@@ -626,6 +644,18 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+  },
+  webWeekControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  webWeekArrow: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
   },
   webSortMenu: {
     position: "absolute",

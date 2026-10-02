@@ -26,6 +26,33 @@ const getTauriFetch = async (): Promise<TauriFetch | null> => {
 
 export const isTauriDesktop = () => isTauriWeb;
 
+let tauriFetchInstalled = false;
+let tauriFetchInstallPromise: Promise<void> | null = null;
+
+/**
+ * EcoleDirecte's SDK calls the global fetch() directly instead of going through
+ * appFetch(). On Tauri that would put the request back into the WebView and
+ * therefore back under browser CORS rules.
+ */
+export async function installTauriFetch(): Promise<void> {
+  if (!isTauriWeb || tauriFetchInstalled) return;
+
+  tauriFetchInstallPromise ??= (async () => {
+    const nativeFetch = await getTauriFetch();
+    if (!nativeFetch) {
+      throw new Error("Tauri HTTP indisponible : le client natif ne peut pas être installé.");
+    }
+
+    globalThis.fetch = nativeFetch as typeof globalThis.fetch;
+    if (typeof window !== "undefined") {
+      window.fetch = nativeFetch as typeof window.fetch;
+    }
+    tauriFetchInstalled = true;
+  })();
+
+  await tauriFetchInstallPromise;
+}
+
 /**
  * Uses Tauri's Rust HTTP client in the desktop WebView so school APIs are not
  * subject to browser CORS. Normal browsers keep the native Web Fetch API.

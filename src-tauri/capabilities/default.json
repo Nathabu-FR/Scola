@@ -44,6 +44,12 @@
         },
         {
           "url": "https://calendar.google.com/**"
+        },
+        {
+          "url": "https://*.index-education.net/**"
+        },
+        {
+          "url": "https://index-education.net/**"
         }
       ]
     }

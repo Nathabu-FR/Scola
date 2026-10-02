@@ -18,6 +18,11 @@ import { useWidgetSync } from '@/widgets';
 import { LogBox } from 'react-native';
 import { appFetch, isTauriDesktop } from "@/utils/network/fetch";
 
+// Keep the real WebView fetch available for URLs that are intentionally not
+// sent through Tauri's native HTTP transport.
+const browserFetch =
+  typeof window !== "undefined" ? window.fetch.bind(window) : globalThis.fetch;
+
 // Polyfill Buffer
 global.Buffer = Buffer;
 
@@ -68,7 +73,6 @@ export default function RootLayout() {
   }, [analyticsView]);
 
   useEffect(() => {
-    const originalFetch = window.fetch;
     let nativeFetchInProgress = false;
 
     const shouldUseTauriTransport = (url: string) => {
@@ -122,7 +126,7 @@ export default function RootLayout() {
           nativeFetchInProgress = false;
         }
       } else {
-        response = await originalFetch(...args);
+        response = await browserFetch(...args);
       }
 
       try {

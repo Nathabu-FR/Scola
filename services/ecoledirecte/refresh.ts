@@ -2,8 +2,10 @@ import { Client } from "@blockshub/blocksdirecte";
 
 import { useAccountStore } from "@/stores/account";
 import { Auth } from "@/stores/account/types";
+import { installTauriFetch } from "@/utils/network/fetch";
 
 export async function refreshEDAccount(accountId: string, credentials: Auth): Promise<{auth: Auth, account: Client }> {
+  await installTauriFetch();
   const client = new Client();
   await client.auth.refreshToken(
     credentials.additionals!["username"] as string,

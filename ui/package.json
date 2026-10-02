@@ -1,0 +1,8 @@
+{
+  "name": "scola-ui",
+  "version": "0.1.0",
+  "description": "The official Scola UI library",
+  "main": "./index.js",
+  "author": "Scola",
+  "license": "GPL-3.0-or-later"
+}

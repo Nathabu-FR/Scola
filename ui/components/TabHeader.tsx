@@ -1,0 +1,180 @@
+
+import { useTheme } from "expo-router/react-navigation";
+import { router } from "expo-router";
+import { Papicons } from "@getpapillon/papicons";
+import { ProgressiveBlurView } from '@sbaiahmed1/react-native-blur';
+import React, { useEffect } from 'react';
+import { Platform, Pressable, useWindowDimensions, View } from 'react-native';
+import Reanimated from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { runsIOS26 } from '../utils/IsLiquidGlass';
+import { TabHeaderTitleProps } from './TabHeaderTitle';
+import AndroidBackButton from '@/utils/theme/AndroidBackButton';
+import useResizable from "../utils/Resizable";
+
+
+interface TabHeaderProps {
+  onHeightChanged?: (height: number) => void,
+  title?: React.ReactElement<TabHeaderTitleProps>,
+  trailing?: React.ReactElement,
+  bottom?: React.ReactElement,
+  shouldCollapseHeader?: boolean,
+  modal?: boolean,
+  backgroundColor?: string,
+  showAndroidBackButton?: boolean,
+  backButtonColor?: string,
+};
+
+const TabHeader: React.FC<TabHeaderProps> = ({
+  onHeightChanged = () => { },
+  title,
+  trailing,
+  bottom,
+  shouldCollapseHeader,
+  modal,
+  backgroundColor,
+  showAndroidBackButton,
+  backButtonColor,
+}) => {
+  const isModal = Platform.OS === 'ios' ? modal : false;
+  const theme = useTheme();
+  const colors = theme.colors;
+  const insets = useSafeAreaInsets();
+  const [height, setHeight] = React.useState(0);
+  const usedInsets = isModal ? 16 : insets.top;
+  const { isLarge } = useResizable();
+
+  useEffect(() => {
+    onHeightChanged(height + (Platform.OS === 'android' ? 6 : 0));
+  }, [height]);
+
+  return (
+    <>
+      <Reanimated.View
+        style={[{
+          backgroundColor: runsIOS26 ? 'transparent' : backgroundColor || colors.background,
+          borderBottomWidth: (Platform.OS === 'ios' && !runsIOS26) ? 0.5 : 0,
+          borderBottomColor: (Platform.OS === 'ios' && !runsIOS26) ? colors.border : undefined,
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: height,
+          zIndex: 99,
+          overflow: Platform.OS === 'android' ? 'visible' : 'hidden',
+          elevation: 0,
+        }]}
+        pointerEvents={'none'}
+      >
+        {runsIOS26 && (
+          <ProgressiveBlurView
+            blurType="systemMaterial"
+            blurAmount={20}
+            direction="blurredTopClearBottom"
+            startOffset={0}
+            reducedTransparencyFallbackColor="#00000000"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: height - 20,
+              zIndex: 99,
+            }}
+          />
+        )}
+      </Reanimated.View>
+
+      <View
+        style={{
+          paddingTop: usedInsets + 4,
+          paddingBottom: 16,
+          position: 'absolute',
+          top: 0,
+          left: insets.left,
+          right: insets.right,
+          zIndex: 1001,
+          gap: 10,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+        onLayout={(event) => {
+          const { height } = event.nativeEvent.layout;
+          setHeight(height);
+        }}
+      >
+        <View
+          style={{
+            flex: 1,
+            flexDirection: 'row',
+            gap: 8,
+            paddingHorizontal: 16,
+            paddingLeft: isModal ? 24 : 16,
+            height: 40,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          {showAndroidBackButton && Platform.OS === 'web' && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Retour"
+              onPress={() => router.canGoBack() ? router.back() : router.replace("/")}
+              style={{ width: 36, height: 36, alignItems: "center", justifyContent: "center" }}
+            >
+              <Papicons name="ArrowLeft" size={22} color={backButtonColor || colors.primary} />
+            </Pressable>
+          )}
+          {showAndroidBackButton && Platform.OS === 'android' && (
+            <View style={{
+              marginTop: -2,
+            }}>
+              <AndroidBackButton />
+            </View>
+          )}
+
+          {title}
+
+          <View
+            style={{
+              flex: 1,
+              flexDirection: 'row',
+              gap: 8,
+              alignItems: 'center',
+              justifyContent: 'flex-end'
+            }}
+          >
+            {isLarge && (
+              <View
+                style={{
+                  maxWidth: 320,
+                  flex: 1,
+                  flexDirection: 'row',
+                  gap: 8,
+                  alignItems: 'center',
+                  justifyContent: 'flex-end',
+                }}
+              >
+                {bottom}
+              </View>
+            )}
+
+            {trailing}
+          </View>
+        </View>
+
+        <View
+          style={{
+            width: '100%',
+          paddingHorizontal: 16,
+          }}
+        >
+          {!isLarge && bottom}
+        </View>
+      </View>
+    </>
+  )
+};
+
+export default TabHeader;

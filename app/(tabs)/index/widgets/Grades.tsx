@@ -21,7 +21,10 @@ const GradesWidget = ({ history, averages }: GradesWidgetProps) => {
       <Averages
         compact
         history={history}
-        realAverage={averages.student?.value ?? averages.class?.value}
+        realAverage={averages.student?.value}
+        classAverage={averages.class?.value}
+        minimumAverage={averages.min?.value}
+        maximumAverage={averages.max?.value}
         displayScale={displayScale}
       />
     </View>

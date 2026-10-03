@@ -31,6 +31,8 @@ import { runsIOS26 } from '@/ui/utils/IsLiquidGlass';
 import i18n from '@/utils/i18n';
 
 import { AndroidHeaderButton, AndroidHeaderMenu } from '@/components/AndroidHeaderItems';
+import AndroidBackButton from '@/utils/theme/AndroidBackButton';
+import TasksSummary from './atoms/TasksSummary';
 
 import TasksWeekPage from './components/TasksWeekPage';
 import WeekPicker from './components/WeekPicker';
@@ -186,6 +188,22 @@ const TasksView: React.FC = () => {
 
   const hasHomeworkError = Boolean(homeworkError) || homeworkFailures.length > 0;
 
+  const currentWeekTaskCounts = useMemo(() => {
+    const seen = new Set<string>();
+    const items = (homeworkByWeek[selectedWeek] ?? []).filter(homework => {
+      const key = homework.id
+        ? `${homework.createdByAccount}:${homework.id}`
+        : `${homework.createdByAccount}:${homework.subject}:${homework.content}:${homework.dueDate.getTime()}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    return {
+      total: items.length,
+      remaining: items.filter(homework => !homework.isDone).length,
+    };
+  }, [homeworkByWeek, selectedWeek]);
+
   const {
     searchTerm,
     setSearchTerm,
@@ -211,7 +229,7 @@ const TasksView: React.FC = () => {
   // nothing in the header changes while a swipe is in flight.
   const [settledIndex, setSettledIndex] = useState(INITIAL_INDEX);
   const settledLabels = getWeekLabels(getWeekFromIndex(settledIndex), defaultWeek);
-  const weekLabel = settledLabels.relative ?? settledLabels.main;
+  const weekLabel = Platform.OS === "web" ? settledLabels.main : settledLabels.relative ?? settledLabels.main;
 
   // The pager's live position, in pixels away from the origin page. Pages are
   // laid out at their own fixed offsets and the row is translated by this, so
@@ -305,9 +323,9 @@ const TasksView: React.FC = () => {
   // its SwiftUI host not re-fed props, on every week crossing.
   const weekPickerAnchor = useMemo(() => ({
     top: runsIOS26 ? headerHeight : 0,
-    left: TOOLBAR_BUTTON_INSET,
-    width: TOOLBAR_BUTTON_SIZE,
-  }), [headerHeight]);
+    left: Platform.OS === "web" && screenWidth >= 960 ? 150 : TOOLBAR_BUTTON_INSET,
+    width: Platform.OS === "web" && screenWidth >= 960 ? 180 : TOOLBAR_BUTTON_SIZE,
+  }), [headerHeight, screenWidth]);
 
   // Stable across week crossings, so the tip's SwiftUI host is not re-fed props
   // every time the pager settles.
@@ -327,8 +345,39 @@ const TasksView: React.FC = () => {
     onSelectWeek(week);
   }, [getIndexFromWeek, onSelectWeek, INITIAL_INDEX, windowWidth, offsetX, pendingPage]);
 
+  const renderWebHeaderLeft = useCallback(() => (
+    <View style={styles.webHeaderLeading}>
+      <AndroidBackButton />
+      <Typography variant="header" weight="semibold" numberOfLines={1}>
+        {t("Tab_Tasks")}
+      </Typography>
+      <View style={styles.webHeaderWeekControls}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Semaine précédente" onPress={() => handlePickWeek(selectedWeek - 1)} style={[styles.webWeekArrow, { backgroundColor: colors.card }]}>
+          <Papicons name="ArrowLeft" size={17} color={colors.text} />
+        </Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Choisir ${weekLabel}`} onPress={toggleWeekPicker} style={[styles.webHeaderWeekButton, { backgroundColor: colors.card }]}>
+          <Papicons name="Calendar" size={17} color={colors.primary} />
+          <Typography variant="body2" weight="semibold" numberOfLines={1}>{weekLabel}</Typography>
+        </Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="Semaine suivante" onPress={() => handlePickWeek(selectedWeek + 1)} style={[styles.webWeekArrow, { backgroundColor: colors.card }]}>
+          <Papicons name="ArrowRight" size={17} color={colors.text} />
+        </Pressable>
+      </View>
+    </View>
+  ), [colors.card, colors.primary, colors.text, handlePickWeek, selectedWeek, toggleWeekPicker, weekLabel]);
+
+  const renderWebHeaderRight = useCallback(() => (
+    <Pressable accessibilityRole="button" accessibilityLabel={t("Task_Sorting_Title")} accessibilityState={{ expanded: showWebSortings }} onPress={() => setShowWebSortings(value => !value)} style={[styles.webHeaderSortButton, { backgroundColor: colors.card }]}>
+      <Papicons name="Filter" size={17} color={colors.primary} />
+      <Typography variant="body2" weight="semibold">{t("Task_Sorting_Title")}</Typography>
+    </Pressable>
+  ), [colors.card, colors.primary, showWebSortings]);
+
   return (
     <>
+      {Platform.OS === "web" && screenWidth >= 960 && (
+        <Stack.Screen options={{ headerTitle: "", headerBackVisible: false, headerLeft: renderWebHeaderLeft, headerRight: renderWebHeaderRight }} />
+      )}
       {isAndroid ? (
         <Stack.Toolbar placement="left" asChild>
           <AndroidHeaderButton icon="Calendar" accessibilityLabel={weekLabel} onPress={toggleWeekPicker} />
@@ -417,7 +466,7 @@ const TasksView: React.FC = () => {
         </Stack.Toolbar>
       ) : null}
 
-      {Platform.OS === "web" && (
+      {Platform.OS === "web" && screenWidth < 960 && (
         <View style={styles.webToolbar}>
           <View style={styles.webWeekControls}>
             <Pressable
@@ -458,7 +507,7 @@ const TasksView: React.FC = () => {
       )}
 
       {Platform.OS === "web" && showWebSortings && (
-        <View style={[styles.webSortMenu, { backgroundColor: colors.card }]}>
+        <View style={[styles.webSortMenu, { top: screenWidth >= 960 ? 8 : 54, backgroundColor: colors.card }]}>
           {sortings.map(sorting => (
             <Pressable
               key={sorting.value}
@@ -490,32 +539,38 @@ const TasksView: React.FC = () => {
           style={{ alignSelf: "center", marginTop: 8, marginBottom: 4 }}
         />
         {(Platform.OS === "web" || Platform.OS === "android") && (
-          <Pressable
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: showUndoneOnly }}
-            accessibilityLabel="Afficher uniquement les devoirs non terminés"
-            onPress={() => setShowUndoneOnly(value => !value)}
-            style={[
-              styles.desktopFilter,
-              {
-                borderColor: showUndoneOnly ? colors.primary : colors.border,
-                backgroundColor: showUndoneOnly ? `${colors.primary}18` : colors.card,
-                userSelect: "none",
-              },
-            ] as any}
-          >
-            {showUndoneOnly ? (
-              <Papicons name="Check" size={19} color={colors.primary} />
-            ) : (
-              <View style={[styles.uncheckedFilterIcon, { borderColor: colors.text + "88" }]} />
+          <View style={Platform.OS === "web" ? styles.webFilterSummaryRow : undefined}>
+            <Pressable
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: showUndoneOnly }}
+              accessibilityLabel="Afficher uniquement les devoirs non terminés"
+              onPress={() => setShowUndoneOnly(value => !value)}
+              style={[
+                styles.desktopFilter,
+                Platform.OS === "web" ? styles.webDesktopFilter : undefined,
+                {
+                  borderColor: showUndoneOnly ? colors.primary : colors.border,
+                  backgroundColor: showUndoneOnly ? `${colors.primary}18` : colors.card,
+                  userSelect: "none",
+                },
+              ] as any}
+            >
+              {showUndoneOnly ? (
+                <Papicons name="Check" size={19} color={colors.primary} />
+              ) : (
+                <View style={[styles.uncheckedFilterIcon, { borderColor: colors.text + "88" }]} />
+              )}
+              <Typography variant="body1" weight="semibold" selectable={false}>
+                Devoirs non terminés uniquement
+              </Typography>
+              <Typography variant="body2" color="textSecondary" style={{ marginLeft: "auto" }}>
+                {showUndoneOnly ? "Activé" : "Filtrer"}
+              </Typography>
+            </Pressable>
+            {Platform.OS === "web" && homeworkByWeek[selectedWeek] !== undefined && (
+              <TasksSummary inline totalCount={currentWeekTaskCounts.total} remainingCount={currentWeekTaskCounts.remaining} headerHeight={0} />
             )}
-            <Typography variant="body1" weight="semibold" selectable={false}>
-              Devoirs non terminés uniquement
-            </Typography>
-            <Typography variant="body2" color="textSecondary" style={{ marginLeft: "auto" }}>
-              {showUndoneOnly ? "Activé" : "Filtrer"}
-            </Typography>
-          </Pressable>
+          </View>
         )}
         <GestureDetector gesture={panGesture}>
           <Reanimated.View style={[styles.pager, rowStyle]}>
@@ -622,11 +677,54 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
   },
+  webFilterSummaryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginHorizontal: 16,
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  webDesktopFilter: {
+    flex: 1,
+    minWidth: 260,
+    marginHorizontal: 0,
+    marginTop: 0,
+    marginBottom: 0,
+  },
   uncheckedFilterIcon: {
     width: 18,
     height: 18,
     borderWidth: 2,
     borderRadius: 9,
+  },
+  webHeaderLeading: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  webHeaderWeekControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginLeft: 10,
+  },
+  webHeaderWeekButton: {
+    minHeight: 36,
+    paddingHorizontal: 10,
+    borderRadius: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    maxWidth: 170,
+  },
+  webHeaderSortButton: {
+    minHeight: 36,
+    paddingHorizontal: 12,
+    borderRadius: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   webToolbar: {
     minHeight: 48,

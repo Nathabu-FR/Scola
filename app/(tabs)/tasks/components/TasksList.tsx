@@ -116,7 +116,7 @@ const TasksList: React.FC<TasksListProps> = ({
       contentInsetAdjustmentBehavior="automatic"
       showsVerticalScrollIndicator={false}
       showsHorizontalScrollIndicator={false}
-      ListHeaderComponent={isLoaded ? (
+      ListHeaderComponent={isLoaded && Platform.OS !== "web" ? (
         <TasksSummary
           totalCount={totalHomeworkCount}
           remainingCount={remainingHomeworkCount}

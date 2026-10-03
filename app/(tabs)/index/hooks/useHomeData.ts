@@ -1,6 +1,5 @@
 import { router } from 'expo-router';
 import { t } from 'i18next';
-import { instance } from "@blockshub/pawnote-lts";
 import { useCallback, useEffect } from 'react';
 import { InteractionManager } from 'react-native';
 
@@ -12,7 +11,6 @@ import { getManager, initializeAccountManager, resetAccountManager } from "@/ser
 import { Services } from '@/stores/account/types';
 import { useSettingsStore } from '@/stores/settings';
 import { useAlert } from '@/ui/components/AlertProvider';
-import { getCurrentPeriod } from '@/utils/grades/helper/period';
 import { debug, warn } from '@/utils/logger/logger';
 import { setPendingPronoteChallenge } from '@/utils/pronote/challenge';
 import { useAccountStore } from '@/stores/account';
@@ -37,23 +35,6 @@ export const useHomeData = () => {
     const date = new Date();
     const weekNumber = getWeekNumberFromDate(date);
     await manager.getWeeklyTimetable(weekNumber, date);
-  }, []);
-
-  const fetchGrades = useCallback(async () => {
-    const manager = getManager();
-    if (!manager) {
-      warn('Manager is null, skipping grades fetch');
-      return;
-    }
-    const gradePeriods = await manager.getGradesPeriods();
-    if (gradePeriods.length === 0) {
-      return;
-    }
-    const currentPeriod = getCurrentPeriod(gradePeriods);
-
-    if (currentPeriod) {
-      await manager.getGradesForPeriod(currentPeriod, currentPeriod.createdByAccount);
-    }
   }, []);
 
   const initialize = useCallback(async () => {
@@ -96,7 +77,7 @@ export const useHomeData = () => {
       await initializeAccountManager(lastUsedAccount);
       debug("Refreshed Manager received");
 
-      await Promise.all([fetchEDT(), fetchGrades()]);
+      await fetchEDT();
       lastHomeSync.set(lastUsedAccount, Date.now());
 
       if (settingsstore.showAlertAtLogin) {
@@ -187,7 +168,9 @@ export const useHomeData = () => {
                 relinkDeviceUUID: String(error.service.auth?.additionals?.["deviceUUID"] ?? ""),
               };
 
-              const instanceInfo = await instance(authUrl as string).catch(() => null);
+              const instanceInfo = await import("@blockshub/pawnote-lts")
+                .then(({ instance }) => instance(authUrl as string))
+                .catch(() => null);
 
               return setTimeout(() => {
                 router.navigate({
@@ -221,7 +204,7 @@ export const useHomeData = () => {
         });
       }
     }
-  }, [alert, fetchEDT, fetchGrades, settingsstore.showAlertAtLogin, lastUsedAccount, removeAccount]);
+  }, [alert, fetchEDT, settingsstore.showAlertAtLogin, lastUsedAccount, removeAccount]);
 
   useEffect(() => {
     const task = InteractionManager.runAfterInteractions(() => {

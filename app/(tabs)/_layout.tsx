@@ -101,7 +101,7 @@ function DesktopTabLayout() {
   const visibleTabCount = ["home", "calendar", "tasks", "grades"].filter(
     tab => !disabledTabs.includes(tab)
   ).length;
-  const tabBarWidth = Math.max(320, visibleTabCount * 120);
+  const tabBarWidth = Math.max(288, visibleTabCount * 88 + 16);
 
   return (
     <Tabs
@@ -109,17 +109,17 @@ function DesktopTabLayout() {
         headerShown: false,
         tabBarActiveTintColor: theme.colors.tint,
         tabBarInactiveTintColor: theme.colors.text + '99',
-        tabBarLabelStyle: { fontFamily: font('medium'), fontSize: 13 },
+        tabBarLabelStyle: { fontFamily: font('medium'), fontSize: 12 },
         tabBarStyle: {
           // Keep the web tab bar in layout so long lists finish above it.
           alignSelf: 'center',
           width: tabBarWidth,
           maxWidth: '90%',
-          height: 64,
-          marginTop: 8,
-          marginBottom: 12,
-          paddingHorizontal: 6,
-          paddingVertical: 5,
+          height: 56,
+          marginTop: 6,
+          marginBottom: 10,
+          paddingHorizontal: 5,
+          paddingVertical: 4,
           borderRadius: 32,
           borderTopWidth: 0,
           backgroundColor: theme.dark ? '#191919ee' : '#ffffffe8',
@@ -128,11 +128,11 @@ function DesktopTabLayout() {
           elevation: 10,
         },
         tabBarItemStyle: {
-          marginHorizontal: 4,
-          marginVertical: 4,
-          borderRadius: 24,
+          marginHorizontal: 2,
+          marginVertical: 2,
+          borderRadius: 22,
         },
-        tabBarActiveBackgroundColor: theme.colors.text + (theme.dark ? '18' : '12'),
+        tabBarActiveBackgroundColor: theme.colors.tint + (theme.dark ? '25' : '16'),
       }}
     >
       <Tabs.Screen name="index" options={{ title: t('Tab_Home'), href: disabledTabs.includes('home') ? null : undefined, tabBarIcon: ({ color }) => <PapiconTabIcon name="Home" color={color} /> }} />
@@ -144,7 +144,7 @@ function DesktopTabLayout() {
 }
 
 function PapiconTabIcon({ name, color }: { name: string; color: string }) {
-  return <Papicons name={name as any} size={21} color={color} />;
+  return <Papicons name={name as any} size={19} color={color} />;
 }
 
 export default function TabLayout() {

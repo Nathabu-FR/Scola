@@ -90,12 +90,12 @@ const HomeScreen = () => {
   }, [account, allCachedHomeworks, homeworkByWeek]);
 
   const { currentPeriod } = usePeriodsData();
-  const { grades, history, averages } = useGradesData(currentPeriod);
+  const { grades, history, averages } = useGradesData(currentPeriod, Platform.OS === "web" ? { methods: ["subject"] } : undefined);
   const gradesWidgetHidden =
     grades.length === 0 &&
     !averages.student &&
     !averages.class &&
-    history.length === 0;
+    Object.values(history).every(points => !points || points.length === 0);
 
   const renderTimeTable = React.useCallback(() => <HomeTimeTableWidget />, []);
   const renderGrades = React.useCallback(

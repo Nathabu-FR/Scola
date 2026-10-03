@@ -1,4 +1,5 @@
 import { Platform } from "react-native";
+import { useTheme } from "expo-router/react-navigation";
 import AndroidBackButton from "./AndroidBackButton";
 import { useFont } from "./fonts";
 import React from "react";
@@ -6,9 +7,13 @@ import React from "react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const useScreenOptions = (): any => {
   const font = useFont();
+  const { colors } = useTheme();
 
   return React.useMemo(() => ({
     headerLargeTitle: false,
+    headerTitleAlign: Platform.OS === "web" ? "left" : undefined,
+    headerStyle: Platform.OS === "web" ? { backgroundColor: colors.background } : undefined,
+    headerShadowVisible: Platform.OS === "web" ? false : undefined,
     headerTransparent: Platform.OS === "ios" && parseInt(Platform.Version) >= 26,
     headerBackButtonDisplayMode:
       Platform.OS === "ios" && parseInt(Platform.Version) < 26
@@ -35,5 +40,5 @@ export const useScreenOptions = (): any => {
     } : undefined,
     headerLeft: (Platform.OS == 'android' || Platform.OS === 'web') ? () => <AndroidBackButton /> : undefined,
     headerBackVisible: (Platform.OS == 'android' || Platform.OS === 'web') ? false : undefined
-  }), [font]);
+  }), [font, colors.background]);
 };

@@ -92,6 +92,9 @@ const GRAPH_TIP_STYLE = { top: 76, left: 0, right: 0 } as const;
 interface AveragesProps {
   history: Partial<Record<AverageMethodKey, AverageHistoryPoint[]>>;
   realAverage?: number | null;
+  classAverage?: number | null;
+  minimumAverage?: number | null;
+  maximumAverage?: number | null;
   color?: ColorValue;
   displayScale?: GradeDisplayScale;
   // Home widget layout: graph on the left, a smaller readout on the right.
@@ -101,6 +104,7 @@ interface AveragesProps {
 const Averages = ({
   history,
   realAverage,
+  classAverage,
   color,
   displayScale = "20",
   compact = false,
@@ -382,6 +386,17 @@ const Averages = ({
             <View style={{ flex: 1, paddingVertical: 14, paddingRight: 16, paddingLeft: 12, gap: 1 }}>
               {renderAverage()}
               {renderLabel()}
+              {classAverage !== null && classAverage !== undefined && (
+                <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", marginTop: 3 }}>
+                  <Typography variant="caption" color="textSecondary">{t("Grades_Avg_Class_Title", "Moyenne de classe")}</Typography>
+                  <View style={{ flexDirection: "row", alignItems: "baseline", gap: 3 }}>
+                    <Typography variant="body2" weight="semibold" style={{ color: adjustedColor }}>
+                      {toDisplayScaleFrom20(classAverage, displayScale).toFixed(2)}
+                    </Typography>
+                    <Typography variant="caption" color="textSecondary">{getDisplayDenominator(displayScale)}</Typography>
+                  </View>
+                </View>
+              )}
             </View>
           </View>
 
@@ -417,6 +432,17 @@ const Averages = ({
           {renderAverage()}
 
           {renderLabel()}
+          {classAverage !== null && classAverage !== undefined && (
+            <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", marginTop: 6 }}>
+              <Typography variant="body2" color="textSecondary">{t("Grades_Avg_Class_Title", "Moyenne de classe")}</Typography>
+              <View style={{ flexDirection: "row", alignItems: "baseline", gap: 3 }}>
+                <Typography variant="body2" weight="semibold" style={{ color: adjustedColor }}>
+                  {toDisplayScaleFrom20(classAverage, displayScale).toFixed(2)}
+                </Typography>
+                <Typography variant="caption" color="textSecondary">{getDisplayDenominator(displayScale)}</Typography>
+              </View>
+            </View>
+          )}
         </View>
 
         {sheet}

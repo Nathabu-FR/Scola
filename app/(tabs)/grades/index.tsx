@@ -247,7 +247,15 @@ const GradesView = () => {
                   marginRight: -contentPaddingRight,
                 }}>
                 <View style={{ paddingLeft: contentPaddingLeft, paddingRight: contentPaddingRight }}>
-                  <Averages history={history} realAverage={isAverageServiceProvided ? averages.student?.value : undefined} color={theme.colors.primary} displayScale={displayScale} />
+                  <Averages
+                    history={history}
+                    realAverage={isAverageServiceProvided ? averages.student?.value : undefined}
+                    classAverage={averages.class?.value}
+                    minimumAverage={averages.min?.value}
+                    maximumAverage={averages.max?.value}
+                    color={theme.colors.primary}
+                    displayScale={displayScale}
+                  />
                 </View>
 
                 <FlatList

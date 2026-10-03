@@ -29,6 +29,14 @@ jobs:
           cache: npm
           cache-dependency-path: package.json
 
+      - name: Restore Node dependency tree
+        id: node-modules-cache
+        uses: actions/cache/restore@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: node_modules
+          key: windows-node24-${{ hashFiles('package.json', 'patches/**') }}
+          restore-keys: windows-node24-
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
@@ -39,12 +47,44 @@ jobs:
           cache-on-failure: true
 
       - name: Install app dependencies
+        if: steps.node-modules-cache.outputs.cache-hit != 'true'
         run: npm install --legacy-peer-deps
 
+      - name: Save Node dependency tree
+        if: steps.node-modules-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: node_modules
+          key: windows-node24-${{ hashFiles('package.json', 'patches/**') }}
+
+      - name: Restore Expo Metro transform cache
+        id: metro-cache
+        uses: actions/cache/restore@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: ${{ runner.temp }}/expo-metro-restore
+          key: windows-metro-${{ hashFiles('package.json', 'app.config.ts', 'babel.config.js', 'metro.config.js', 'patches/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: windows-metro-${{ hashFiles('package.json', 'app.config.ts', 'babel.config.js', 'metro.config.js', 'patches/**') }}-
+
+      - name: Prepare Metro cache directories
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\expo-metro-restore" | Out-Null
+          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\expo-metro-output" | Out-Null
+
       - name: Export web bundle
+        id: export-web
         run: npx expo export --platform web
         env:
           SCOLA_TARGET: desktop
+          EXPO_METRO_CACHE_RESTORE_DIR: ${{ runner.temp }}\expo-metro-restore
+          EXPO_METRO_CACHE_OUTPUT_DIR: ${{ runner.temp }}\expo-metro-output
+
+      - name: Save Expo Metro transform cache
+        if: steps.export-web.outcome == 'success'
+        uses: actions/cache/save@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: ${{ runner.temp }}/expo-metro-output
+          key: windows-metro-${{ hashFiles('package.json', 'app.config.ts', 'babel.config.js', 'metro.config.js', 'patches/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Check source for unsafe web ExpoUI imports
         run: npm run check:web-native-imports

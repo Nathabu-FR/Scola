@@ -27,7 +27,7 @@ import {
   toDisplayScaleFrom20,
 } from "@/utils/grades/scale";
 
-import { calculateAmplifiedGraphPoints, GraphPoint } from "../utils/graph";
+import { calculateAmplifiedGraphPoints, calculateGraphPoints, GraphPoint } from "../utils/graph";
 import type { AverageHistoryPoint, AverageMethodKey } from "../hooks/useGradesData";
 import ActionMenu from "@/ui/components/ActionMenu";
 
@@ -166,12 +166,26 @@ const Averages = ({
     }, [active]);
 
     const graphAxis = useMemo<GraphPoint[]>(() => {
-      const points = calculateAmplifiedGraphPoints(currentAverageHistory, getDisplayScaleMax(displayScale));
+      const points = compact
+        ? calculateGraphPoints(currentAverageHistory)
+        : calculateAmplifiedGraphPoints(currentAverageHistory, getDisplayScaleMax(displayScale));
       points.forEach(item => {
         item.value = Math.round(item.value * 100) / 100;
       });
       return points;
-    }, [currentAverageHistory, displayScale]);
+    }, [compact, currentAverageHistory, displayScale]);
+
+    const compactGraphRange = useMemo(() => {
+      if (!compact || graphAxis.length === 0) return undefined;
+      const values = graphAxis.map(point => point.value);
+      const scaleMax = getDisplayScaleMax(displayScale);
+      const padding = 0.75;
+      const min = Math.max(0, Math.min(...values) - padding);
+      const max = Math.min(scaleMax, Math.max(...values) + padding);
+      return {
+        y: max > min ? { min, max } : { min: 0, max: scaleMax },
+      };
+    }, [compact, displayScale, graphAxis]);
 
     const displayedRealAverage = useMemo(() => {
       if (realAverage === undefined || realAverage === null) { return undefined; }
@@ -195,14 +209,15 @@ const Averages = ({
     const graph = graphAxis.length > 0 ? (
       <LineGraph
         points={graphAxis}
+        range={compactGraphRange}
         animated
         color={adjustedColor}
         enablePanGesture
         onPointSelected={handleGestureUpdate}
         onGestureEnd={handleGestureEnd}
-        verticalPadding={compact ? 16 : 24}
-        horizontalPadding={32}
-        lineThickness={4}
+        verticalPadding={compact ? 8 : 24}
+        horizontalPadding={compact ? 20 : 32}
+        lineThickness={compact ? 2.5 : 4}
         panGestureDelay={0}
         indicatorPulsating
         enableIndicator
@@ -287,7 +302,7 @@ const Averages = ({
           >
             <SwiftUIText
               modifiers={[
-                font({ family: papillonFont("semibold"), size: compact ? 26 : 36 }),
+                font({ family: papillonFont("semibold"), size: compact ? 24 : 36 }),
                 contentTransition("numericText"),
                 animation(Animation.default, shownAverage),
                 foregroundStyle(adjustedColor),
@@ -379,7 +394,7 @@ const Averages = ({
       return (
         <View style={{ overflow: "hidden" }}>
           <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <View style={{ width: '40%', height: 72 }}>
+            <View style={{ width: '38%', height: 58 }}>
               {graph}
             </View>
 

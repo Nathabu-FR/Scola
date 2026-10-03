@@ -120,7 +120,19 @@ export function useHomeworkForWeeks(weekNumbers: number[], refresh = 0) {
           Q.where("dueDate", Q.between(start.getTime(), end.getTime())),
           Q.where("createdByAccount", Q.oneOf(sourceIds))
         )
-        .observe()
+        .observeWithColumns([
+          "homeworkId",
+          "subject",
+          "content",
+          "dueDate",
+          "isDone",
+          "returnFormat",
+          "attachments",
+          "evaluation",
+          "custom",
+          "createdByAccount",
+          "kidName",
+        ])
         .subscribe(records => {
           if (cancelled) return;
           const list = records
@@ -164,7 +176,19 @@ export function useAllHomeworkFromCache(options: { upcomingOnly?: boolean } = {}
         : [])
     );
     const subscription = query
-      .observe()
+      .observeWithColumns([
+        "homeworkId",
+        "subject",
+        "content",
+        "dueDate",
+        "isDone",
+        "returnFormat",
+        "attachments",
+        "evaluation",
+        "custom",
+        "createdByAccount",
+        "kidName",
+      ])
       .subscribe(records => {
         setHomeworks(
           records
@@ -457,9 +481,13 @@ export function parseJsonArray(s: string): unknown[] {
 }
 
 export function getWeekNumberFromDate(date: Date): number {
-  const startOfYear = new Date(date.getFullYear(), 0, 1);
-  const days = Math.floor(
-    (date.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24)
+  const firstWeekStart = getDateRangeOfWeek(1, date.getFullYear()).start;
+  const startDay = Date.UTC(
+    firstWeekStart.getFullYear(),
+    firstWeekStart.getMonth(),
+    firstWeekStart.getDate()
   );
-  return Math.ceil((days + startOfYear.getDay() + 1) / 7);
+  const dateDay = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+  const days = Math.floor((dateDay - startDay) / (7 * 24 * 60 * 60 * 1000));
+  return days + 1;
 }

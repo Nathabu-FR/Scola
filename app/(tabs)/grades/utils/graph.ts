@@ -10,13 +10,8 @@ export interface AverageHistoryItem {
   date: Date | string;
 }
 
-export const calculateAmplifiedGraphPoints = (
-  currentAverageHistory: AverageHistoryItem[],
-  scale: number
-): GraphPoint[] => {
-  if (!currentAverageHistory) { return []; }
-
-  const points = currentAverageHistory
+const getHistoryPoints = (history: AverageHistoryItem[]): GraphPoint[] =>
+  history
     .filter(item => !isNaN(item.average) && item.average !== null && item.average !== undefined)
     .map(item => ({
       value: item.average,
@@ -24,6 +19,29 @@ export const calculateAmplifiedGraphPoints = (
       originalValue: item.average,
       originalDate: new Date(item.date)
     }));
+
+const compressPointSpacing = (points: GraphPoint[]): GraphPoint[] => {
+  if (points.length === 0) return [];
+  const firstDate = points[0].date.getTime();
+  const compressedSpacing = 86400000 * 0.5;
+
+  return points.map((point, index) => ({
+    ...point,
+    date: new Date(firstDate + index * compressedSpacing),
+  }));
+};
+
+export const calculateGraphPoints = (
+  currentAverageHistory: AverageHistoryItem[]
+): GraphPoint[] => compressPointSpacing(getHistoryPoints(currentAverageHistory));
+
+export const calculateAmplifiedGraphPoints = (
+  currentAverageHistory: AverageHistoryItem[],
+  scale: number
+): GraphPoint[] => {
+  if (!currentAverageHistory) { return []; }
+
+  const points = getHistoryPoints(currentAverageHistory);
 
   if (points.length === 0) return [];
 
@@ -107,13 +125,8 @@ export const calculateAmplifiedGraphPoints = (
     }
   }
 
-  const firstDate = points[0].date.getTime();
-  const DAY_MS = 86400000;
-  const COMPRESSED_SPACING = DAY_MS * 0.50;
-
-  return finalPoints.map((p, index) => ({
-    ...p,
-    value: Math.round(p.value * 100) / 100,
-    date: new Date(firstDate + (index * COMPRESSED_SPACING))
+  return compressPointSpacing(finalPoints).map(point => ({
+    ...point,
+    value: Math.round(point.value * 100) / 100,
   }));
 };

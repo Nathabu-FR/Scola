@@ -35,10 +35,8 @@ export const getWeekIndexOfDate = (date: Date) =>
   1 + Math.floor(daysBetween(getWeekRange(1).start, date) / 7);
 
 /**
- * The week we are in. Derived from the week ranges themselves rather than from
- * `getWeekNumberFromDate`, which counts weeks as starting on Sunday and so
- * names the *next* week for any Sunday. The title, the pager's origin and the
- * picker all read this, so they cannot drift apart.
+ * The week we are in. Derived from the same Monday-aligned week ranges as the
+ * pager and homework cache, so the title, pager origin, and picker stay aligned.
  */
 export const getCurrentWeekIndex = () => getWeekIndexOfDate(new Date());
 

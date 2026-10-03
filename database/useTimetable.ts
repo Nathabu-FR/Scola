@@ -86,7 +86,24 @@ export function useTimetable(refresh = 0, weekNumber: number | number[] = 0, dat
     const courseSubscription = database
       .get('courses')
       .query(Q.where('from', Q.between(start.getTime(), end.getTime())))
-      .observe()
+      .observeWithColumns([
+        'createdByAccount',
+        'kidName',
+        'courseId',
+        'subject',
+        'type',
+        'from',
+        'to',
+        'additionalInfo',
+        'room',
+        'teacher',
+        'group',
+        'backgroundColor',
+        'status',
+        'customStatus',
+        'resourceId',
+        'url',
+      ])
       .subscribe(fetchTimetable);
     const icalSubscription = database.get('icals').query().observe().subscribe(fetchTimetable);
 

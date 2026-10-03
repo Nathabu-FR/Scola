@@ -87,11 +87,7 @@ export function useCalendarState() {
   // Sync FlatList with date
   useEffect(() => {
     const newIndex = getIndexFromDate(date);
-    let newWeekNumber = getWeekNumberFromDate(date);
-
-    if (date.getDay() === 0) {
-      newWeekNumber += 1;
-    }
+    const newWeekNumber = getWeekNumberFromDate(date);
 
     if (newIndex !== currentIndex) {
       setCurrentIndex(newIndex);

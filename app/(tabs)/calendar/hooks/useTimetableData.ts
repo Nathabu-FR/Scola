@@ -21,6 +21,7 @@ export function useTimetableData(weekNumber: number, currentDate: Date = new Dat
   // Weeks are fetched once per session; a ref keeps a swipe back and forth from
   // re-running the effect that starts the fetch.
   const fetchedWeeks = useRef<Set<string>>(new Set());
+  const inFlightWeeks = useRef<Set<string>>(new Set());
 
   const [manager, setManager] = useState(() => getManager(true));
 
@@ -72,26 +73,34 @@ export function useTimetableData(weekNumber: number, currentDate: Date = new Dat
           const targetDate = new Date(safeDate);
           targetDate.setDate(targetDate.getDate() + (week - targetWeekNumber) * 7);
           const year = targetDate.getFullYear();
-          const key = `${year}-${week}`;
+          const key = `${lastUsedAccount}:${year}-${week}`;
           return { week, targetDate, key };
         });
 
-        const toFetch = forceRefresh
-          ? candidates
-          : candidates.filter(c => !fetchedWeeks.current.has(c.key));
+        const toFetch = candidates.filter(c =>
+          !inFlightWeeks.current.has(c.key) &&
+          (forceRefresh || !fetchedWeeks.current.has(c.key))
+        );
 
         if (toFetch.length > 0) {
-          await Promise.all(
-            toFetch.map((c) => {
-              return managerToUse.getWeeklyTimetable(c.week, c.targetDate)
-            })
-          );
+          toFetch.forEach(candidate => inFlightWeeks.current.add(candidate.key));
+          try {
+            const results = await Promise.allSettled(
+              toFetch.map(candidate =>
+                managerToUse.getWeeklyTimetable(candidate.week, candidate.targetDate)
+              )
+            );
+            const rejected = results.find(result => result.status === "rejected");
+            if (rejected?.status === "rejected") throw rejected.reason;
 
-          if (useAccountStore.getState().lastUsedAccount !== managerToUse.getAccount().id) return;
+            if (useAccountStore.getState().lastUsedAccount !== managerToUse.getAccount().id) return;
 
-          setRefresh(prev => prev + 1);
-          for (const candidate of toFetch) {
-            fetchedWeeks.current.add(candidate.key);
+            setRefresh(prev => prev + 1);
+            for (const candidate of toFetch) {
+              fetchedWeeks.current.add(candidate.key);
+            }
+          } finally {
+            toFetch.forEach(candidate => inFlightWeeks.current.delete(candidate.key));
           }
         }
 

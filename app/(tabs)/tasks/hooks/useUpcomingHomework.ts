@@ -29,9 +29,7 @@ export type UpcomingHomework = {
 export const useUpcomingHomework = (weekCount = DEFAULT_WEEK_COUNT): UpcomingHomework => {
   const database = useDatabase();
   const [refresh, setRefresh] = useState(0);
-  // `getCurrentWeekIndex`, not `getWeekNumberFromDate`: the latter counts weeks
-  // from Sunday and so names the next one on a Sunday. This is the numbering the
-  // tasks screen, its pager and the homework cache all share.
+  // Use the same Monday-aligned week index as the tasks pager and homework cache.
   const [currentWeek] = useState(() => getCurrentWeekIndex());
 
   const weeks = useMemo(

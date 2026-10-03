@@ -119,18 +119,22 @@ function DesktopTabLayout() {
           marginTop: 6,
           marginBottom: 10,
           paddingHorizontal: 5,
-          paddingVertical: 4,
+          paddingVertical: 3,
           borderRadius: 32,
           borderTopWidth: 0,
           backgroundColor: theme.dark ? '#191919ee' : '#ffffffe8',
+          borderWidth: 1,
+          borderColor: theme.dark ? '#ffffff12' : '#00000010',
           shadowOpacity: 0.18,
           shadowRadius: 18,
           elevation: 10,
         },
         tabBarItemStyle: {
-          marginHorizontal: 2,
-          marginVertical: 2,
-          borderRadius: 22,
+          flex: 1,
+          minWidth: 0,
+          marginHorizontal: 1,
+          marginVertical: 1,
+          borderRadius: 20,
         },
         tabBarActiveBackgroundColor: theme.colors.tint + (theme.dark ? '25' : '16'),
       }}
@@ -144,7 +148,7 @@ function DesktopTabLayout() {
 }
 
 function PapiconTabIcon({ name, color }: { name: string; color: string }) {
-  return <Papicons name={name as any} size={19} color={color} />;
+  return <Papicons name={name as any} size={18} color={color} />;
 }
 
 export default function TabLayout() {

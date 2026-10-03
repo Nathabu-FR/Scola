@@ -96,12 +96,12 @@ export async function addGradesToDatabase(grades: SharedGrade[], subject: string
             correctionFile: JSON.stringify(item.correctionFile),
             bonus: item.bonus,
             optional: item.optional,
-            outOf: JSON.stringify(item.outOf),
+            outOfRaw: JSON.stringify(item.outOf),
             coefficient: item.coefficient,
-            studentScore: JSON.stringify(item.studentScore),
-            averageScore: JSON.stringify(item.averageScore),
-            minScore: JSON.stringify(item.minScore),
-            maxScore: JSON.stringify(item.maxScore)
+            studentScoreRaw: JSON.stringify(item.studentScore),
+            averageScoreRaw: JSON.stringify(item.averageScore),
+            minScoreRaw: JSON.stringify(item.minScore),
+            maxScoreRaw: JSON.stringify(item.maxScore)
           })
         })
       }, 10000, 'addGradesToDatabase')
@@ -195,11 +195,11 @@ export async function addPeriodGradesToDatabase(item: SharedPeriodGrades, period
             bonus: grade.bonus ?? false,
             optional: grade.optional ?? false,
             coefficient: grade.coefficient ?? 1,
-            outOf: JSON.stringify(grade.outOf ?? {}),
-            studentScore: JSON.stringify(grade.studentScore ?? {}),
-            averageScore: JSON.stringify(grade.averageScore ?? {}),
-            minScore: JSON.stringify(grade.minScore ?? {}),
-            maxScore: JSON.stringify(grade.maxScore ?? {}),
+            outOfRaw: JSON.stringify(grade.outOf ?? {}),
+            studentScoreRaw: JSON.stringify(grade.studentScore ?? {}),
+            averageScoreRaw: JSON.stringify(grade.averageScore ?? {}),
+            minScoreRaw: JSON.stringify(grade.minScore ?? {}),
+            maxScoreRaw: JSON.stringify(grade.maxScore ?? {}),
           });
         }));
       }

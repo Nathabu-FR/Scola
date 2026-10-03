@@ -74,7 +74,7 @@ const HomeScreen = () => {
     return [...new Set(weeks)];
   }, []);
   const { homeworkByWeek, setAsDone: setHomeworkAsDone } = useHomeworkData(homeworkWeeks, alert);
-  const allCachedHomeworks = useAllHomeworkFromCache();
+  const allCachedHomeworks = useAllHomeworkFromCache({ upcomingOnly: true });
   const urgentHomeworks = React.useMemo(() => {
     const serviceIds = account?.services.map(service => service.id) ?? [];
     const candidates = [...allCachedHomeworks, ...Object.values(homeworkByWeek).flat()];

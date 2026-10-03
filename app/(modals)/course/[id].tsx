@@ -90,7 +90,10 @@ export default function CourseModal() {
     if (activeTab !== "content") return;
 
     if (!course?.resourceId) {
-      setSessionContents([]);
+      const fallback = course?.additionalInfo?.trim()
+        ? [{ title: "Informations de séance", description: course.additionalInfo, category: 0, attachments: [] }]
+        : [];
+      setSessionContents(fallback);
       setLoadingContents(false);
       setContentsError(false);
       return;
@@ -104,7 +107,12 @@ export default function CourseModal() {
       try {
         const manager = getManager(true) ?? await initializeAccountManager();
         const contents = await manager.getCourseResources(course);
-        if (!cancelled) setSessionContents(contents);
+        if (!cancelled) {
+          const fallback = course.additionalInfo?.trim()
+            ? [{ title: "Informations de séance", description: course.additionalInfo, category: 0, attachments: [] }]
+            : [];
+          setSessionContents(contents.length > 0 ? contents : fallback);
+        }
       } catch {
         if (!cancelled) {
           setSessionContents([]);
@@ -447,11 +455,7 @@ export default function CourseModal() {
                 </Typography>
               </List.Item>
             ) : sessionContents.map((resource, index) => {
-              const description = (resource.description ?? "")
-                .replace(/<br\s*\/?\s*>/gi, "\n")
-                .replace(/<[^>]+>/g, " ")
-                .replace(/&nbsp;/g, " ")
-                .trim();
+              const description = readableCourseText(resource.description ?? "");
 
               return (
                 <View key={`${resource.title ?? resource.category}-${index}`} style={{ gap: 4, marginBottom: 12 }}>
@@ -459,11 +463,16 @@ export default function CourseModal() {
                     {resource.title || `Séance ${index + 1}`}
                   </Typography>
                   {description ? (
-                    <Typography variant="body1" color="textSecondary">
+                    <Typography
+                      variant="body1"
+                      color="textSecondary"
+                      selectable
+                      style={{ minWidth: 0, flexShrink: 1, lineHeight: 22 }}
+                    >
                       {description}
                     </Typography>
                   ) : null}
-                  {resource.attachments.map((attachment, attachmentIndex) => (
+                  {(resource.attachments ?? []).map((attachment, attachmentIndex) => (
                     <List.Item
                       key={`${attachment.url}-${attachmentIndex}`}
                       onPress={() => openAttachment(attachment)}
@@ -471,10 +480,19 @@ export default function CourseModal() {
                       <List.Leading>
                         <Icon><Papicons name={getAttachmentIcon(attachment)} /></Icon>
                       </List.Leading>
-                      <Typography variant="title" numberOfLines={1}>
-                        {attachment.name || attachment.url}
+                      <Typography
+                        variant="title"
+                        selectable
+                        style={{ minWidth: 0, flexShrink: 1, ...(Platform.OS === "web" ? { overflowWrap: "anywhere" } : {}) }}
+                      >
+                        {attachment.name || attachment.url || "Document de séance"}
                       </Typography>
-                      <Typography variant="body1" color="textSecondary" numberOfLines={1}>
+                      <Typography
+                        variant="body1"
+                        color="textSecondary"
+                        selectable
+                        style={{ minWidth: 0, flexShrink: 1, ...(Platform.OS === "web" ? { overflowWrap: "anywhere" } : {}) }}
+                      >
                         {attachment.url}
                       </Typography>
                     </List.Item>
@@ -487,4 +505,33 @@ export default function CourseModal() {
       </List>
     </View>
   );
+}
+
+function readableCourseText(value: string): string {
+  return value
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
+    .replace(/<!--([\s\S]*?)-->/g, " ")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(?:p|div|li|h[1-6]|tr|blockquote)>/gi, "\n")
+    .replace(/<li\b[^>]*>/gi, "• ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;|&#160;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&#(\d+);/g, (match, value: string) => decodeCodePoint(match, Number(value)))
+    .replace(/&#x([\da-f]+);/gi, (match, value: string) => decodeCodePoint(match, parseInt(value, 16)))
+    .replace(/[\t ]+\n/g, "\n")
+    .replace(/\n[\t ]+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function decodeCodePoint(original: string, value: number): string {
+  return Number.isInteger(value) && value >= 0 && value <= 0x10ffff
+    ? String.fromCodePoint(value)
+    : original;
 }

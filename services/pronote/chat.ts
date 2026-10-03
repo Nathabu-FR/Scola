@@ -3,26 +3,16 @@ import {
   discussionRecipients,
   discussions,
   discussionSendMessage,
+  DiscussionMessage,
   EntityKind,
   newDiscussion,
   NewDiscussionRecipient,
   newDiscussionRecipients,
   SessionHandle,
-  TabLocation,
 } from "@blockshub/pawnote-lts";
 
 import { Chat, Message, Recipient } from "@/services/shared/chat";
 import { error } from "@/utils/logger/logger";
-
-function getDiscussionTab(session: SessionHandle, from: string) {
-  const tab = session.user.resources
-    .find(resource => resource.tabs?.has(TabLocation.Discussions))
-    ?.tabs?.get(TabLocation.Discussions);
-  if (!tab) {
-    throw error("Chat tab not found in session", from);
-  }
-  return tab;
-}
 
 export async function fetchPronoteChats(
   session: SessionHandle,
@@ -51,8 +41,6 @@ export async function fetchPronoteChatRecipients(
   if (!session) {
     throw error("Session is undefined", "fetchPronoteChatRecipients");
   }
-
-  getDiscussionTab(session, "fetchPronoteChatRecipients");
 
   if (!chat.ref) {
     throw error("Chat reference is undefined", "fetchPronoteChatRecipients");
@@ -83,8 +71,6 @@ export async function fetchPronoteChatMessages(
     throw error("Session is undefined", "fetchPronoteChatMessages");
   }
 
-  getDiscussionTab(session, "fetchPronoteChatMessages");
-
   if (!chat.ref) {
     throw error("Chat reference is undefined", "fetchPronoteChatMessages");
   }
@@ -96,7 +82,23 @@ export async function fetchPronoteChatMessages(
   const messages = await discussionMessages(session, chat.ref, true)
   const studentName = session.user.resources.find(resource => resource.name)?.name ?? session.user.name;
 
-  return (Array.isArray(messages.sents) ? messages.sents : []).map((message) => {
+  // PRONOTE stores a reply chain on each sent item. The actual incoming
+  // message is often nested under `replyingTo` (and forwarded messages under
+  // `transferredMessages`), so reading only `sents` produced an empty thread.
+  const threadMessages = new Map<string, DiscussionMessage>();
+  for (const sent of Array.isArray(messages.sents) ? messages.sents : []) {
+    for (const message of [
+      ...(Array.isArray(sent.transferredMessages) ? sent.transferredMessages : []),
+      ...(sent.replyingTo ? [sent.replyingTo] : []),
+      sent,
+    ]) {
+      if (message?.id) threadMessages.set(message.id, message);
+    }
+  }
+
+  return [...threadMessages.values()]
+    .sort((a, b) => a.creationDate.getTime() - b.creationDate.getTime())
+    .map((message) => {
     return {
       id: message.id,
       subject: "",
@@ -122,8 +124,6 @@ export async function sendPronoteMessageInChat(
     throw error("Session is undefined", "sendPronoteMessageInChat");
   }
 
-  getDiscussionTab(session, "sendPronoteMessageInChat");
-
   if (!chat.ref) {
     throw error("Chat reference is undefined", "sendPronoteMessageInChat");
   }
@@ -141,8 +141,6 @@ export async function fetchPronoteRecipients(
   if (!session) {
     throw error("Session is undefined", "fetchPronoteRecipients");
   }
-
-  getDiscussionTab(session, "fetchPronoteRecipients");
 
   const recipientsByKind = await Promise.all([
     newDiscussionRecipients(session, EntityKind.Teacher),

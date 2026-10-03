@@ -2,7 +2,6 @@ import {
   parseTimetable,
   resource,
   SessionHandle,
-  TabLocation,
   TimetableClassActivity,
   TimetableClassDetention,
   TimetableClassLesson,
@@ -114,13 +113,6 @@ export async function fetchPronoteCourseResources(
     throw error("Session is undefined", "fetchPronoteCourseResources");
   }
 
-  const timetableTab = session.user.resources.find(resource =>
-    resource.tabs?.has(TabLocation.Timetable)
-  )?.tabs.get(TabLocation.Timetable);
-  if (!timetableTab) {
-    return [];
-  }
-
   if (!course.resourceId) {
     return [];
   }
@@ -131,7 +123,7 @@ export async function fetchPronoteCourseResources(
   return resources.map(r => ({
     title: r.title,
     description: r.description,
-    category: r.category,
+    category: r.category ?? 0,
     attachments: (Array.isArray(r.files) ? r.files : []).map(a => ({
       type: a.kind,
       name: a.name,

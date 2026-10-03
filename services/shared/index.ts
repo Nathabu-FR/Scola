@@ -49,7 +49,7 @@ import {
 import { Chat, Message, Recipient } from "@/services/shared/chat";
 import { Period, PeriodGrades } from "@/services/shared/grade";
 import { Homework } from "@/services/shared/homework";
-import { News } from "@/services/shared/news";
+import { News, NewsSurveyAnswers } from "@/services/shared/news";
 import { Course, CourseDay, CourseResource } from "@/services/shared/timetable";
 import {
   Capabilities,
@@ -451,6 +451,19 @@ export class AccountManager {
           ? await client.setNewsAsAcknowledged(news)
           : news,
       { multiple: false, clientId: news.createdByAccount }
+    );
+  }
+
+  async answerNewsSurvey(news: News, answers: NewsSurveyAnswers): Promise<void> {
+    return await this.fetchData(
+      Capabilities.NEWS,
+      async client => {
+        if (!client.answerNewsSurvey) {
+          throw new Error("Les réponses aux sondages ne sont pas prises en charge par ce service scolaire.");
+        }
+        await client.answerNewsSurvey(news, answers);
+      },
+      { clientId: news.createdByAccount }
     );
   }
 

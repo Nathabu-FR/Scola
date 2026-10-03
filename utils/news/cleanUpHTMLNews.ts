@@ -73,10 +73,9 @@ export const cleanHtmlForArticle = (htmlString: string): string => {
         }
     });
 
-    // 7. Final cleanup for a **single line**: replace specialDelimiter with an empty string.
-    // This removes all delimiters, resulting in a continuous single line of HTML.
+    // Keep paragraph/list boundaries. Removing these breaks made long news
+    // posts render as one run-on line and hid their original structure.
     return finalHtml.trim()
-        .replace(new RegExp(specialDelimiter + '+$'), '') // Remove trailing delimiters
-        .replace(new RegExp(`${specialDelimiter}+`, 'g'), '') // **KEY CHANGE:** Replace all remaining delimiters with an empty string
-        .replace(/\s+/g, ' '); // **Optional:** Collapse all remaining whitespace (including spaces between tags) to a single space for maximum compression.
+        .replace(/(?:<br\s*\/?\s*>\s*){2,}/gi, '<br />')
+        .replace(/(?:<br\s*\/?\s*>\s*)+$/gi, '');
 };

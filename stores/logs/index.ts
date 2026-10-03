@@ -1,10 +1,18 @@
 import { create } from 'zustand'
 
-import { Log, LogsStorage, NetworkStorage } from './types'
+import { Log, LogsStorage, NetworkStorage, NetworkResponse } from './types'
 
-export const useLogStore = create<LogsStorage>((set, get) => ({
+const REQUEST_HISTORY_LIMIT = 30;
+const HOST_HISTORY_LIMIT = 24;
+const LOG_HISTORY_LIMIT = 500;
+
+export const useLogStore = create<LogsStorage>((set) => ({
   logs: [],
-  addItem: (log: Log) => set({ logs: [...get().logs, log] })
+  addItem: (log: Log) => set(state => ({
+    logs: state.logs.length >= LOG_HISTORY_LIMIT
+      ? [...state.logs.slice(-(LOG_HISTORY_LIMIT - 1)), log]
+      : [...state.logs, log],
+  }))
 }))
 
 const sanitizeUrl = (rawUrl: string): string => {
@@ -18,11 +26,20 @@ export const useNetworkStore = create<NetworkStorage>((set, get) => ({
     const url = sanitizeUrl(request.url)
     const hosts = get().hosts;
 
+    if (!hosts.has(url) && hosts.size >= HOST_HISTORY_LIMIT) {
+      const oldestHost = hosts.keys().next().value;
+      if (oldestHost) hosts.delete(oldestHost);
+    }
+
     if (!hosts.has(url)) {
       hosts.set(url, { requests: [], responses: [] });
     }
 
-    hosts.get(url)!.requests.push({ [uuid]: request });
+    const requests = hosts.get(url)!.requests;
+    requests.push({ [uuid]: request.clone() });
+    if (requests.length > REQUEST_HISTORY_LIMIT) {
+      requests.splice(0, requests.length - REQUEST_HISTORY_LIMIT);
+    }
 
     set({ hosts: new Map(hosts) });
   },
@@ -32,7 +49,12 @@ export const useNetworkStore = create<NetworkStorage>((set, get) => ({
     if (!hosts.has(url)) {
       hosts.set(url, { requests: [], responses: [] });
     }
-    hosts.get(url)!.responses.push({ [uuid]: response });
+    const metadata: NetworkResponse = { status: response.status, url: response.url };
+    const responses = hosts.get(url)!.responses;
+    responses.push({ [uuid]: metadata });
+    if (responses.length > REQUEST_HISTORY_LIMIT) {
+      responses.splice(0, responses.length - REQUEST_HISTORY_LIMIT);
+    }
     set({ hosts: new Map(hosts) });
   }
 }))

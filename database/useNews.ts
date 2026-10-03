@@ -55,23 +55,25 @@ export async function getNewsById(id: string): Promise<SharedNews | undefined> {
     .query(Q.where("newsId", id), Q.where("createdByAccount", Q.oneOf(sourceIds)))
     .fetch();
   const cachedNews = records[0] ? mapNewsToShared(records[0]) : undefined;
+  const activeSourceIds = getActiveAccountDataSourceIds();
+  const cachedItem = cachedNews && activeSourceIds.includes(cachedNews.createdByAccount)
+    ? cachedNews
+    : undefined;
+
+  // The list already came from this cache. Never hold the detail screen behind
+  // a second full-feed request; on slow school servers that could take minutes.
+  if (cachedItem) return cachedItem;
 
   try {
     const { getManager } = await import("@/services/shared");
     const freshNews = await getManager()?.getNews();
-    const activeSourceIds = getActiveAccountDataSourceIds();
-    const freshItem = freshNews?.find(item =>
-      activeSourceIds.includes(item.createdByAccount) && getNewsRouteId(item) === id
+    const currentSourceIds = getActiveAccountDataSourceIds();
+    return freshNews?.find(item =>
+      currentSourceIds.includes(item.createdByAccount) && getNewsRouteId(item) === id
     );
-    const cachedItem = cachedNews && activeSourceIds.includes(cachedNews.createdByAccount)
-      ? cachedNews
-      : undefined;
-    return freshItem ?? cachedItem;
   } catch (error) {
     warn(`Unable to refresh news ${id}: ${String(error)}`);
-    return cachedNews && getActiveAccountDataSourceIds().includes(cachedNews.createdByAccount)
-      ? cachedNews
-      : undefined;
+    return undefined;
   }
 }
 
@@ -117,6 +119,7 @@ export async function addNewsToDatabase(news: SharedNews[]) {
             newsModel.category = item.category ?? "";
             newsModel.createdByAccount = item.createdByAccount ?? "";
             newsModel.question = item.question ?? false;
+            newsModel.surveyRaw = item.survey ? JSON.stringify(item.survey) : "";
           }));
         }
 
@@ -132,6 +135,7 @@ export async function addNewsToDatabase(news: SharedNews[]) {
             newsModel.category = item.category ?? newsModel.category;
             newsModel.createdByAccount = item.createdByAccount ?? newsModel.createdByAccount;
             newsModel.question = item.question ?? newsModel.question;
+            newsModel.surveyRaw = item.survey ? JSON.stringify(item.survey) : "";
           }));
         }
 
@@ -169,6 +173,13 @@ export async function getNewsFromCache(
 }
 
 function mapNewsToShared(news: News): SharedNews {
+  let survey: SharedNews["survey"];
+  try {
+    survey = news.surveyRaw ? JSON.parse(news.surveyRaw) as SharedNews["survey"] : undefined;
+  } catch {
+    survey = undefined;
+  }
+
   return {
     id: news.newsId,
     title: news.title,
@@ -181,5 +192,6 @@ function mapNewsToShared(news: News): SharedNews {
     createdByAccount: news.createdByAccount,
     fromCache: true,
     question: news.question,
+    survey,
   };
 }

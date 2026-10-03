@@ -2,8 +2,6 @@ import { Buffer } from "buffer";
 
 import { Client } from "@blockshub/blocksdirecte";
 
-import { warn } from "@/utils/logger/logger";
-
 import { News } from "../shared/news";
 
 type EDTimelinePostit = {
@@ -18,13 +16,10 @@ type EDTimelinePostit = {
 };
 
 export async function fetchEDNews(session: Client, accountId: string): Promise<News[]> {
-  try {
-    const timeline = await session.timeline.getPublicTimeline();
-    return mapEDNews((timeline.postits ?? []) as EDTimelinePostit[], accountId);
-  } catch (error) {
-    warn(`ED public timeline failed: ${String(error)}`);
-    return [];
-  }
+  // Let AccountManager use its last successful cache when the request fails.
+  // Returning [] here made a transport/API failure look like a valid empty feed.
+  const timeline = await session.timeline.getPublicTimeline();
+  return mapEDNews((timeline.postits ?? []) as EDTimelinePostit[], accountId);
 }
 
 function mapEDNews(news: EDTimelinePostit[], accountId: string): News[] {

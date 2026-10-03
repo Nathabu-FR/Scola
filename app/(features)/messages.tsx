@@ -13,6 +13,8 @@ import {
   View,
 } from "react-native";
 import { useTheme } from "expo-router/react-navigation";
+import { useAccountStore } from "@/stores/account";
+import { Services } from "@/stores/account/types";
 
 import { getManager, initializeAccountManager } from "@/services/shared";
 import { Attachment } from "@/services/shared/attachment";
@@ -26,11 +28,17 @@ import { SafeAreaView } from "react-native-safe-area-context";
 const plainText = (value: string) =>
   value
     .replace(/<br\s*\/?\s*>/gi, "\n")
+    .replace(/<\/(?:p|div|li|h[1-6])>/gi, "\n")
+    .replace(/<li\b[^>]*>/gi, "• ")
     .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
+    .replace(/&nbsp;|&#160;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/\s+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
 
 const formatDate = (value: Date) =>
@@ -40,6 +48,9 @@ const formatDate = (value: Date) =>
 
 export default function MessagesScreen() {
   const { colors } = useTheme();
+  const activeAccount = useAccountStore(state =>
+    state.accounts.find(account => account.id === state.lastUsedAccount)
+  );
   const [chats, setChats] = useState<Chat[]>([]);
   const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -113,6 +124,8 @@ export default function MessagesScreen() {
 
   const chatKey = useCallback((chat: Chat) => `${chat.createdByAccount}:${chat.id}:${chat.date.getTime()}`, []);
   const sortedMessages = messages;
+  const hasOnlyEcoleDirecte = Boolean(activeAccount?.services.length) &&
+    activeAccount!.services.every(service => service.serviceId === Services.ECOLEDIRECTE);
 
   return (
     <SafeAreaView edges={["left", "right", "bottom"]} style={{ flex: 1, backgroundColor: colors.overground }}>
@@ -147,7 +160,13 @@ export default function MessagesScreen() {
                   <Typography variant="body1" weight="semibold" numberOfLines={1} style={{ flex: 1 }}>{message.author}</Typography>
                   <Typography variant="caption" color="textSecondary">{formatDate(message.date)}</Typography>
                 </View>
-                <Typography variant="body1">{plainText(message.content)}</Typography>
+                <Typography
+                  variant="body1"
+                  selectable
+                  style={{ minWidth: 0, flexShrink: 1, ...(Platform.OS === "web" ? { overflowWrap: "anywhere" } : {}) }}
+                >
+                  {plainText(message.content) || "Ce message ne contient pas de texte."}
+                </Typography>
                 {(message.attachments ?? []).map((attachment, index) => (
                   <Pressable
                     key={`${attachment.url}-${index}`}
@@ -199,7 +218,9 @@ export default function MessagesScreen() {
               <MessageCircle size={34} color={colors.text + "80"} />
               <Typography variant="title" align="center">Aucune conversation</Typography>
               <Typography variant="body1" color="textSecondary" align="center">
-                {errorMessage || "Les conversations disponibles avec ton compte scolaire apparaîtront ici."}
+                {errorMessage || (hasOnlyEcoleDirecte
+                  ? "La messagerie ÉcoleDirecte n’est pas encore disponible dans cette connexion."
+                  : "Les conversations disponibles avec ton compte scolaire apparaîtront ici.")}
               </Typography>
             </View>
           )}

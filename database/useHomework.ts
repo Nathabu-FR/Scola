@@ -151,7 +151,7 @@ export function useHomeworkForWeeks(weekNumbers: number[], refresh = 0) {
 }
 
 /** Observe every cached assignment so the home screen can rank open work across week boundaries. */
-export function useAllHomeworkFromCache() {
+export function useAllHomeworkFromCache(options: { upcomingOnly?: boolean } = {}) {
   const database = useDatabase();
   const accounts = useAccountStore(state => state.accounts);
   const activeAccountId = useAccountStore(state => state.lastUsedAccount);
@@ -160,6 +160,7 @@ export function useAllHomeworkFromCache() {
     [accounts, activeAccountId]
   );
   const [homeworks, setHomeworks] = useState<SharedHomework[]>([]);
+  const upcomingOnly = options.upcomingOnly ?? false;
 
   useEffect(() => {
     setHomeworks([]);
@@ -167,9 +168,18 @@ export function useAllHomeworkFromCache() {
       setHomeworks([]);
       return;
     }
-    const subscription = database
-      .get<Homework>("homework")
-      .query(Q.where("createdByAccount", Q.oneOf(sourceIds)))
+    const query = database.get<Homework>("homework").query(
+      Q.where("createdByAccount", Q.oneOf(sourceIds)),
+      ...(upcomingOnly
+        ? [
+            Q.where("isDone", false),
+            Q.where("dueDate", Q.gte(Date.now() - 30 * 24 * 60 * 60 * 1000)),
+            Q.sortBy("dueDate", Q.asc),
+            Q.take(100),
+          ]
+        : [])
+    );
+    const subscription = query
       .observe()
       .subscribe(records => {
         setHomeworks(
@@ -180,7 +190,7 @@ export function useAllHomeworkFromCache() {
       });
 
     return () => subscription.unsubscribe();
-  }, [database, sourceIds]);
+  }, [database, sourceIds, upcomingOnly]);
 
   return homeworks;
 }

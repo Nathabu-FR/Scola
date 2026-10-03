@@ -11,5 +11,14 @@ export default schemaMigrations({
         }),
       ],
     },
+    {
+      toVersion: 39,
+      steps: [
+        addColumns({
+          table: "news",
+          columns: [{ name: "survey", type: "string", isOptional: true }],
+        }),
+      ],
+    },
   ],
 });

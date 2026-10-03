@@ -11,7 +11,7 @@ import {
 } from "@/services/pronote/chat";
 import { fetchPronoteGradePeriods, fetchPronoteGrades } from "@/services/pronote/grades";
 import { fetchPronoteHomeworks, setPronoteHomeworkAsDone } from "@/services/pronote/homework";
-import { fetchPronoteNews, setPronoteNewsAsAcknowledged } from "@/services/pronote/news";
+import { answerPronoteNewsSurvey, fetchPronoteNews, setPronoteNewsAsAcknowledged } from "@/services/pronote/news";
 import { refreshPronoteAccount } from "@/services/pronote/refresh";
 import { fetchPronoteCourseResources, fetchPronoteWeekTimetable } from "@/services/pronote/timetable";
 import { Attendance } from "@/services/shared/attendance";
@@ -19,7 +19,7 @@ import { CanteenMenu } from "@/services/shared/canteen";
 import { Chat, Message, Recipient } from "@/services/shared/chat";
 import { Period, PeriodGrades } from "@/services/shared/grade";
 import { Homework } from "@/services/shared/homework";
-import { News } from "@/services/shared/news";
+import { News, NewsSurveyAnswers } from "@/services/shared/news";
 import { Course, CourseDay, CourseResource } from "@/services/shared/timetable";
 import { Capabilities, SchoolServicePlugin } from "@/services/shared/types";
 import { Auth, Services } from "@/stores/account/types";
@@ -231,6 +231,14 @@ export class Pronote implements SchoolServicePlugin {
     }
 
     throw error("Session is not valid", "Pronote.setNewsAsAcknowledged");
+  }
+
+  async answerNewsSurvey(news: News, answers: NewsSurveyAnswers): Promise<void> {
+    await this.checkTokenValidty();
+    if (!this.session) {
+      throw error("Session is not valid", "Pronote.answerNewsSurvey");
+    }
+    return answerPronoteNewsSurvey(this.session, news, answers);
   }
 
   async setHomeworkCompletion(homework: Homework, state?: boolean): Promise<Homework> {

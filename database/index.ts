@@ -26,7 +26,6 @@ import CanteenHistoryItem from './models/CanteenHistory';
 import Kid from './models/Kid';
 import { mySchema } from './schema';
 import migrations from './migrations';
-import migrations from './migrations';
 
 const appGroupId = 'group.xyz.getpapillon.ios';
 const databaseFilename = 'watermelon.db';

@@ -3,7 +3,6 @@ import { AppState, AppStateStatus } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
 
-import { initializeDatabaseOnStartup } from '@/database/utils/initialization';
 import { configureTips, resetTipsDatastore, showAllTips } from '@/modules/papillon-tips';
 import { initializeAccountManager } from '@/services/shared';
 import { useSettingsStore } from '@/stores/settings';
@@ -12,7 +11,6 @@ import i18n from '@/utils/i18n';
 import { checkConsent } from '@/utils/logger/consent';
 import { warn } from '@/utils/logger/logger';
 import { posthog } from '@/utils/logger/posthog';
-import ModelManager from '@/utils/magic/ModelManager';
 import { FONT_CONFIG } from '@/constants/LayoutScreenOptions';
 import { installTauriFetch } from "@/utils/network/fetch";
 
@@ -24,7 +22,6 @@ export function useAppInitialization() {
 
   // Settings
   const customLanguage = useSettingsStore(state => state.personalization.language);
-  const magicEnabled = useSettingsStore(state => state.personalization.magicEnabled);
   const selectedTheme = useSettingsStore(state => state.personalization.theme);
   const mutateProperty = useSettingsStore(state => state.mutateProperty);
 
@@ -83,17 +80,6 @@ export function useAppInitialization() {
     });
   }, []);
 
-  // Database Initialization
-  // The WatermelonDB adapter is constructed synchronously at module load
-  // (see database/index.ts), so it's already usable before this effect runs.
-  // initializeDatabaseOnStartup() only runs diagnostic health checks, so it
-  // does not need to gate app readiness / the splash screen.
-  useEffect(() => {
-    initializeDatabaseOnStartup().catch(err => {
-      warn(`Database initialization failed: ${err}`);
-    });
-  }, []);
-
   // AppState Monitoring
   const appState = useRef<AppStateStatus>(AppState.currentState);
   const lastBackgroundRef = useRef<number | null>(null);
@@ -122,13 +108,6 @@ export function useAppInitialization() {
       subscription.remove();
     };
   }, []);
-
-  // Magic/ModelManager Initialization
-  useEffect(() => {
-    if (magicEnabled) {
-      ModelManager.safeInit();
-    }
-  }, [magicEnabled]);
 
   // PostHog Consent Sync
   useEffect(() => {

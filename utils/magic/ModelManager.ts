@@ -473,15 +473,13 @@ class ModelManager {
       sequence.push(0);
     }
 
-    if (unknownWords.length > 0) {
-      log(
-        `[TOKENIZE] Mots inconnus (${unknownWords.length}): [${unknownWords.join(", ")}]`
-      );
+    if (verbose && unknownWords.length > 0) {
+      debug(`[TOKENIZE] Mots inconnus (${unknownWords.length}): [${unknownWords.join(", ")}]`);
     }
 
-    log(
-      `[TOKENIZE] Séquence finale: longueur=${sequence.length}, 10 premiers tokens=[${sequence.slice(0, 10).join(", ")}]`
-    );
+    if (verbose) {
+      debug(`[TOKENIZE] Séquence finale: longueur=${sequence.length}, 10 premiers tokens=[${sequence.slice(0, 10).join(", ")}]`);
+    }
 
     return sequence;
   }

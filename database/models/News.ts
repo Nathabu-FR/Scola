@@ -16,4 +16,5 @@ export default class News extends Model {
   @text('author') author!: string;
   @text('category') category!: string;
   @field('question') question!: boolean;
+  @text('survey') surveyRaw?: string;
 }

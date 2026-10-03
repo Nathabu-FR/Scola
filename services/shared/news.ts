@@ -1,5 +1,5 @@
 import { ActualitiesResponse } from "esup-multi.js";
-import { NewsInformation } from "@blockshub/pawnote-lts";
+import { NewsInformation, NewsSurvey } from "@blockshub/pawnote-lts";
 import { News as SkolengoNews } from "skolengojs";
 
 import { Attachment } from "@/services/shared/attachment";
@@ -26,5 +26,43 @@ export interface News extends GenericInterface {
   author: string;
   category: string;
   question?: boolean;
-  ref?: NewsInformation | SkolengoNews | ActualitiesResponse;
+  survey?: NewsSurveyData;
+  ref?: NewsInformation | NewsSurvey | SkolengoNews | ActualitiesResponse;
 }
+
+export interface NewsSurveyChoice {
+  value: string;
+  position: number;
+  isTextInput: boolean;
+}
+
+export interface NewsSurveyQuestion {
+  id: string;
+  position: number;
+  kind: number;
+  fullTitle: string;
+  title: string;
+  content: string;
+  shouldAnswer: boolean;
+  answered: boolean;
+  selectedAnswers?: number[];
+  textInputAnswer?: string;
+  shouldRespectMaximumChoices: boolean;
+  maximumChoices: number;
+  maximumLength: number;
+  choices: NewsSurveyChoice[];
+  attachments: Attachment[];
+}
+
+/** Safe, cacheable display data for a Pronote survey. */
+export interface NewsSurveyData {
+  isAnonymous: boolean;
+  questions: NewsSurveyQuestion[];
+}
+
+export interface NewsSurveyAnswer {
+  selectedAnswers?: number[];
+  textInputAnswer?: string;
+}
+
+export type NewsSurveyAnswers = Record<string, NewsSurveyAnswer>;

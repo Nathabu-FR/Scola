@@ -1,6 +1,5 @@
 import React, { useCallback, useMemo } from "react";
-import { Platform, RefreshControl, StyleSheet } from "react-native";
-import Reanimated, { LinearTransition } from "react-native-reanimated";
+import { Platform, RefreshControl, StyleSheet, View } from "react-native";
 
 import { Homework } from "@/services/shared/homework";
 import List from "@/ui/new/List";
@@ -31,15 +30,9 @@ interface TasksListProps {
   sortMethod: string;
   setAsDone: (item: Homework, done: boolean) => void;
   isLoaded?: boolean;
-  /** The homework could not be loaded: an empty week means "unknown", not "free". */
   hasError?: boolean;
   totalHomeworkCount: number;
   remainingHomeworkCount: number;
-  /**
-   * Rows animate in only on the page the screen opened with. Every other page
-   * is mounted off-screen by the week pager, where a couple of dozen entering
-   * animations would cost frames without anyone seeing them.
-   */
   animateItems?: boolean;
 }
 
@@ -63,54 +56,77 @@ const TasksList: React.FC<TasksListProps> = ({
   const headerHeight = useHeaderHeight();
   const { isLarge } = useResizable();
 
-  // Items arrive already merged with the freshly fetched homework, so a row
-  // only needs the item itself — no per-row lookup, no per-row id hashing.
-  const renderTask = useCallback(
-    (item: Homework, index: number) => (
-      <Reanimated.View layout={LinearTransition}>
-        <TaskItem
-          item={item}
-          index={index}
-          fromCache={item.fromCache}
-          animated={animateItems}
-          setAsDone={setAsDone}
-        />
-      </Reanimated.View>
-    ),
-    [setAsDone, animateItems]
-  );
-
-  const taskKeyExtractor = useCallback((item: Homework) => {
-    return (
-      (item.id ? `${item.createdByAccount}:${item.id}` : undefined) ??
-      "hw:" +
-        item.subject +
-        item.content +
-        item.createdByAccount +
-        new Date(item.dueDate).toDateString()
-    );
-  }, []);
+  const taskKeyExtractor = useCallback((item: Homework) => (
+    (item.id ? `${item.createdByAccount}:${item.id}` : undefined) ??
+      "hw:" + item.subject + item.content + item.createdByAccount + new Date(item.dueDate).toDateString()
+  ), []);
 
   const visibleSections = useMemo(
     () => sections.filter(section => section.data.length > 0),
     [sections]
   );
-  const showsDayGroups =
-    sortMethod === "date" && searchTerm.trim().length === 0;
-  const numColumns = isLarge && showsDayGroups ? 2 : 1;
+  const showsDayGroups = sortMethod === "date" && searchTerm.trim().length === 0;
+  const cardColumns = isLarge && showsDayGroups ? 2 : 1;
+
+  // Each FlashList cell holds at most two cards. The old day-sized cells
+  // rendered every task in a group at once, disabling useful virtualization.
+  const rows = useMemo(() => {
+    const result: React.ReactElement[] = [];
+    const renderTask = (item: Homework, index: number) => (
+      <TaskItem
+        item={item}
+        index={index}
+        fromCache={item.fromCache}
+        animated={animateItems}
+        setAsDone={setAsDone}
+      />
+    );
+
+    for (const section of visibleSections) {
+      if (section.title && sortMethod === "date") {
+        result.push(
+          <List.View key={`day-${section.id}`} id={`day-${section.id}`}>
+            <DateHeader
+              title={section.title}
+              isCollapsed={collapsedGroups.includes(section.id)}
+              onToggle={() => toggleGroup(section.id)}
+            />
+          </List.View>
+        );
+      }
+
+      if (collapsedGroups.includes(section.id)) continue;
+
+      const stride = cardColumns;
+      for (let index = 0; index < section.data.length; index += stride) {
+        const first = section.data[index];
+        const second = stride === 2 ? section.data[index + 1] : undefined;
+        const rowId = `tasks-${taskKeyExtractor(first)}${second ? `-${taskKeyExtractor(second)}` : ""}`;
+
+        result.push(
+          <List.View key={rowId} id={rowId}>
+            {stride === 1 ? renderTask(first, index) : (
+              <View style={{ flexDirection: "row", gap: 12 }}>
+                <View style={{ flex: 1, minWidth: 0 }}>{renderTask(first, index)}</View>
+                {second ? (
+                  <View style={{ flex: 1, minWidth: 0 }}>{renderTask(second, index + 1)}</View>
+                ) : <View style={{ flex: 1 }} />}
+              </View>
+            )}
+          </List.View>
+        );
+      }
+    }
+
+    return result;
+  }, [visibleSections, sortMethod, collapsedGroups, toggleGroup, taskKeyExtractor, animateItems, setAsDone, cardColumns]);
 
   return (
     <List
-      key={`tasks-list-${numColumns}`}
-      animated
-      numColumns={numColumns}
-      maintainVisibleContentPosition={{ disabled: true }}
       style={[styles.list, { backgroundColor: colors.overground }]}
       contentContainerStyle={{
         paddingLeft: 16,
-        // A large right inset (landscape notch) already gives enough breathing room.
         paddingRight: insets.right > 10 ? 0 : 16,
-        // Leave room for the floating add button on desktop.
         paddingBottom: Platform.OS === "web" ? 88 : 16,
       }}
       contentInsetAdjustmentBehavior="automatic"
@@ -128,35 +144,9 @@ const TasksList: React.FC<TasksListProps> = ({
           <EmptyState isSearching={searchTerm.length > 0} hasError={hasError} />
         ) : null
       }
-      refreshControl={
-        <RefreshControl
-          refreshing={isRefreshing}
-          onRefresh={onRefresh}
-        />
-      }
+      refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />}
     >
-      {visibleSections.map(section => {
-        const isCollapsed = collapsedGroups.includes(section.id);
-
-        return (
-          <Reanimated.View key={section.id} layout={LinearTransition}>
-            {section.title && sortMethod === "date" && (
-              <DateHeader
-                title={section.title}
-                isCollapsed={isCollapsed}
-                onToggle={() => toggleGroup(section.id)}
-              />
-            )}
-
-            {!isCollapsed &&
-              section.data.map((item, index) => (
-                <React.Fragment key={taskKeyExtractor(item)}>
-                  {renderTask(item, index)}
-                </React.Fragment>
-              ))}
-          </Reanimated.View>
-        );
-      })}
+      {rows}
     </List>
   );
 };

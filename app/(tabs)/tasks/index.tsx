@@ -173,7 +173,7 @@ const TasksView: React.FC = () => {
   const { colors } = useTheme();
 
   const weeksToLoad = useMemo(
-    () => PAGE_OFFSETS.map(offset => selectedWeek + offset),
+    () => INITIAL_PAGE_OFFSETS.map(offset => selectedWeek + offset),
     [selectedWeek]
   );
 

@@ -1,4 +1,4 @@
-import { getManager } from "@/services/shared";
+import { getManager, initializeAccountManager } from "@/services/shared";
 import { News } from "@/services/shared/news";
 import { getNewsById } from "@/database/useNews";
 import { useAccountStore } from "@/stores/account";
@@ -7,8 +7,10 @@ import Stack from "@/ui/components/Stack";
 import TypographyLegacy, { VARIANTS } from "@/ui/components/Typography";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { Linking, Platform, ScrollView, StyleSheet, View } from "react-native";
+import { Linking, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { Attachment, News as SkolengoNews } from "skolengojs";
+import { NewsQuestionKind } from "@blockshub/pawnote-lts";
+import { CheckSquare, Circle, CircleCheck, Square } from "lucide-react-native";
 
 import HTMLView from "react-native-htmlview";
 import { HeaderBackButton, useTheme } from "expo-router/react-navigation";
@@ -29,6 +31,8 @@ import Typography from "@/ui/new/Typography";
 import { useFont } from "@/utils/theme/fonts";
 import ActivityIndicator from "@/ui/components/ActivityIndicator";
 import { useSafeHorizontalPadding } from "@/ui/hooks/useSafeHorizontalPadding";
+import { warn } from "@/utils/logger/logger";
+import { NewsSurveyAnswers } from "@/services/shared/news";
 
 const NewsPage = () => {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -40,6 +44,10 @@ const NewsPage = () => {
   const { colors } = useTheme();
   const font = useFont();
   const [HTMLCleanupEnabled, setHTMLCleanupEnabled] = useState(true)
+  const [surveyAnswers, setSurveyAnswers] = useState<NewsSurveyAnswers>({});
+  const [surveySubmitting, setSurveySubmitting] = useState(false);
+  const [surveySubmitted, setSurveySubmitted] = useState(false);
+  const [surveyError, setSurveyError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -84,7 +92,11 @@ const NewsPage = () => {
           );
         }
 
-        await manager?.setNewsAsDone(news);
+        try {
+          await manager?.setNewsAsDone(news);
+        } catch (error) {
+          warn(`Unable to mark news ${news.id} as read: ${String(error)}`);
+        }
       }
     };
 
@@ -97,15 +109,17 @@ const NewsPage = () => {
       ...VARIANTS.body1,
       fontFamily: font("medium"),
       color: colors.text,
+      flexShrink: 1,
     },
     div: {
       ...VARIANTS.body1,
       fontFamily: font("medium"),
       color: colors.text,
+      flexShrink: 1,
     },
     a: {
       color: colors.primary,
-      textDecorationLine: 'underline'
+      textDecorationLine: 'underline',
     },
     ul: {
       ...VARIANTS.body1,
@@ -124,6 +138,68 @@ const NewsPage = () => {
   }
 
   const cleanedContent = HTMLCleanupEnabled ? cleanHtmlForArticle(news.content) : news.content
+  const surveyQuestions = news.survey?.questions ?? [];
+
+  const getQuestionAnswer = (question: (typeof surveyQuestions)[number]) =>
+    surveyAnswers[question.id] ?? {
+      selectedAnswers: question.selectedAnswers ?? [],
+      textInputAnswer: question.textInputAnswer ?? "",
+    };
+
+  const toggleSurveyChoice = (question: (typeof surveyQuestions)[number], position: number) => {
+    const current = getQuestionAnswer(question);
+    const selected = current.selectedAnswers ?? [];
+    let next: number[];
+    if (question.kind === NewsQuestionKind.UniqueChoice) {
+      next = selected.includes(position) ? [] : [position];
+    } else if (selected.includes(position)) {
+      next = selected.filter(value => value !== position);
+    } else {
+      next = [...selected, position];
+      if (question.shouldRespectMaximumChoices && question.maximumChoices > 0) {
+        next = next.slice(-question.maximumChoices);
+      }
+    }
+    setSurveyAnswers(previous => ({
+      ...previous,
+      [question.id]: { ...current, selectedAnswers: next },
+    }));
+    setSurveyError("");
+  };
+
+  const canSubmitSurvey = surveyQuestions
+    .filter(question => question.shouldAnswer && !question.answered)
+    .every(question => {
+      const answer = getQuestionAnswer(question);
+      if (question.kind === NewsQuestionKind.TextInput) {
+        return Boolean(answer.textInputAnswer?.trim());
+      }
+      if ((answer.selectedAnswers?.length ?? 0) === 0) return false;
+      const selectedTextInput = question.choices.some(choice =>
+        choice.isTextInput && answer.selectedAnswers?.includes(choice.position)
+      );
+      return !selectedTextInput || Boolean(answer.textInputAnswer?.trim());
+    });
+
+  const submitSurvey = async () => {
+    if (!news || !canSubmitSurvey || surveySubmitting) return;
+    setSurveySubmitting(true);
+    setSurveyError("");
+    try {
+      const manager = getManager(true) ?? await initializeAccountManager();
+      const answers = Object.fromEntries(
+        surveyQuestions
+          .filter(question => question.shouldAnswer && !question.answered)
+          .map(question => [question.id, getQuestionAnswer(question)])
+      );
+      await manager.answerNewsSurvey(news, answers);
+      setSurveySubmitted(true);
+    } catch (error) {
+      setSurveyError(`La réponse n’a pas pu être envoyée. ${String(error)}`);
+    } finally {
+      setSurveySubmitting(false);
+    }
+  };
 
   return (
     <ScrollView
@@ -159,14 +235,14 @@ const NewsPage = () => {
         </TypographyLegacy>
 
         <Stack direction="horizontal" hAlign="center">
-          <Stack direction="horizontal" gap={8} inline flex hAlign="center">
+          <Stack direction="horizontal" gap={8} inline flex hAlign="center" style={{ flexWrap: "wrap", minWidth: 0 }}>
             <Avatar initials={getInitials(news.author)} size={28} />
-            <TypographyLegacy nowrap variant="body2">
+            <TypographyLegacy variant="body2" style={{ flexShrink: 1 }}>
               {news.author}
             </TypographyLegacy>
           </Stack>
 
-          <TypographyLegacy nowrap variant="body2" color="secondary">
+          <TypographyLegacy variant="body2" color="secondary" style={{ flexShrink: 1 }}>
             {new Date(news.createdAt).toLocaleDateString(undefined, {
               day: '2-digit',
               month: 'short',
@@ -176,33 +252,125 @@ const NewsPage = () => {
         </Stack>
       </Stack>
 
-      {news.question && (
+      {news.question && surveyQuestions.length === 0 ? (
         <List scrollEnabled={false}>
           <List.Item>
             <List.Leading>
-              <Icon>
-                <Papicons name="pie" />
-              </Icon>
+              <Icon><Papicons name="pie" /></Icon>
             </List.Leading>
-            <Typography variant="title">
-              Cette actualité contient un sondage
-            </Typography>
+            <Typography variant="title">Cette actualité contient un formulaire</Typography>
             <Typography variant="body1" color="textSecondary">
-              PRONOTE ne nous permet pas d'afficher les sondages pour le moment.
+              Le formulaire n’a pas pu être récupéré pour le moment. Actualise les actualités lorsque la connexion Pronote sera disponible.
             </Typography>
           </List.Item>
         </List>
-      )}
+      ) : null}
 
-      <HTMLView
-        value={cleanedContent}
-        stylesheet={stylesheet}
-        style={{
-          gap: 12
-        }}
-        paragraphBreak=""
-        bullet="  •  "
-      />
+      {surveyQuestions.length > 0 ? (
+        <View style={{ gap: 12, width: "100%", minWidth: 0 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+            <Icon><Papicons name="pie" /></Icon>
+            <Typography variant="title" style={{ flex: 1, minWidth: 0 }}>
+              {news.survey?.isAnonymous ? "Sondage anonyme" : "Sondage nominatif"}
+            </Typography>
+          </View>
+
+          {surveyQuestions.map(question => {
+            const answer = getQuestionAnswer(question);
+            const answered = question.answered || surveySubmitted;
+            const isMultiple = question.kind === NewsQuestionKind.MultipleChoice;
+            const hasTextAnswer = question.kind === NewsQuestionKind.TextInput ||
+              question.choices.some(choice => choice.isTextInput && answer.selectedAnswers?.includes(choice.position));
+
+            return (
+              <View
+                key={question.id}
+                style={{ gap: 10, padding: 14, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card }}
+              >
+                <Typography variant="title" style={{ flexShrink: 1 }}>
+                  {question.title || question.fullTitle || "Question"}
+                </Typography>
+                {question.content ? (
+                  <HTMLView
+                    value={HTMLCleanupEnabled ? cleanHtmlForArticle(question.content) : question.content}
+                    stylesheet={stylesheet}
+                    style={{ maxWidth: "100%" }}
+                    paragraphBreak="\n"
+                  />
+                ) : null}
+
+                {question.choices.filter(choice => !choice.isTextInput || question.kind !== NewsQuestionKind.TextInput).map(choice => {
+                  const selected = answer.selectedAnswers?.includes(choice.position) ?? false;
+                  return (
+                    <Pressable
+                      key={`${question.id}-${choice.position}`}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: selected, disabled: answered || surveySubmitting }}
+                      disabled={answered || surveySubmitting}
+                      onPress={() => toggleSurveyChoice(question, choice.position)}
+                      style={{ flexDirection: "row", alignItems: "flex-start", gap: 10, minHeight: 40, paddingVertical: 8 }}
+                    >
+                      {isMultiple
+                        ? selected ? <CheckSquare size={20} color={colors.primary} /> : <Square size={20} color={colors.text + "88"} />
+                        : selected ? <CircleCheck size={20} color={colors.primary} /> : <Circle size={20} color={colors.text + "88"} />}
+                      <Typography variant="body1" style={{ flex: 1, minWidth: 0, flexShrink: 1 }}>
+                        {choice.value}
+                      </Typography>
+                    </Pressable>
+                  );
+                })}
+
+                {hasTextAnswer ? (
+                  <TextInput
+                    value={answer.textInputAnswer ?? ""}
+                    onChangeText={text => setSurveyAnswers(previous => ({
+                      ...previous,
+                      [question.id]: { ...getQuestionAnswer(question), textInputAnswer: text },
+                    }))}
+                    editable={!answered && !surveySubmitting}
+                    multiline
+                    maxLength={question.maximumLength > 0 ? question.maximumLength : undefined}
+                    placeholder="Ta réponse"
+                    placeholderTextColor={colors.text + "80"}
+                    style={{ minHeight: 48, maxWidth: "100%", padding: 12, borderRadius: 12, color: colors.text, backgroundColor: colors.overground, fontSize: 16, textAlignVertical: "top" }}
+                  />
+                ) : null}
+
+                {answered ? (
+                  <Typography variant="caption" color="textSecondary">Réponse déjà enregistrée</Typography>
+                ) : null}
+              </View>
+            );
+          })}
+
+          {surveySubmitted ? (
+            <Typography variant="body1" color="primary">Ta réponse a bien été envoyée.</Typography>
+          ) : surveyQuestions.some(question => question.shouldAnswer && !question.answered) ? (
+            <Pressable
+              accessibilityRole="button"
+              disabled={!canSubmitSurvey || surveySubmitting}
+              onPress={() => void submitSurvey()}
+              style={{ minHeight: 48, alignItems: "center", justifyContent: "center", paddingHorizontal: 18, borderRadius: 14, backgroundColor: colors.primary, opacity: !canSubmitSurvey || surveySubmitting ? 0.55 : 1 }}
+            >
+              {surveySubmitting
+                ? <ActivityIndicator />
+                : <Typography variant="body1" weight="semibold" style={{ color: "#FFFFFF" }}>Envoyer ma réponse</Typography>}
+            </Pressable>
+          ) : null}
+
+          {surveyError ? <Typography variant="body2" color="#D60046">{surveyError}</Typography> : null}
+        </View>
+      ) : null}
+
+      {!surveyQuestions.length && cleanedContent ? (
+        <HTMLView
+          value={cleanedContent}
+          stylesheet={stylesheet}
+          style={{ gap: 12, width: "100%" }}
+          paragraphBreak="\n"
+          bullet="  •  "
+        />
+      ) : null}
 
       {news.attachments.length > 0 && (
         <ListLegacy>
@@ -216,7 +384,7 @@ const NewsPage = () => {
               <TypographyLegacy variant="title">
                 {attachment.name}
               </TypographyLegacy>
-              <TypographyLegacy variant="body1" nowrap color="secondary">
+              <TypographyLegacy variant="body1" color="secondary" style={{ flexShrink: 1, ...(Platform.OS === "web" ? { overflowWrap: "anywhere" } : {}) }}>
                 {attachment.url}
               </TypographyLegacy>
             </Item>

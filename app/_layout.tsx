@@ -75,7 +75,6 @@ export default function RootLayout() {
   useEffect(() => {
     // fetch en place AVANT notre surcharge : c'est lui qu'on remet au démontage.
     const originalFetch = window.fetch;
-    let nativeFetchInProgress = false;
 
     const shouldUseTauriTransport = (url: string) => {
       try {
@@ -102,38 +101,35 @@ export default function RootLayout() {
     };
 
     const patchedFetch: typeof window.fetch = async (...args) => {
-      const id = uuid();
-      let request: Request | null = null;
-      if (args[0] instanceof Request && args[1] === undefined) {
-        request = args[0];
-      } else {
-        request = new Request(...args);
+      const input = args[0];
+      const requestUrl = input instanceof Request ? input.url : String(input);
+      const id = __DEV__ ? uuid() : "";
+
+      if (__DEV__) {
+        try {
+          const request = input instanceof Request && args[1] === undefined
+            ? input
+            : new Request(...args);
+          useNetworkStore.getState().addRequest(request, id);
+        } catch { }
       }
 
-      try {
-        useNetworkStore.getState().addRequest(request, id);
-      } catch { }
-
-      const useNative =
-        isTauriDesktop() &&
-        !nativeFetchInProgress &&
-        shouldUseTauriTransport(request.url);
+      const useNative = isTauriDesktop() && shouldUseTauriTransport(requestUrl);
 
       let response: Response;
       if (useNative) {
-        nativeFetchInProgress = true;
-        try {
-          response = await appFetch(request, args[1]);
-        } finally {
-          nativeFetchInProgress = false;
-        }
+        response = await appFetch(input, args[1]);
       } else {
         response = await browserFetch(...args);
       }
 
-      try {
-        useNetworkStore.getState().addResponse(response.clone(), id);
-      } catch { }
+      if (__DEV__) {
+        try {
+          // The diagnostic panel only needs status and URL. Keeping a cloned
+          // body for each response buffered large school feeds in memory.
+          useNetworkStore.getState().addResponse(response, id);
+        } catch { }
+      }
 
       return response;
     };

@@ -23,7 +23,9 @@ export interface NetworkStorage {
     addResponse: (response: Response, uuid: string) => void;
 }
 
+export type NetworkResponse = Pick<Response, "status" | "url">;
+
 export type Host = {
     requests: Record<string, Request>[],
-    responses: Record<string, Response>[]
+    responses: Record<string, NetworkResponse>[],
 }

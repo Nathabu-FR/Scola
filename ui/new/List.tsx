@@ -543,6 +543,12 @@ const List = ({
   const ListComponent = FlashList;
 
   const keyExtractor = useCallback(item => item.id, []);
+  const getItemType = useCallback(item => {
+    if (item.kind === "view" && React.isValidElement(item.main)) {
+      return `view-${getComponentTypeName(item.main.type) || "default"}`;
+    }
+    return item.kind;
+  }, []);
 
   const renderItem = useCallback(
     ({ item }) => {
@@ -623,12 +629,6 @@ const List = ({
   );
   const removeClippedSubviews =
     rest.removeClippedSubviews ?? Platform.OS === "android";
-  const initialNumToRender = rest.initialNumToRender ?? 10;
-  const maxToRenderPerBatch = rest.maxToRenderPerBatch ?? 10;
-  const updateCellsBatchingPeriod = rest.updateCellsBatchingPeriod ?? 16;
-  const windowSize = rest.windowSize ?? 10;
-  const estimatedItemSize = rest.estimatedItemSize ?? 74;
-  const nonAnimatedListPerfProps = animated ? null : { estimatedItemSize };
 
   return (
     <ListComponent
@@ -642,6 +642,7 @@ const List = ({
       }
       data={data}
       keyExtractor={keyExtractor}
+      getItemType={getItemType}
       renderItem={item => (
         <View
           style={[
@@ -656,11 +657,6 @@ const List = ({
       )}
       {...rest}
       removeClippedSubviews={removeClippedSubviews}
-      initialNumToRender={initialNumToRender}
-      maxToRenderPerBatch={maxToRenderPerBatch}
-      updateCellsBatchingPeriod={updateCellsBatchingPeriod}
-      windowSize={windowSize}
-      {...nonAnimatedListPerfProps}
       contentContainerStyle={contentContainerStyle}
       numColumns={numColumns}
       masonry={numColumns > 1}

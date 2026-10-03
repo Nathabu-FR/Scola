@@ -22,7 +22,7 @@ import {
 import { Chat, Message, Recipient } from "@/services/shared/chat";
 import { Period, PeriodGrades } from "@/services/shared/grade";
 import { Homework } from "@/services/shared/homework";
-import { News } from "@/services/shared/news";
+import { News, NewsSurveyAnswers } from "@/services/shared/news";
 import { Course, CourseDay, CourseResource } from "@/services/shared/timetable";
 import { Auth, Services } from "@/stores/account/types";
 
@@ -89,6 +89,7 @@ export interface SchoolServicePlugin {
   getWeeklyTimetable?: (weekNumber: number, date: Date) => Promise<CourseDay[]>;
   sendMessageInChat?: (chat: Chat, content: string) => Promise<void>;
   setNewsAsAcknowledged?: (news: News) => Promise<News>;
+  answerNewsSurvey?: (news: News, answers: NewsSurveyAnswers) => Promise<void>;
   setHomeworkCompletion?: (
     homework: Homework,
     state?: boolean

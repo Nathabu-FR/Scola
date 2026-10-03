@@ -27,6 +27,7 @@ import { useSafeHorizontalPadding } from "@/ui/hooks/useSafeHorizontalPadding";
 import { getStatusText } from "../../(tabs)/calendar/components/CalendarDay";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getAttachmentIcon } from "@/utils/news/getAttachmentIcon";
+import { warn } from "@/utils/logger/logger";
 
 interface SubjectInfo {
   name: string;
@@ -36,7 +37,7 @@ interface SubjectInfo {
 }
 
 export default function CourseModal() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, returnTo } = useLocalSearchParams<{ id: string; returnTo?: string }>();
   const { colors } = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -56,7 +57,7 @@ export default function CourseModal() {
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const backHeader = (Platform.OS === "android" || Platform.OS === "web") ? (
     <NativeHeaderSide side="Left">
-      <NativeHeaderPressable onPress={() => router.canGoBack() ? router.back() : router.replace("/")}>
+      <NativeHeaderPressable onPress={() => returnTo === "home" ? router.replace("/(tabs)/index") : router.canGoBack() ? router.back() : router.replace("/")}>
         <Icon size={28}><Papicons name="ArrowLeft" color={colors.primary} /></Icon>
       </NativeHeaderPressable>
     </NativeHeaderSide>
@@ -113,9 +114,13 @@ export default function CourseModal() {
             : [];
           setSessionContents(contents.length > 0 ? contents : fallback);
         }
-      } catch {
+      } catch (error) {
         if (!cancelled) {
-          setSessionContents([]);
+          warn(`Impossible de charger le contenu du cours ${course.id}: ${String(error)}`, "CourseModal");
+          const fallback = course.additionalInfo?.trim()
+            ? [{ title: "Informations de séance", description: course.additionalInfo, category: 0, attachments: [] }]
+            : [];
+          setSessionContents(fallback);
           setContentsError(true);
         }
       } finally {
@@ -165,9 +170,14 @@ export default function CourseModal() {
   const endTime = Math.floor(course.to.getTime() / 1000);
   const openAttachment = (attachment: Attachment) => {
     if (!attachment.url) return;
+    if (Platform.OS === "web" && typeof window !== "undefined") {
+      const opened = window.open(attachment.url, "_blank", "noopener,noreferrer");
+      if (!opened) window.location.assign(attachment.url);
+      return;
+    }
     void WebBrowser.openBrowserAsync(attachment.url, {
       presentationStyle: "formSheet",
-    });
+    }).catch(error => Alert.alert("Document indisponible", String(error)));
   };
   const setManualCourseStatus = async (customStatus?: string) => {
     // Les cours iCal n'ont pas de record modifiable : on persiste le statut
@@ -442,19 +452,22 @@ export default function CourseModal() {
                 <List.Leading><ActivityIndicator /></List.Leading>
                 <Typography variant="title">Chargement du contenu…</Typography>
               </List.Item>
-            ) : contentsError ? (
-              <List.Item>
-                <Typography variant="body1" color="textSecondary">
-                  Le contenu de cette séance n’a pas pu être récupéré. Réessaie lorsque la connexion Pronote sera disponible.
-                </Typography>
-              </List.Item>
-            ) : sessionContents.length === 0 ? (
+            ) : (
+              <>
+                {contentsError ? (
+                  <List.Item>
+                    <Typography variant="body1" color="textSecondary">
+                      Certains éléments n’ont pas pu être récupérés. Les informations enregistrées avec le cours restent affichées ci-dessous.
+                    </Typography>
+                  </List.Item>
+                ) : null}
+                {sessionContents.length === 0 ? (
               <List.Item>
                 <Typography variant="body1" color="textSecondary">
                   Aucun contenu de séance n’est disponible pour ce cours.
                 </Typography>
               </List.Item>
-            ) : sessionContents.map((resource, index) => {
+                ) : sessionContents.map((resource, index) => {
               const description = readableCourseText(resource.description ?? "");
 
               return (
@@ -499,7 +512,9 @@ export default function CourseModal() {
                   ))}
                 </View>
               );
-            })}
+                })}
+              </>
+            )}
           </List.Section>
         )}
       </List>

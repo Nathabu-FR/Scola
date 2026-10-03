@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useTimetable } from '@/database/useTimetable';
-import { getAccountDataSourceIds } from '@/database/accountScope';
+import { useActiveAccountDataSourceIds } from '@/database/accountScope';
 import { useLoadErrorAlert } from '@/hooks/useLoadErrorAlert';
 import { useManagerSubscription } from '@/hooks/useManagerSubscription';
 import type { AccountManager } from "@/services/shared";
@@ -26,13 +26,8 @@ export function useTimetableData(weekNumber: number, currentDate: Date = new Dat
 
   // Read through selectors: switching accounts has to rebuild `services`, or the
   // filter below would keep matching the previous account and hide every course.
-  const accounts = useAccountStore(state => state.accounts);
   const lastUsedAccount = useAccountStore(state => state.lastUsedAccount);
-  const account = accounts.find(item => item.id === lastUsedAccount);
-  const services: string[] = useMemo(
-    () => getAccountDataSourceIds(account),
-    [account]
-  );
+  const services = useActiveAccountDataSourceIds();
 
   const rawTimetable = useTimetable(refresh, [weekNumber - 1, weekNumber, weekNumber + 1], safeDate);
 

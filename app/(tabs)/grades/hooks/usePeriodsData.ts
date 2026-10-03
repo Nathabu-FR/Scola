@@ -1,11 +1,12 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useManagerSubscription } from "@/hooks/useManagerSubscription";
 import type { AccountManager } from "@/services/shared";
 import { getManager } from "@/services/shared";
 import { Period } from "@/services/shared/grade";
 import { Capabilities, ServiceFailure } from "@/services/shared/types";
-import { useSettingsStore } from "@/stores/settings";
+import { getGradesPeriodNameForAccount, migrateLegacyAccountPersonalization, setGradesPeriodNameForAccount, useSettingsStore } from "@/stores/settings";
+import { useAccountStore } from "@/stores/account";
 import { getCurrentPeriod } from "@/utils/grades/helper/period";
 import { warn } from "@/utils/logger/logger";
 
@@ -50,20 +51,35 @@ export function usePeriodsData(): UsePeriodsDataResult {
   const [error, setError] = useState<Error | null>(null);
   const [failures, setFailures] = useState<ServiceFailure[]>([]);
 
-  const savedPeriodName = useSettingsStore(state => state.personalization.gradesPeriodName);
-  const mutateSettings = useSettingsStore(state => state.mutateProperty);
+  const accountId = useAccountStore(state => state.lastUsedAccount);
+  const savedPeriodName = useSettingsStore(state => getGradesPeriodNameForAccount(state.personalization, accountId));
+  const fetchRequestId = useRef(0);
 
   // Avoids re-applying the saved period every time the periods list is refreshed
   // once the user has actively picked one for this session.
   const hasUserSelection = useRef(false);
 
+  useEffect(() => {
+    fetchRequestId.current++;
+    hasUserSelection.current = false;
+    setPeriods([]);
+    setCurrentPeriodState(undefined);
+    setLoading(Boolean(accountId));
+    setRefreshing(false);
+    setError(null);
+    setFailures([]);
+    migrateLegacyAccountPersonalization(accountId);
+  }, [accountId]);
+
   const fetchPeriods = useCallback(async (managerToUse: AccountManager, isRefresh = false) => {
+    const requestId = ++fetchRequestId.current;
     if (isRefresh) { setRefreshing(true); } else { setLoading(true); }
     setError(null);
     setFailures([]);
 
     try {
-      const result = await managerToUse.getGradesPeriods();
+      const result = await managerToUse.getGradesPeriods(isRefresh);
+      if (requestId !== fetchRequestId.current || managerToUse.account.id !== useAccountStore.getState().lastUsedAccount) { return; }
       setFailures(managerToUse.getFailures(Capabilities.GRADES));
       const sorted = sortPeriods(result);
       setPeriods(sorted);
@@ -83,14 +99,17 @@ export function usePeriodsData(): UsePeriodsDataResult {
         return sorted.length > 0 ? getCurrentPeriod(sorted) : undefined;
       });
     } catch (e) {
+      if (requestId !== fetchRequestId.current || managerToUse.account.id !== useAccountStore.getState().lastUsedAccount) { return; }
       warn(String(e), "usePeriodsData");
       setFailures(managerToUse.getFailures(Capabilities.GRADES));
       setError(e instanceof Error ? e : new Error(String(e)));
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (requestId === fetchRequestId.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
-  }, [savedPeriodName]);
+  }, [accountId, savedPeriodName]);
 
   const handleManager = useCallback((manager: AccountManager) => {
     fetchPeriods(manager);
@@ -111,9 +130,9 @@ export function usePeriodsData(): UsePeriodsDataResult {
     setCurrentPeriodState(period);
 
     if (period.name && period.name !== savedPeriodName) {
-      mutateSettings("personalization", { gradesPeriodName: period.name });
+      setGradesPeriodNameForAccount(accountId, period.name);
     }
-  }, [mutateSettings, savedPeriodName]);
+  }, [accountId, savedPeriodName]);
 
   const refresh = useCallback(async () => {
     const manager = getManager();

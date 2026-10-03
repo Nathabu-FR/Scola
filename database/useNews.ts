@@ -1,26 +1,20 @@
 import { Model, Q } from "@nozbe/watermelondb";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Attachment } from "@/services/shared/attachment";
 import { News as SharedNews } from "@/services/shared/news";
-import { useAccountStore } from "@/stores/account";
 import { generateId } from "@/utils/generateId";
 import { info,warn } from "@/utils/logger/logger";
 
 import { getDatabaseInstance, useDatabase } from "./DatabaseProvider";
 import News from "./models/News";
-import { getAccountDataSourceIds, getActiveAccountDataSourceIds } from "./accountScope";
+import { getActiveAccountDataSourceIds, useActiveAccountDataSourceIds } from "./accountScope";
 import { parseJsonArray } from "./useHomework";
 import { safeWrite } from "./utils/safeTransaction";
 
 export function useNews(refresh = 0) {
   const database = useDatabase();
-  const accounts = useAccountStore(state => state.accounts);
-  const activeAccountId = useAccountStore(state => state.lastUsedAccount);
-  const sourceIds = useMemo(
-    () => getAccountDataSourceIds(accounts.find(account => account.id === activeAccountId)),
-    [accounts, activeAccountId]
-  );
+  const sourceIds = useActiveAccountDataSourceIds();
   const sourceKey = sourceIds.join("\u0000");
   const [news, setNews] = useState<SharedNews[]>([]);
 
@@ -37,7 +31,7 @@ export function useNews(refresh = 0) {
     );
 
     return () => sub.unsubscribe();
-  }, [refresh, database, sourceIds, sourceKey]);
+  }, [refresh, database, sourceKey]);
 
   return news.filter(item => sourceIds.includes(item.createdByAccount));
 }

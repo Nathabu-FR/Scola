@@ -12,6 +12,7 @@ import PapillonSubjectAvg from "@/utils/grades/algorithms/subject";
 import PapillonGradesAveragesOverTime from "@/utils/grades/algorithms/time";
 import PapillonWeightedAvg from "@/utils/grades/algorithms/weighted";
 import { warn } from "@/utils/logger/logger";
+import { useAccountStore } from "@/stores/account";
 
 /** Average calculation methods available to build a "how did it evolve" history. */
 export type AverageMethodKey = "subject" | "weighted" | "median";
@@ -89,6 +90,7 @@ export function useGradesData(
 ): UseGradesDataResult {
   const { kid } = options;
   const methods = options.methods ?? ALL_METHODS;
+  const accountId = useAccountStore(state => state.lastUsedAccount);
 
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [rank, setRank] = useState<GradeScore | null>(null);
@@ -128,7 +130,7 @@ export function useGradesData(
 
   const fetchGrades = useCallback(
     async (managerToUse: AccountManager, targetPeriod: Period, isRefresh = false) => {
-      const cacheKey = `${targetPeriod.id ?? targetPeriod.name}:${kid?.id ?? ""}`;
+      const cacheKey = `${accountId}:${targetPeriod.id ?? targetPeriod.name}:${kid?.id ?? ""}`;
       const requestId = ++requestIdRef.current;
 
       if (!isRefresh && cacheRef.current.has(cacheKey)) {
@@ -147,16 +149,17 @@ export function useGradesData(
         const result = await managerToUse.getGradesForPeriod(
           targetPeriod,
           targetPeriod.createdByAccount,
-          kid
+          kid,
+          isRefresh
         );
 
-        if (requestId !== requestIdRef.current) { return; } // A newer request has taken over.
+        if (requestId !== requestIdRef.current || managerToUse.account.id !== useAccountStore.getState().lastUsedAccount) { return; } // A newer profile or period request has taken over.
 
         setFailures(managerToUse.getFailures(Capabilities.GRADES));
         cacheRef.current.set(cacheKey, result);
         applyResult(result);
       } catch (e) {
-        if (requestId !== requestIdRef.current) { return; }
+        if (requestId !== requestIdRef.current || managerToUse.account.id !== useAccountStore.getState().lastUsedAccount) { return; }
         warn(String(e), "useGradesData");
         setFailures(managerToUse.getFailures(Capabilities.GRADES));
         setError(e instanceof Error ? e : new Error(String(e)));
@@ -167,8 +170,26 @@ export function useGradesData(
         }
       }
     },
-    [applyResult, kid]
+    [accountId, applyResult, kid]
   );
+
+  useEffect(() => {
+    requestIdRef.current++;
+    cacheRef.current.clear();
+    applyResult(undefined);
+    setError(null);
+    setFailures([]);
+    setRefreshing(false);
+    setLoading(Boolean(accountId && period));
+  }, [accountId, applyResult]);
+
+  useEffect(() => {
+    requestIdRef.current++;
+    applyResult(undefined);
+    setError(null);
+    setFailures([]);
+    setLoading(Boolean(period));
+  }, [period?.id, period?.name, applyResult]);
 
   useEffect(() => {
     if (period) { return; }

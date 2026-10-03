@@ -105,9 +105,9 @@ function TabOneScreen() {
   const tabBarHeight = insets.bottom;
   const { width: screenWidth } = useWindowDimensions();
 
-  const accounts = useAccountStore(state => state.accounts);
-  const lastUsedAccount = useAccountStore(state => state.lastUsedAccount);
-  const account = accounts.find(a => a.id === lastUsedAccount);
+  const transportInfo = useAccountStore(state =>
+    state.accounts.find(account => account.id === state.lastUsedAccount)?.transport
+  );
 
   const {
     date,
@@ -259,11 +259,11 @@ function TabOneScreen() {
         onRefresh={handleRefresh}
         colors={colors}
         tabBarHeight={tabBarHeight}
-        transportInfo={account?.transport ?? undefined}
+          transportInfo={transportInfo ?? undefined}
         hasError={hasTimetableError}
       />
     );
-  }, [getDateFromIndex, timetable, manualRefreshing, handleRefresh, colors, tabBarHeight, account, hasTimetableError]);
+  }, [getDateFromIndex, timetable, manualRefreshing, handleRefresh, colors, tabBarHeight, transportInfo, hasTimetableError]);
 
   return (
     <>

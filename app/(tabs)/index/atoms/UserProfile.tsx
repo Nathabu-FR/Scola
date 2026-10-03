@@ -7,7 +7,7 @@ import React from 'react';
 import { Dimensions, Platform, StyleSheet } from 'react-native';
 import { Pressable } from 'react-native';
 
-import { initializeAccountManager } from '@/services/shared';
+import { switchActiveAccount } from '@/services/shared';
 import { useAccountStore } from '@/stores/account';
 import { useSettingsStore } from '@/stores/settings';
 import Avatar from '@/ui/components/Avatar';
@@ -23,7 +23,16 @@ import ActionMenu from '@/ui/components/ActionMenu';
 const UserProfile = ({ subtitle, onPress }: { subtitle?: string, onPress?: () => void }) => {
   const router = useRouter();
   const { firstName, lastName, initials, profilePicture, level, establishment } = useUserProfileData() ?? {};
-  const accounts = useAccountStore((state) => state.accounts);
+  const accountsKey = useAccountStore(state => JSON.stringify(state.accounts.map(account => ({
+    id: account.id,
+    firstName: account.firstName,
+    lastName: account.lastName,
+    schoolName: account.schoolName,
+  }))));
+  const accounts = React.useMemo(
+    () => JSON.parse(accountsKey) as { id: string; firstName?: string; lastName?: string; schoolName?: string }[],
+    [accountsKey]
+  );
   const lastUsedAccount = useAccountStore((state) => state.lastUsedAccount);
   const theme = useTheme();
 
@@ -92,9 +101,8 @@ const UserProfile = ({ subtitle, onPress }: { subtitle?: string, onPress?: () =>
                 disabledTabsByAccount: nextDisabledTabsByAccount,
                 disabledTabs: disabledTabsForAccount,
               });
-              store.setLastUsedAccount(nativeEvent.event);
               try {
-                await initializeAccountManager();
+                await switchActiveAccount(nativeEvent.event);
               } catch (err) {
                 console.error("Failed to switch account:", err);
               }

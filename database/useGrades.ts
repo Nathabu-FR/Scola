@@ -117,6 +117,12 @@ export async function addPeriodGradesToDatabase(item: SharedPeriodGrades, period
     Q.where("createdByAccount", item.createdByAccount)
   ).fetch();
   const periodRow = periods[0];
+  if (!periodRow) {
+    // Do not create an orphaned periodgrade with an empty foreign key. This
+    // can happen when the grades response races its periods cache write.
+    warn(`Period "${period}" is missing from the local cache for ${item.createdByAccount}; grades were not cached.`);
+    return;
+  }
   const existingRows = await db.get<PeriodGrades>("periodgrades").query(
     Q.where("periodGradeId", periodGradeId),
     Q.where("createdByAccount", item.createdByAccount)
@@ -139,7 +145,7 @@ export async function addPeriodGradesToDatabase(item: SharedPeriodGrades, period
         const periodGrade = record as PeriodGrades;
         Object.assign(periodGrade, {
           periodGradeId,
-          periodId: periodRow?.id ?? "",
+          periodId: periodRow.id,
           createdByAccount: item.createdByAccount,
           studentOverallRaw: JSON.stringify(item.studentOverall ?? {}),
           classAverageRaw: JSON.stringify(item.classAverage ?? {}),
@@ -150,7 +156,7 @@ export async function addPeriodGradesToDatabase(item: SharedPeriodGrades, period
         const periodGrade = record as PeriodGrades;
         Object.assign(periodGrade, {
           periodGradeId,
-          periodId: periodRow?.id ?? "",
+          periodId: periodRow.id,
           createdByAccount: item.createdByAccount,
           studentOverallRaw: JSON.stringify(item.studentOverall ?? {}),
           classAverageRaw: JSON.stringify(item.classAverage ?? {}),

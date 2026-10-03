@@ -58,7 +58,9 @@ import {
   ServiceFailure,
 } from "@/services/shared/types";
 import { useAccountStore } from "@/stores/account";
+import { useAccountSwitchStore } from "@/stores/accountSwitch";
 import { Account, ServiceAccount, Services } from "@/stores/account/types";
+import { migrateLegacyAccountPersonalization } from "@/stores/settings";
 import { getAccountDataSourceIds } from "@/database/accountScope";
 import { debug, error, log, warn } from "@/utils/logger/logger";
 
@@ -86,6 +88,8 @@ const summarizeFailure = (reason: unknown): string => {
   return message.length > 500 ? `${message.slice(0, 497)}…` : message;
 };
 
+const GRADES_REQUEST_CACHE_TTL_MS = 5 * 60 * 1000;
+
 const isPermanentAuthError = (e: unknown): boolean =>
   e instanceof BadCredentialsError ||
   e instanceof AuthenticateError ||
@@ -98,6 +102,10 @@ import { Kid } from "./kid";
 export class AccountManager {
   private clients: Record<string, SchoolServicePlugin> = {};
   private failures = new Map<Capabilities, ServiceFailure[]>();
+  private gradesPeriodsCache?: { expiresAt: number; value: Period[] };
+  private gradesPeriodsInFlight?: Promise<Period[]>;
+  private periodGradesCache = new Map<string, { expiresAt: number; value: PeriodGrades }>();
+  private periodGradesInFlight = new Map<string, Promise<PeriodGrades>>();
 
   getFailures(capability: Capabilities): ServiceFailure[] {
     return this.failures.get(capability) ?? [];
@@ -125,46 +133,54 @@ export class AccountManager {
   async refreshAllAccounts(): Promise<boolean> {
     debug("We're refreshing all services for the account " + this.account.id);
     const hasInternet = await this.hasInternet();
-
-    let refreshedAtLeastOne = false;
-
-    const failures: Array<{ service: ServiceAccount; err: unknown }> = [];
-
-    for (const service of this.account.services) {
+    const serviceResults: Array<{
+      refreshed: boolean;
+      failure?: { service: ServiceAccount; err: unknown };
+    }> = await Promise.all(this.account.services.map(async service => {
       try {
         debug("Trying to refresh " + service.id);
         const reusable =
           service.serviceId === Services.PRONOTE ? this.clients[service.id] : undefined;
         const plugin = reusable ?? this.getServicePluginForAccount(service);
 
+        // Older saved accounts can contain a service id removed in a newer
+        // app version. Ignore that client rather than failing the whole refresh.
+        if (!plugin) {
+          warn(`No service plugin available for ${service.id}.`);
+          return { refreshed: false };
+        }
+
         if (!hasInternet && plugin.requiresInternet !== false) {
           warn(`Skipping network service ${service.id} while offline.`);
-          continue;
+          return { refreshed: false };
         }
 
         if (reusable && reusable.isTokenValid?.()) {
-          refreshedAtLeastOne = true;
           debug("Reusing the still valid session of " + service.id);
-          continue;
+          return { refreshed: true };
         }
 
-        if (plugin?.capabilities.includes(Capabilities.REFRESH)) {
+        if (plugin.capabilities.includes(Capabilities.REFRESH)) {
           this.clients[service.id] = await plugin.refreshAccount(service.auth);
-          refreshedAtLeastOne = true;
           debug("Successfully refreshed " + service.id);
-        } else {
-          this.clients[service.id] = plugin;
-          debug(
-            "Plugin for " +
-              service.id +
-              " doesn't support refresh but is available for other capabilities"
-          );
+          return { refreshed: true };
         }
-      } catch (e) {
-        warn(`Refresh failed for ${service.id}: ${e}`);
-        failures.push({ service, err: e });
+
+        this.clients[service.id] = plugin;
+        debug(
+          "Plugin for " +
+            service.id +
+            " doesn't support refresh but is available for other capabilities"
+        );
+        return { refreshed: false };
+      } catch (err) {
+        warn(`Refresh failed for ${service.id}: ${err}`);
+        return { refreshed: false, failure: { service, err } };
       }
-    }
+    }));
+
+    const refreshedAtLeastOne = serviceResults.some(result => result.refreshed);
+    const failures = serviceResults.flatMap(result => result.failure ? [result.failure] : []);
 
     debug(
       "Finished refreshing process for all services, services refreshed: " +
@@ -256,27 +272,64 @@ export class AccountManager {
   async getGradesForPeriod(
     period: Period,
     clientId: string,
-    kid?: Kid
+    kid?: Kid,
+    forceRefresh = false
   ): Promise<PeriodGrades> {
-    return await this.fetchData(
+    const cacheKey = `${clientId}:${period.id ?? period.name}:${kid?.id ?? ""}`;
+    const cached = this.periodGradesCache.get(cacheKey);
+    if (!forceRefresh && cached && cached.expiresAt > Date.now()) {
+      return cached.value;
+    }
+
+    const pending = this.periodGradesInFlight.get(cacheKey);
+    if (pending) return pending;
+
+    const request = this.fetchData(
       Capabilities.GRADES,
       async client =>
         client.getGradesForPeriod
           ? await client.getGradesForPeriod(period, kid)
-          : error("Bad Implementation"),
+          : (() => { throw new Error("getGradesForPeriod not implemented by this service."); })(),
       {
         multiple: false,
         clientId,
-        fallback: async () => getGradePeriodsFromCache(period.name, [clientId]),
+        fallback: async () => await getGradePeriodsFromCache(period.name, [clientId]) ?? {
+          studentOverall: { value: 0, disabled: true, status: "Inconnu" },
+          classAverage: { value: 0, disabled: true, status: "Inconnu" },
+          subjects: [],
+          createdByAccount: clientId,
+          fromCache: true,
+        },
         saveToCache: async (data: PeriodGrades) => {
           await addPeriodGradesToDatabase(data, period.name);
         },
       }
-    );
+    ).then(value => {
+      // A network result is reused by the home card and the Grades screen;
+      // fallback data stays eligible for a quick network retry.
+      if (!value.fromCache) {
+        this.periodGradesCache.set(cacheKey, {
+          expiresAt: Date.now() + GRADES_REQUEST_CACHE_TTL_MS,
+          value,
+        });
+      }
+      return value;
+    }).finally(() => {
+      if (this.periodGradesInFlight.get(cacheKey) === request) {
+        this.periodGradesInFlight.delete(cacheKey);
+      }
+    });
+    this.periodGradesInFlight.set(cacheKey, request);
+    return request;
   }
 
-  async getGradesPeriods(): Promise<Period[]> {
-    return await this.fetchData(
+  async getGradesPeriods(forceRefresh = false): Promise<Period[]> {
+    if (!forceRefresh && this.gradesPeriodsCache && this.gradesPeriodsCache.expiresAt > Date.now()) {
+      return this.gradesPeriodsCache.value;
+    }
+    if (this.gradesPeriodsInFlight) return this.gradesPeriodsInFlight;
+
+    const request = this.fetchData(
       Capabilities.GRADES,
       async client =>
         client.getGradesPeriods ? await client.getGradesPeriods() : [],
@@ -287,7 +340,19 @@ export class AccountManager {
           await addPeriodsToDatabase(data);
         },
       }
-    );
+    ).then(value => {
+      if (!value.some(period => period.fromCache)) {
+        this.gradesPeriodsCache = {
+          expiresAt: Date.now() + GRADES_REQUEST_CACHE_TTL_MS,
+          value,
+        };
+      }
+      return value;
+    }).finally(() => {
+      if (this.gradesPeriodsInFlight === request) this.gradesPeriodsInFlight = undefined;
+    });
+    this.gradesPeriodsInFlight = request;
+    return request;
   }
 
   async getAttendanceForPeriod(period: string): Promise<Attendance[]> {
@@ -546,7 +611,7 @@ export class AccountManager {
       async client =>
         client.getCanteenQRCodes
           ? await client.getCanteenQRCodes()
-          : error("getCanteenQRCodes not found"),
+          : (() => { throw new Error("getCanteenQRCodes not implemented by this service."); })(),
       {
         multiple: false,
         clientId,
@@ -677,12 +742,9 @@ export class AccountManager {
           throw new Error(`Client introuvable : ${options.clientId}`);
         }
         if (!client.capabilities.includes(capability)) {
-          error(
-            "Capability " +
-              capability +
-              " not supported by client " +
-              options.clientId
-          );
+          const capabilityError = new Error("Capability " + capability + " not supported by client " + options.clientId);
+          noteFailure(client, capabilityError);
+          throw capabilityError;
         }
         if (client.requiresInternet !== false && !(await this.hasInternet())) {
           if (options.fallback) {
@@ -970,4 +1032,28 @@ export const getManager = (silent = false): AccountManager | null => {
 
 export const resetAccountManager = (): void => {
   globalManager = null;
+};
+
+/** Switch profiles with a single visible loading state and profile-scoped
+ * personalization migration. In-flight refreshes from the old profile cannot
+ * install their manager because initializeAccountManager checks the active id. */
+export const switchActiveAccount = async (accountId: string): Promise<void> => {
+  const accountStore = useAccountStore.getState();
+  if (accountId === accountStore.lastUsedAccount) return;
+  if (!accountStore.accounts.some(account => account.id === accountId)) {
+    throw new Error("Impossible de trouver le profil sélectionné.");
+  }
+
+  const previousAccountId = accountStore.lastUsedAccount;
+  if (previousAccountId) migrateLegacyAccountPersonalization(previousAccountId);
+
+  useAccountSwitchStore.getState().begin(accountId);
+  resetAccountManager();
+  accountStore.setLastUsedAccount(accountId);
+
+  try {
+    await initializeAccountManager(accountId);
+  } finally {
+    useAccountSwitchStore.getState().finish(accountId);
+  }
 };

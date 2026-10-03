@@ -44,10 +44,16 @@ export interface Personalization {
   magicModelURL?: string;
   language?: string | null;
   wallpaper?: Wallpaper;
+  /** Profile-scoped wallpaper; null means the profile explicitly chose no wallpaper. */
+  wallpapersByAccount?: Record<string, Wallpaper | null>;
+  /** Account to which the legacy global wallpaper belonged before profile scoping. */
+  wallpaperOwnerAccountId?: string;
   disabledTabs?: string[];
   disabledTabsByAccount?: Record<string, string[]>;
   gradesSortMethod?: string;
   gradesPeriodName?: string;
+  gradesPeriodNamesByAccount?: Record<string, string | null>;
+  gradesPeriodOwnerAccountId?: string;
   installedVersion?: string;
   releaseNotesSeenForVersion?: string;
   welcomeModalSeen?: boolean;

@@ -4,31 +4,24 @@ import { useAccountStore } from '@/stores/account';
 import { getInitials } from '@/utils/chats/initials';
 
 export const useUserProfileData = () => {
-  const accounts = useAccountStore((state) => state.accounts);
   const lastUsedAccount = useAccountStore((state) => state.lastUsedAccount);
-  const account = accounts.find((a) => a.id === lastUsedAccount);
+  const accountExists = useAccountStore(state => state.accounts.some(account => account.id === state.lastUsedAccount));
+  const firstName = useAccountStore(state => state.accounts.find(account => account.id === state.lastUsedAccount)?.firstName ?? null);
+  const lastName = useAccountStore(state => state.accounts.find(account => account.id === state.lastUsedAccount)?.lastName ?? null);
+  const level = useAccountStore(state => state.accounts.find(account => account.id === state.lastUsedAccount)?.className ?? null);
+  const establishment = useAccountStore(state => state.accounts.find(account => account.id === state.lastUsedAccount)?.schoolName ?? null);
+  const profilePictureData = useAccountStore(state => state.accounts.find(account => account.id === state.lastUsedAccount)?.customisation?.profilePicture);
 
-  const [firstName, lastName, level, establishment] = useMemo(() => {
-    if (!lastUsedAccount) { return [null, null, null, null]; }
+  const initials = useMemo(() => getInitials(`${firstName ?? ""} ${lastName ?? ""}`), [firstName, lastName]);
 
-    const firstName = account?.firstName;
-    const lastName = account?.lastName;
-    const level = account?.className;
-    const establishment = account?.schoolName;
-
-    return [firstName, lastName, level, establishment];
-  }, [lastUsedAccount, account]);
-
-  const initials = useMemo(() => getInitials(`${account?.firstName} ${account?.lastName}`), [account]);
-  
   const profilePicture = useMemo(() => {
-    if (account && account.customisation && account.customisation.profilePicture && !account.customisation.profilePicture.startsWith("PCFET0NUWVBFIGh0bWw+")) {
-      return `data:image/png;base64,${account.customisation.profilePicture}`;
+    if (profilePictureData && !profilePictureData.startsWith("PCFET0NUWVBFIGh0bWw+")) {
+      return `data:image/png;base64,${profilePictureData}`;
     }
     return undefined;
-  }, [account]);
+  }, [profilePictureData]);
 
-  if(!account) {return null;}
+  if (!accountExists || !lastUsedAccount) {return null;}
 
   return {
     firstName,

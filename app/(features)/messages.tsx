@@ -1,5 +1,5 @@
 import * as WebBrowser from "expo-web-browser";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronLeft, MessageCircle, Send } from "lucide-react-native";
 import {
   ActivityIndicator,
@@ -48,6 +48,7 @@ const formatDate = (value: Date) =>
 
 export default function MessagesScreen() {
   const { colors } = useTheme();
+  const accountId = useAccountStore(state => state.lastUsedAccount);
   const activeAccount = useAccountStore(state =>
     state.accounts.find(account => account.id === state.lastUsedAccount)
   );
@@ -60,8 +61,11 @@ export default function MessagesScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [sending, setSending] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const chatsRequestId = useRef(0);
+  const messagesRequestId = useRef(0);
 
   const loadChats = useCallback(async (isRefresh = false) => {
+    const requestId = ++chatsRequestId.current;
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
     setErrorMessage("");
@@ -69,21 +73,36 @@ export default function MessagesScreen() {
     try {
       const manager = getManager(true) ?? await initializeAccountManager();
       const result = await manager.getChats();
+      if (requestId !== chatsRequestId.current || accountId !== useAccountStore.getState().lastUsedAccount) return;
       setChats([...result].sort((a, b) => b.date.getTime() - a.date.getTime()));
     } catch {
+      if (requestId !== chatsRequestId.current) return;
       setErrorMessage("La messagerie n’a pas pu être chargée. Vérifie la connexion de ton compte scolaire.");
       setChats([]);
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (requestId === chatsRequestId.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
-  }, []);
+  }, [accountId]);
 
   useEffect(() => {
+    setChats([]);
+    setSelectedChat(null);
+    setMessages([]);
+    setDraft("");
+    setLoadingMessages(false);
+    setLoading(true);
+    setRefreshing(false);
+    setSending(false);
+    setErrorMessage("");
+    messagesRequestId.current++;
     void loadChats();
-  }, [loadChats]);
+  }, [accountId, loadChats]);
 
   const openChat = useCallback(async (chat: Chat) => {
+    const requestId = ++messagesRequestId.current;
     setSelectedChat(chat);
     setMessages([]);
     setLoadingMessages(true);
@@ -91,35 +110,57 @@ export default function MessagesScreen() {
     try {
       const manager = getManager(true) ?? await initializeAccountManager();
       const result = await manager.getChatMessages(chat);
+      if (requestId !== messagesRequestId.current || accountId !== useAccountStore.getState().lastUsedAccount) return;
       setMessages([...result].sort((a, b) => a.date.getTime() - b.date.getTime()));
     } catch {
+      if (requestId !== messagesRequestId.current) return;
       setErrorMessage("Les messages de cette conversation n’ont pas pu être chargés.");
     } finally {
-      setLoadingMessages(false);
+      if (requestId === messagesRequestId.current) setLoadingMessages(false);
     }
-  }, []);
+  }, [accountId]);
 
   const sendMessage = useCallback(async () => {
     const content = draft.trim();
     if (!content || !selectedChat || sending) return;
+
+    const requestAccountId = accountId;
     setSending(true);
     setErrorMessage("");
     try {
       const manager = getManager(true) ?? await initializeAccountManager();
+      if (requestAccountId !== useAccountStore.getState().lastUsedAccount) return;
+      if (manager.account.id !== requestAccountId) {
+        throw new Error("Le compte actif a changé.");
+      }
+
       await manager.sendMessageInChat(selectedChat, content);
+      if (requestAccountId !== useAccountStore.getState().lastUsedAccount) return;
       setDraft("");
+
       const updated = await manager.getChatMessages(selectedChat);
+      if (requestAccountId !== useAccountStore.getState().lastUsedAccount) return;
       setMessages([...updated].sort((a, b) => a.date.getTime() - b.date.getTime()));
     } catch {
-      setErrorMessage("Le message n’a pas pu être envoyé. Réessaie dans quelques instants.");
+      if (requestAccountId === useAccountStore.getState().lastUsedAccount) {
+        setErrorMessage("Le message n’a pas pu être envoyé. Réessaie dans quelques instants.");
+      }
     } finally {
-      setSending(false);
+      if (requestAccountId === useAccountStore.getState().lastUsedAccount) {
+        setSending(false);
+      }
     }
-  }, [draft, selectedChat, sending]);
+  }, [accountId, draft, selectedChat, sending]);
 
   const openAttachment = useCallback((attachment: Attachment) => {
     if (!attachment.url) return;
-    void WebBrowser.openBrowserAsync(attachment.url, { presentationStyle: "formSheet" });
+    if (Platform.OS === "web" && typeof window !== "undefined") {
+      const opened = window.open(attachment.url, "_blank", "noopener,noreferrer");
+      if (!opened) window.location.assign(attachment.url);
+      return;
+    }
+    void WebBrowser.openBrowserAsync(attachment.url, { presentationStyle: "formSheet" })
+      .catch(error => setErrorMessage(`La pièce jointe n’a pas pu être ouverte : ${String(error)}`));
   }, []);
 
   const chatKey = useCallback((chat: Chat) => `${chat.createdByAccount}:${chat.id}:${chat.date.getTime()}`, []);

@@ -37,13 +37,32 @@ export async function addChatsToDatabase(chats: SharedChat[]) {
   }
 }
 
+async function ensureChatInDatabase(chat: SharedChat): Promise<string> {
+  const db = getDatabaseInstance();
+  const chatId = generateId(chat.createdByAccount + chat.subject + chat.date);
+  const queryChat = () => db.get<Chat>("chats").query(
+    Q.where("chatId", chatId),
+    Q.where("createdByAccount", chat.createdByAccount)
+  ).fetch();
+
+  // The WatermelonDB primary key is different from our stable `chatId` field.
+  // Use the indexed field (and rehydrate older/missing chat rows) before adding
+  // messages or recipients; find(chatId) incorrectly searched the primary key.
+  let records = await queryChat();
+  if (records.length === 0) {
+    await addChatsToDatabase([chat]);
+    records = await queryChat();
+  }
+  if (records.length === 0) {
+    throw new Error("Impossible de retrouver la conversation dans le cache.");
+  }
+
+  return chatId;
+}
+
 export async function addRecipientsToDatabase(chat: SharedChat, recipients: SharedRecipient[]) {
   const db = getDatabaseInstance();
-  const chatId = generateId(chat.createdByAccount + chat.subject + chat.date)
-  const dbChat = await db.get('chats').find(chatId);
-  if (!dbChat) {
-    error("We're unable to find the chat in cache, please rehydrate chats before...")
-  }
+  const chatId = await ensureChatInDatabase(chat);
 
   for (const item of recipients) {
     const id = generateId(chatId + item.name + item.class)
@@ -69,11 +88,7 @@ export async function addRecipientsToDatabase(chat: SharedChat, recipients: Shar
 
 export async function addMessagesToDatabase(chat: SharedChat, messages: SharedMessage[]) {
   const db = getDatabaseInstance();
-  const chatId = generateId(chat.createdByAccount + chat.subject + chat.date)
-  const dbChat = await db.get('chats').find(chatId);
-  if (!dbChat) {
-    error("We're unable to find the chat in cache, please rehydrate chats before...")
-  }
+  const chatId = await ensureChatInDatabase(chat);
 
   for (const item of messages) {
     const id = generateId(chatId + item.content + item.author + item.date + item.subject)

@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useAccountStore } from "@/stores/account";
+import { useActiveAccountDataSourceIds } from "@/database/accountScope";
 import type { AccountManager } from "@/services/shared";
 import { getManager } from "@/services/shared";
 import { Homework } from "@/services/shared/homework";
@@ -135,18 +136,24 @@ const isSameList = (a: Homework[], b: Homework[]) =>
  * merged with the freshly fetched homework, as arrays whose identity only
  * changes when that week's contents actually did.
  */
-export const useHomeworkData = (weeks: number[], alert: any) => {
+export const useHomeworkData = (
+  weeks: number[],
+  alert: any,
+  options: { deferRemainingWeeks?: boolean } = {}
+) => {
+  const deferRemainingWeeks = options.deferRemainingWeeks ?? false;
   const [refreshingWeek, setRefreshingWeek] = useState<number | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [homework, setHomework] = useState<Record<string, Homework>>({});
 
-  // Read through selectors: switching accounts has to rebuild `services`, or the
-  // filter below would keep matching the previous account and hide every task.
-  const accounts = useAccountStore(state => state.accounts);
   const lastUsedAccount = useAccountStore(state => state.lastUsedAccount);
-  const account = accounts.find(acc => acc.id === lastUsedAccount);
-  type Service = { id: string };
-  const services = useMemo(() => account?.services?.map((s: Service) => s.id) ?? [], [account]);
+  // A refreshed auth token replaces the Account object. Subscribe to the
+  // stable source ids so that doesn't rebuild task caches or retrigger fetches.
+  const accountSources = useActiveAccountDataSourceIds();
+  const services = useMemo(
+    () => accountSources.filter(sourceId => sourceId !== lastUsedAccount),
+    [accountSources, lastUsedAccount]
+  );
   const [manager, setManager] = useState(() => getManager(true));
   const [loadError, setLoadError] = useState<Error | null>(null);
   const [failures, setFailures] = useState<ServiceFailure[]>([]);
@@ -165,11 +172,11 @@ export const useHomeworkData = (weeks: number[], alert: any) => {
     for (const [key, list] of Object.entries(cacheByWeek)) {
       const week = Number(key);
       const items = list.flatMap(value => {
-        const cached = normalizeHomework(value, account?.id ?? "");
+        const cached = normalizeHomework(value, lastUsedAccount ?? "");
         if (
           !cached ||
-          (!services.includes(cached.createdByAccount) &&
-            !(cached.custom && cached.createdByAccount === account?.id))
+            (!services.includes(cached.createdByAccount) &&
+            !(cached.custom && cached.createdByAccount === lastUsedAccount))
         ) {
           return [];
         }
@@ -189,7 +196,7 @@ export const useHomeworkData = (weeks: number[], alert: any) => {
     itemCache.current = nextItems;
     weekCache.current = nextWeeks;
     return nextWeeks;
-  }, [cacheByWeek, homework, services, account?.id]);
+  }, [cacheByWeek, homework, services, lastUsedAccount]);
 
   // A week is fetched from the service once per session; `inFlightWeeks` keeps a
   // swipe back and forth from queueing the same request twice.
@@ -197,6 +204,8 @@ export const useHomeworkData = (weeks: number[], alert: any) => {
   const inFlightWeeks = useRef<Set<number>>(new Set());
   const weeksRef = useRef(weeks);
   weeksRef.current = weeks;
+  const prefetchGeneration = useRef(0);
+  const prefetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scheduleRefresh = useCallback(() => {
@@ -212,6 +221,10 @@ export const useHomeworkData = (weeks: number[], alert: any) => {
   useEffect(() => () => {
     if (refreshTimer.current) {
       clearTimeout(refreshTimer.current);
+    }
+    prefetchGeneration.current++;
+    if (prefetchTimer.current) {
+      clearTimeout(prefetchTimer.current);
     }
   }, []);
 
@@ -256,12 +269,44 @@ export const useHomeworkData = (weeks: number[], alert: any) => {
     [manager, scheduleRefresh]
   );
 
+  const fetchWeeks = useCallback((
+    weeksToFetch: number[],
+    managerToUse: AccountManager | null,
+    force: boolean
+  ) => {
+    prefetchGeneration.current++;
+    const generation = prefetchGeneration.current;
+    if (prefetchTimer.current) {
+      clearTimeout(prefetchTimer.current);
+      prefetchTimer.current = null;
+    }
+
+    if (!deferRemainingWeeks || weeksToFetch.length <= 1) {
+      weeksToFetch.forEach(week => { void fetchWeek(week, managerToUse ?? undefined, force); });
+      return;
+    }
+
+    // Load the visible week first. Non-visible weeks still fill the home
+    // preview cache, but are staggered so four Pronote requests don't all
+    // parse and write at once during the first interactive seconds.
+    void fetchWeek(weeksToFetch[0], managerToUse ?? undefined, force);
+    let nextIndex = 1;
+    const fetchNext = () => {
+      if (prefetchGeneration.current !== generation || nextIndex >= weeksToFetch.length) return;
+      const week = weeksToFetch[nextIndex++];
+      void fetchWeek(week, managerToUse ?? undefined, force).finally(() => {
+        if (prefetchGeneration.current === generation && nextIndex < weeksToFetch.length) {
+          prefetchTimer.current = setTimeout(fetchNext, 1000);
+        }
+      });
+    };
+    prefetchTimer.current = setTimeout(fetchNext, 2500);
+  }, [deferRemainingWeeks, fetchWeek]);
+
   const weeksKey = weeks.join(",");
   useEffect(() => {
-    for (const week of weeksRef.current) {
-      fetchWeek(week);
-    }
-  }, [weeksKey, fetchWeek]);
+    fetchWeeks(weeksRef.current, manager, false);
+  }, [weeksKey, fetchWeeks, manager]);
 
   const managerRef = useRef(manager);
   useEffect(() => {
@@ -276,6 +321,11 @@ export const useHomeworkData = (weeks: number[], alert: any) => {
     weekCache.current = {};
     fetchedWeeks.current.clear();
     inFlightWeeks.current.clear();
+    prefetchGeneration.current++;
+    if (prefetchTimer.current) {
+      clearTimeout(prefetchTimer.current);
+      prefetchTimer.current = null;
+    }
   }, [lastUsedAccount]);
 
   const handleManager = useCallback((updatedManager: AccountManager) => {
@@ -288,10 +338,8 @@ export const useHomeworkData = (weeks: number[], alert: any) => {
     setManager(updatedManager);
     fetchedWeeks.current.clear();
     setLoadError(null);
-    for (const week of weeksRef.current) {
-      fetchWeek(week, updatedManager, true);
-    }
-  }, [fetchWeek]);
+    fetchWeeks(weeksRef.current, updatedManager, true);
+  }, [fetchWeeks]);
 
   // Without a manager nothing is ever fetched: say so rather than leaving the
   // week looking like it simply has no homework.

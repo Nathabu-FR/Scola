@@ -3,7 +3,6 @@ import {
   discussionRecipients,
   discussions,
   discussionSendMessage,
-  DiscussionMessage,
   EntityKind,
   newDiscussion,
   NewDiscussionRecipient,
@@ -12,6 +11,7 @@ import {
 } from "@blockshub/pawnote-lts";
 
 import { Chat, Message, Recipient } from "@/services/shared/chat";
+import { AttachmentType } from "@/services/shared/attachment";
 import { error } from "@/utils/logger/logger";
 
 export async function fetchPronoteChats(
@@ -82,37 +82,91 @@ export async function fetchPronoteChatMessages(
   const messages = await discussionMessages(session, chat.ref, true)
   const studentName = session.user.resources.find(resource => resource.name)?.name ?? session.user.name;
 
-  // PRONOTE stores a reply chain on each sent item. The actual incoming
-  // message is often nested under `replyingTo` (and forwarded messages under
-  // `transferredMessages`), so reading only `sents` produced an empty thread.
-  const threadMessages = new Map<string, DiscussionMessage>();
-  for (const sent of Array.isArray(messages.sents) ? messages.sents : []) {
-    for (const message of [
-      ...(Array.isArray(sent.transferredMessages) ? sent.transferredMessages : []),
-      ...(sent.replyingTo ? [sent.replyingTo] : []),
-      sent,
-    ]) {
-      if (message?.id) threadMessages.set(message.id, message);
+  // The library has returned both a raw `sents` shape and a parsed
+  // `MessagesOverview.messages` shape across supported PRONOTE versions.
+  // Normalize either shape and walk replies/forwards instead of assuming the
+  // body is on the top-level sent item.
+  type MessageRecord = Record<string, unknown>;
+  const asRecord = (value: unknown): MessageRecord | undefined =>
+    value && typeof value === "object" && !Array.isArray(value)
+      ? value as MessageRecord
+      : undefined;
+  const readText = (value: unknown, depth = 0): string => {
+    if (depth > 5 || value == null) return "";
+    if (typeof value === "string") return value;
+    if (typeof value === "number") return String(value);
+    if (Array.isArray(value)) return value.map(item => readText(item, depth + 1)).filter(Boolean).join("\n");
+    const record = asRecord(value);
+    if (!record) return "";
+    for (const key of ["V", "value", "text", "content", "body", "html", "L"]) {
+      const text = readText(record[key], depth + 1);
+      if (text) return text;
     }
-  }
+    return "";
+  };
+  const response = messages as unknown as MessageRecord;
+  const rootItems = ["messages", "sents", "received", "items", "sentMessages"]
+    .flatMap(key => Array.isArray(response[key]) ? response[key] as unknown[] : []);
+  const visited = new WeakSet<object>();
+  const normalized = new Map<string, Message>();
+  let fallbackIndex = 0;
 
-  return [...threadMessages.values()]
-    .sort((a, b) => a.creationDate.getTime() - b.creationDate.getTime())
-    .map((message) => {
-    return {
-      id: message.id,
-      subject: "",
-      content: message.content,
-      author: message.author?.name ?? studentName,
-      date: message.creationDate,
-      attachments: (Array.isArray(message.files) ? message.files : []).map((attachment) => ({
-        type: attachment.kind,
-        name: attachment.name,
-        url: attachment.url,
-        createdByAccount: accountId,
-      }))
-    };
-  });
+  const visit = (value: unknown, depth = 0): void => {
+    if (depth > 8) return;
+    if (Array.isArray(value)) {
+      value.forEach(item => visit(item, depth + 1));
+      return;
+    }
+    const record = asRecord(value);
+    if (!record || visited.has(record)) return;
+    visited.add(record);
+
+    const body = readText(record.content ?? record.body ?? record.text ?? record.messageText ?? record.message);
+    const rawFiles = record.files ?? record.attachments;
+    const files = Array.isArray(rawFiles) ? rawFiles : [];
+    const idValue = record.id ?? record.messageId ?? record.messageID ?? record.N;
+    const id = typeof idValue === "string" || typeof idValue === "number"
+      ? String(idValue)
+      : undefined;
+
+    if (body.trim() || files.length > 0) {
+      const dateValue = record.creationDate ?? record.date ?? record.createdAt ?? record.sentAt;
+      const parsedDate = dateValue instanceof Date ? dateValue : new Date(String(dateValue ?? ""));
+      const date = Number.isNaN(parsedDate.getTime()) ? chat.date : parsedDate;
+      const authorRecord = asRecord(record.author ?? record.sender);
+      const author = typeof record.author === "string"
+        ? record.author
+        : readText(authorRecord?.name ?? authorRecord?.label) || studentName;
+      const key = id ?? `${chat.id}:${date.getTime()}:${author}:${body.slice(0, 64)}:${fallbackIndex++}`;
+      normalized.set(key, {
+        id: key,
+        subject: "",
+        content: body,
+        author,
+        date,
+        attachments: files.flatMap(file => {
+          const attachment = asRecord(file);
+          if (!attachment) return [];
+          const url = readText(attachment.url ?? attachment.href);
+          if (!url) return [];
+          const kind = attachment.kind ?? attachment.type;
+          return [{
+            type: (kind === 0 || kind === "link" || kind === "LINK" ? AttachmentType.LINK : AttachmentType.FILE),
+            name: readText(attachment.name ?? attachment.filename) || "Pièce jointe",
+            url,
+            createdByAccount: accountId,
+          }];
+        }),
+      });
+    }
+
+    for (const key of ["replyingTo", "transferredMessages", "replies", "messages", "items", "sents", "received", "message", "thread"]) {
+      visit(record[key], depth + 1);
+    }
+  };
+
+  rootItems.forEach(item => visit(item));
+  return [...normalized.values()].sort((a, b) => a.date.getTime() - b.date.getTime());
 }
 
 export async function sendPronoteMessageInChat(

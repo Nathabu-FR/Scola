@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { t } from 'i18next';
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { InteractionManager } from 'react-native';
 
 import { getWeekNumberFromDate } from '@/database/useHomework';
@@ -25,6 +25,14 @@ export const useHomeData = () => {
   const settingsstore = useSettingsStore(state => state.personalization);
   const lastUsedAccount = useAccountStore(state => state.lastUsedAccount);
   const removeAccount = useAccountStore(state => state.removeAccount);
+  const previousAccount = useRef(lastUsedAccount);
+
+  useEffect(() => {
+    if (previousAccount.current !== lastUsedAccount) {
+      lastHomeSync.delete(lastUsedAccount);
+      previousAccount.current = lastUsedAccount;
+    }
+  }, [lastUsedAccount]);
 
   const fetchEDT = useCallback(async () => {
     const manager = getManager();

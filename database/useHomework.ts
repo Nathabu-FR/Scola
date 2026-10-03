@@ -1,5 +1,5 @@
 import { Model, Q } from "@nozbe/watermelondb";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Attachment } from "@/services/shared/attachment";
 import { Homework as SharedHomework } from "@/services/shared/homework";
@@ -8,8 +8,7 @@ import { warn } from "@/utils/logger/logger";
 
 import { getDatabaseInstance, useDatabase } from "./DatabaseProvider";
 import Homework from "./models/Homework";
-import { getAccountDataSourceIds, getActiveAccountDataSourceIds } from "./accountScope";
-import { useAccountStore } from "@/stores/account";
+import { getActiveAccountDataSourceIds, useActiveAccountDataSourceIds } from "./accountScope";
 import { safeWrite } from "./utils/safeTransaction";
 
 function mapHomeworkToShared(homework: Homework): SharedHomework {
@@ -75,12 +74,7 @@ export async function getHomeworkById(id: string): Promise<SharedHomework | unde
 
 export function useHomeworkForWeek(weekNumber: number, refresh = 0) {
   const database = useDatabase();
-  const accounts = useAccountStore(state => state.accounts);
-  const activeAccountId = useAccountStore(state => state.lastUsedAccount);
-  const sourceIds = useMemo(
-    () => getAccountDataSourceIds(accounts.find(account => account.id === activeAccountId)),
-    [accounts, activeAccountId]
-  );
+  const sourceIds = useActiveAccountDataSourceIds();
   const [homeworks, setHomeworks] = useState<SharedHomework[]>([]);
 
   useEffect(() => {
@@ -105,12 +99,7 @@ export function useHomeworkForWeek(weekNumber: number, refresh = 0) {
 // empty page before the query resolves.
 export function useHomeworkForWeeks(weekNumbers: number[], refresh = 0) {
   const database = useDatabase();
-  const accounts = useAccountStore(state => state.accounts);
-  const activeAccountId = useAccountStore(state => state.lastUsedAccount);
-  const sourceIds = useMemo(
-    () => getAccountDataSourceIds(accounts.find(account => account.id === activeAccountId)),
-    [accounts, activeAccountId]
-  );
+  const sourceIds = useActiveAccountDataSourceIds();
   const [homeworks, setHomeworks] = useState<Record<number, SharedHomework[]>>({});
   const weeksKey = weekNumbers.join(",");
 
@@ -153,12 +142,7 @@ export function useHomeworkForWeeks(weekNumbers: number[], refresh = 0) {
 /** Observe every cached assignment so the home screen can rank open work across week boundaries. */
 export function useAllHomeworkFromCache(options: { upcomingOnly?: boolean } = {}) {
   const database = useDatabase();
-  const accounts = useAccountStore(state => state.accounts);
-  const activeAccountId = useAccountStore(state => state.lastUsedAccount);
-  const sourceIds = useMemo(
-    () => getAccountDataSourceIds(accounts.find(account => account.id === activeAccountId)),
-    [accounts, activeAccountId]
-  );
+  const sourceIds = useActiveAccountDataSourceIds();
   const [homeworks, setHomeworks] = useState<SharedHomework[]>([]);
   const upcomingOnly = options.upcomingOnly ?? false;
 

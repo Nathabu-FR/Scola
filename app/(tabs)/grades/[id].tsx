@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import List from '@/ui/new/List';
 import Typography from '@/ui/new/Typography';
 import { useSettingsStore } from '@/stores/settings';
+import { useAccountStore } from '@/stores/account';
 import { formatAssumed20ForDisplay, getGradeDisplayScale, getDisplayScaleMax } from '@/utils/grades/scale';
 import { SkillChip } from "@/ui/components/SkillChip";
 import { getCurrentPeriod } from "@/utils/grades/helper/period";
@@ -92,6 +93,7 @@ export default function GradesModal() {
   const [subject, setSubject] = useState<Subject>();
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [loading, setLoading] = useState(true);
+  const accountId = useAccountStore(state => state.lastUsedAccount);
   const displayScale = getGradeDisplayScale(useSettingsStore(state => state.personalization.gradesDisplayScale));
   const displayScaleMax = getDisplayScaleMax(displayScale);
   const insets = useSafeAreaInsets();
@@ -112,9 +114,10 @@ export default function GradesModal() {
 
       try {
         const manager = getManager();
-        if (!manager || !id) return;
+        if (!manager || !id || manager.account.id !== accountId) return;
 
         const periods = await manager.getGradesPeriods();
+        if (cancelled || manager.account.id !== useAccountStore.getState().lastUsedAccount) return;
         const currentPeriod = getCurrentPeriod(periods);
         const orderedPeriods = currentPeriod
           ? [currentPeriod, ...periods.filter(period => period.id !== currentPeriod.id)]
@@ -126,6 +129,7 @@ export default function GradesModal() {
               period,
               period.createdByAccount
             );
+            if (cancelled || manager.account.id !== useAccountStore.getState().lastUsedAccount) return;
             const periodSubjects = [
               ...(periodGrades.subjects ?? []),
               ...(periodGrades.modules ?? []),
@@ -160,7 +164,7 @@ export default function GradesModal() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [accountId, id]);
 
   const getSubjectById = useCallback(
     (subjectId: string) => subjects.find(candidate => candidate.id === subjectId),

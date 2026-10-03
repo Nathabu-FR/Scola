@@ -25,13 +25,15 @@ import HomeHomeworkWidget from './widgets/homework';
 import { useHomeworkData } from '../tasks/hooks/useHomeworkData';
 import GradesWidget from './widgets/Grades';
 import { usePeriodsData } from '../grades/hooks/usePeriodsData';
-import { useGradesData } from '../grades/hooks/useGradesData';
+import { useGradesData, type AverageMethodKey } from '../grades/hooks/useGradesData';
 import MainTabErrorBoundary from '@/ui/components/MainTabErrorBoundary';
 import { Dynamic } from '@/ui/components/Dynamic';
 import Stack from '@/ui/components/Stack';
 import Typography from '@/ui/components/Typography';
 import Icon from '@/ui/components/Icon';
 import Button from '@/ui/new/Button';
+
+const HOME_GRADE_HISTORY_METHODS: AverageMethodKey[] = ["subject"];
 
 const HomeScreen = () => {
   const focused = useIsFocused();
@@ -42,23 +44,43 @@ const HomeScreen = () => {
   const alert = useAlert();
 
   // Account
-  const store = useAccountStore();
-  const accounts = useAccountStore((state) => state.accounts);
-  const account = accounts.find(a => a.id === store.lastUsedAccount);
+  // Subscribe only to data that affects the home UI. Token refreshes replace
+  // account/service objects; subscribing to the whole store used to rerender
+  // the home tree and restart its database observers for every refreshed token.
+  const accountInfo = useAccountStore((state) => {
+    const activeAccount = state.accounts.find(item => item.id === state.lastUsedAccount);
+    return activeAccount
+      ? JSON.stringify({
+        id: activeAccount.id,
+        schoolName: activeAccount.schoolName,
+        transportConfigured: activeAccount.transport !== undefined,
+        serviceIds: activeAccount.services.map(service => service.id),
+      })
+      : "";
+  });
+  const account = React.useMemo(() => accountInfo
+    ? JSON.parse(accountInfo) as {
+      id: string;
+      schoolName?: string;
+      transportConfigured: boolean;
+      serviceIds: string[];
+    }
+    : undefined, [accountInfo]);
+  const initializeTransport = useAccountStore(state => state.initializeTransport);
   const router = useRouter();
   const welcomeModalSeen = useSettingsStore(state => state.personalization.welcomeModalSeen);
   const mutateSettings = useSettingsStore(state => state.mutateProperty);
 
   React.useEffect(() => {
-    if (accounts.length === 0) {
+    if (!account) {
       router.replace("/(onboarding)/welcome");
       return;
     }
 
-    if (account && account.transport === undefined) {
-      store.initializeTransport(account.schoolName);
+    if (account && !account.transportConfigured) {
+      initializeTransport(account.schoolName);
     }
-  }, [account, accounts.length, router, store]);
+  }, [account, initializeTransport, router]);
 
   useHomeData();
   const { courses } = useTimetableWidgetData();
@@ -73,10 +95,14 @@ const HomeScreen = () => {
     });
     return [...new Set(weeks)];
   }, []);
-  const { homeworkByWeek, setAsDone: setHomeworkAsDone } = useHomeworkData(homeworkWeeks, alert);
+  const { homeworkByWeek, setAsDone: setHomeworkAsDone } = useHomeworkData(
+    homeworkWeeks,
+    alert,
+    { deferRemainingWeeks: true }
+  );
   const allCachedHomeworks = useAllHomeworkFromCache({ upcomingOnly: true });
   const urgentHomeworks = React.useMemo(() => {
-    const serviceIds = account?.services.map(service => service.id) ?? [];
+    const serviceIds = account?.serviceIds ?? [];
     const candidates = [...allCachedHomeworks, ...Object.values(homeworkByWeek).flat()];
     const byId = new Map<string, (typeof candidates)[number]>();
     for (const homework of candidates) {
@@ -90,14 +116,20 @@ const HomeScreen = () => {
   }, [account, allCachedHomeworks, homeworkByWeek]);
 
   const { currentPeriod } = usePeriodsData();
-  const { grades, history, averages } = useGradesData(currentPeriod, Platform.OS === "web" ? { methods: ["subject"] } : undefined);
+  // The home card draws only the report-card average line. Computing the
+  // weighted and median histories here added two full grade-history passes on
+  // every cold start without changing what the widget can display.
+  const { grades, history, averages } = useGradesData(currentPeriod, { methods: HOME_GRADE_HISTORY_METHODS });
   const gradesWidgetHidden =
     grades.length === 0 &&
     !averages.student &&
     !averages.class &&
     Object.values(history).every(points => !points || points.length === 0);
 
-  const renderTimeTable = React.useCallback(() => <HomeTimeTableWidget />, []);
+  const renderTimeTable = React.useCallback(
+    () => <HomeTimeTableWidget courses={courses} />,
+    [courses]
+  );
   const renderGrades = React.useCallback(
     () => <GradesWidget history={history} averages={averages} />,
     [history, averages]
@@ -122,7 +154,7 @@ const HomeScreen = () => {
       hidden: gradesWidgetHidden,
       render: renderGrades
     }
-  ], [account, courses.length, gradesWidgetHidden, renderGrades, renderTimeTable, timetableTitle, urgentHomeworks, setHomeworkAsDone]);
+  ], [account, gradesWidgetHidden, renderGrades, renderTimeTable, timetableTitle, urgentHomeworks, setHomeworkAsDone]);
 
   const visibleWidgets = React.useMemo(
     () => data.filter(item => !item.hidden && (!item.dev || __DEV__)),

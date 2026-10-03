@@ -102,7 +102,7 @@ const Course = React.memo((props: CourseProps) => {
   const [separatorTaps, setSeparatorTaps] = useState(0);
 
   let textColor = adjust(color ?? "#FFFFFF", dark ? 0.1 : -0.15);
-  if (status?.canceled) { textColor = colors.text + "80"; }
+  if (status?.canceled) { textColor = colors.text; }
 
   /** Horaire */
   const renderTimes = useCallback(() => (

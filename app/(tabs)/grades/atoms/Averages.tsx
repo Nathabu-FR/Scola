@@ -311,7 +311,7 @@ const Averages = ({
       ) : (
         <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 2, marginBottom: -2 }}>
           <Typography
-            variant={compact ? "h3" : "h1"}
+            variant={compact ? "h4" : "h1"}
             weight="bold"
             style={{ color: adjustedColor }}
           >
@@ -377,26 +377,15 @@ const Averages = ({
 
     if (compact) {
       return (
-        <View style={{ backgroundColor: theme.colors.item, borderRadius: 24, overflow: "hidden" }}>
+        <View style={{ overflow: "hidden" }}>
           <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <View style={{ width: '40%', height: 96 }}>
+            <View style={{ width: '40%', height: 72 }}>
               {graph}
             </View>
 
-            <View style={{ flex: 1, paddingVertical: 14, paddingRight: 16, paddingLeft: 12, gap: 1 }}>
+            <View style={{ flex: 1, paddingVertical: 6, paddingRight: 12, paddingLeft: 8, gap: 1 }}>
               {renderAverage()}
               {renderLabel()}
-              {classAverage !== null && classAverage !== undefined && (
-                <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", marginTop: 3 }}>
-                  <Typography variant="caption" color="textSecondary">{t("Grades_Avg_Class_Title", "Moyenne de classe")}</Typography>
-                  <View style={{ flexDirection: "row", alignItems: "baseline", gap: 3 }}>
-                    <Typography variant="body2" weight="semibold" style={{ color: adjustedColor }}>
-                      {toDisplayScaleFrom20(classAverage, displayScale).toFixed(2)}
-                    </Typography>
-                    <Typography variant="caption" color="textSecondary">{getDisplayDenominator(displayScale)}</Typography>
-                  </View>
-                </View>
-              )}
             </View>
           </View>
 

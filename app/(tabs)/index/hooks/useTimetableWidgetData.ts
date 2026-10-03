@@ -74,20 +74,29 @@ export const useTimetableWidgetData = (options: { showCancelled?: boolean } = {}
   const [loading, setLoading] = useState(true);
   const [upcomingDays, setUpcomingDays] = useState<UpcomingCourseDay[]>([]);
 
-  const accounts = useAccountStore((state) => state.accounts);
-  const lastUsedAccount = useAccountStore((state) => state.lastUsedAccount);
-  const account = accounts.find((a) => a.id === lastUsedAccount);
+  // The account object is replaced whenever credentials refresh. Keep this
+  // database observer keyed to the actual profile/source ids so token updates
+  // don't unsubscribe, clear the widget and scan the timetable again.
+  const accountScope = useAccountStore(state => {
+    const account = state.accounts.find(item => item.id === state.lastUsedAccount);
+    return account
+      ? JSON.stringify({ accountId: account.id, sourceIds: getAccountDataSourceIds(account) })
+      : "";
+  });
+  const { accountId, services } = useMemo((): { accountId?: string; services: string[] } => {
+    if (!accountScope) return { accountId: undefined, services: [] };
+    const scope = JSON.parse(accountScope) as { accountId: string; sourceIds: string[] };
+    return { accountId: scope.accountId, services: scope.sourceIds };
+  }, [accountScope]);
   // Scoped by `showCancelled` so callers that keep cancelled courses don't seed
   // the ones that filter them out.
   const cacheKey = useMemo(
     () =>
-      account?.id
-        ? `widget:timetable:${account.id}:${showCancelled ? "all" : "active"}`
+      accountId
+        ? `widget:timetable:${accountId}:${showCancelled ? "all" : "active"}`
         : undefined,
-    [account?.id, showCancelled]
+    [accountId, showCancelled]
   );
-
-  const services = useMemo(() => getAccountDataSourceIds(account), [account]);
 
   // The home widget only needs upcoming lessons. Querying all 54 weeks of the
   // current year plus all 54 weeks of the next year made startup scan the

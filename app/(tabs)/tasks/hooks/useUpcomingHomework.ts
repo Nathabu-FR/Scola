@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Q } from "@nozbe/watermelondb";
 
-import { getAccountDataSourceIds } from "@/database/accountScope";
+import { useActiveAccountDataSourceIds } from "@/database/accountScope";
 import { useDatabase } from "@/database/DatabaseProvider";
 import { useHomeworkForWeeks } from "@/database/useHomework";
 import { Homework } from "@/services/shared/homework";
-import { useAccountStore } from "@/stores/account";
 
 import { getCurrentWeekIndex } from "../utils/weekGrid";
 
@@ -40,10 +39,7 @@ export const useUpcomingHomework = (weekCount = DEFAULT_WEEK_COUNT): UpcomingHom
     [currentWeek, weekCount]
   );
 
-  const accounts = useAccountStore((state) => state.accounts);
-  const lastUsedAccount = useAccountStore((state) => state.lastUsedAccount);
-  const account = accounts.find((a) => a.id === lastUsedAccount);
-  const services = useMemo(() => getAccountDataSourceIds(account), [account]);
+  const services = useActiveAccountDataSourceIds();
 
   const homeworkByWeek = useHomeworkForWeeks(weeks, refresh);
 

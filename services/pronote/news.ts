@@ -21,18 +21,19 @@ import { error } from "@/utils/logger/logger";
  */
 export async function fetchPronoteNews(session: SessionHandle, accountId: string): Promise<News[]> {
   const response = await PawnoteNews(session);
-  return (Array.isArray(response.items) ? response.items : []).map(item => {
+  return (Array.isArray(response?.items) ? response.items : []).flatMap(item => {
+    if (!item || typeof item !== "object") return [];
     const isSurvey = item.is === "survey";
     const informationQuestion = !isSurvey && "question" in item ? item.question : undefined;
     const questions = isSurvey
-      ? item.questions
+      ? (Array.isArray(item.questions) ? item.questions : [])
       : informationQuestion && informationQuestion.kind !== 0 ? [informationQuestion] : [];
     const attachments = [
       ...(isSurvey ? [] : item.attachments ?? []),
       ...questions.flatMap(question => question.attachments ?? []),
     ];
 
-    return {
+    return [{
       id: item.id,
       title: item.title,
       createdAt: item.creationDate,
@@ -54,7 +55,7 @@ export async function fetchPronoteNews(session: SessionHandle, accountId: string
       survey: questions.length > 0
         ? { isAnonymous: isSurvey ? item.isAnonymous : false, questions: questions.map(serializeQuestion) }
         : undefined,
-    };
+    }];
   });
 }
 
@@ -134,7 +135,7 @@ function serializeQuestion(question: NewsQuestion): NewsSurveyData["questions"][
       shouldRespectMaximumChoices: question.shouldRespectMaximumChoices,
       maximumChoices: question.maximumChoices,
       maximumLength: question.maximumLength,
-      choices: question.choices.map(choice => ({
+      choices: (Array.isArray(question.choices) ? question.choices : []).map(choice => ({
         value: choice.value,
         position: choice.position,
         isTextInput: choice.isTextInput,

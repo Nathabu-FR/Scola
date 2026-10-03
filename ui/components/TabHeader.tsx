@@ -96,7 +96,7 @@ const TabHeader: React.FC<TabHeaderProps> = ({
           right: insets.right,
           zIndex: 1001,
           gap: 10,
-          alignItems: 'center',
+          alignItems: 'stretch',
           justifyContent: 'center',
         }}
         onLayout={(event) => {
@@ -113,7 +113,7 @@ const TabHeader: React.FC<TabHeaderProps> = ({
             paddingLeft: isModal ? 24 : 16,
             height: 40,
             alignItems: 'center',
-            justifyContent: 'center',
+            justifyContent: 'flex-start',
           }}
         >
           {showAndroidBackButton && Platform.OS === 'web' && (

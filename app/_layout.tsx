@@ -7,6 +7,7 @@ import React, { useEffect, useMemo, useRef } from 'react';
 import { useSegments } from 'expo-router';
 
 import { AppProviders } from '@/components/AppProviders';
+import AccountSwitchOverlay from '@/components/AccountSwitchOverlay';
 import FakeSplash from '@/components/FakeSplash';
 import { RootNavigator } from '@/components/RootNavigator';
 import { useAppInitialization } from '@/hooks/useAppInitialization';
@@ -98,6 +99,7 @@ export default function RootLayout() {
           hostname === "data.geopf.fr" ||
           hostname === "data.education.gouv.fr" ||
           hostname.endsWith(".pronote.com") ||
+          hostname.endsWith(".index-education.net") ||
           hostname.endsWith(".index-education.com") ||
           hostname.endsWith(".indexeducation.com")
         );
@@ -158,6 +160,7 @@ export default function RootLayout() {
     <AppProviders>
       <FakeSplash isAppReady={isAppReady} instant={true} />
       <RootNavigator />
+      <AccountSwitchOverlay />
     </AppProviders>
   );
 }

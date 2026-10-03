@@ -1,5 +1,5 @@
 import { Model, Q } from "@nozbe/watermelondb";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { getICalCourseById, getICalEventsForWeek } from "@/services/local/ical";
 import { Course as SharedCourse,CourseDay as SharedCourseDay } from "@/services/shared/timetable"
@@ -7,12 +7,11 @@ import { generateId } from "@/utils/generateId";
 import { warn } from "@/utils/logger/logger";
 
 import { getDatabaseInstance, useDatabase } from "./DatabaseProvider"
-import { getAccountDataSourceIds, getActiveAccountDataSourceIds } from "./accountScope";
+import { getActiveAccountDataSourceIds, useActiveAccountDataSourceIds } from "./accountScope";
 import { mapCourseToShared } from "./mappers/course";
 import Course from "./models/Timetable";
 import { getDateRangeOfWeek } from "./useHomework";
 import { safeWrite } from "./utils/safeTransaction";
-import { useAccountStore } from "@/stores/account";
 
 export function getCourseRouteId(course: SharedCourse): string {
   // Les identifiants fournis par les services scolaires sont stables.
@@ -60,12 +59,7 @@ export async function updateCourseCustomStatus(courseId: string, customStatus?: 
 
 export function useTimetable(refresh = 0, weekNumber: number | number[] = 0, date: Date = new Date()) {
   const database = useDatabase();
-  const accounts = useAccountStore(state => state.accounts);
-  const activeAccountId = useAccountStore(state => state.lastUsedAccount);
-  const sourceIds = useMemo(
-    () => getAccountDataSourceIds(accounts.find(account => account.id === activeAccountId)),
-    [accounts, activeAccountId]
-  );
+  const sourceIds = useActiveAccountDataSourceIds();
   const [timetable, setTimetable] = useState<SharedCourseDay[]>([]);
 
   const weeks = Array.isArray(weekNumber) ? weekNumber : [weekNumber];

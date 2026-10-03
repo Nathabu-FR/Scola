@@ -1,7 +1,7 @@
 import { TipIds } from "@/constants/Tips"
 import { useAccountStore } from "@/stores/account"
 import { retireTip } from "@/stores/tips"
-import { useSettingsStore } from "@/stores/settings"
+import { getWallpaperForAccount, setWallpaperForAccount, useSettingsStore } from "@/stores/settings"
 import { Wallpaper } from "@/stores/settings/types"
 import AnimatedPressable from "@/ui/components/AnimatedPressable"
 import Stack from "@/ui/components/Stack"
@@ -103,10 +103,8 @@ const WallpaperModal = () => {
 
   const [currentlyDownloading, setCurrentlyDownloading] = useState<string[]>([]);
 
-  const settingsStore = useSettingsStore(state => state.personalization);
-  const mutateProperty = useSettingsStore(state => state.mutateProperty);
-
-  const currentWallpaper = settingsStore.wallpaper;
+  const accountId = useAccountStore(state => state.lastUsedAccount);
+  const currentWallpaper = useSettingsStore(state => getWallpaperForAccount(state.personalization, accountId));
   const selectedId = currentWallpaper?.id;
   const hasCustomWallpaper = selectedId?.startsWith("custom:") ?? false;
 
@@ -127,19 +125,23 @@ const WallpaperModal = () => {
     }
   }, [collections, currentWallpaper, headerHeight]);
 
-  const wallpaperDirectory = Platform.OS === "web"
-    ? null
-    : new Directory(Paths.document, "wallpapers");
+  const wallpaperRoot = Platform.OS === "web" ? null : new Directory(Paths.document, "wallpapers");
+  const wallpaperDirectory = wallpaperRoot
+    ? new Directory(wallpaperRoot, encodeURIComponent(accountId || "default"))
+    : null;
+  const ensureWallpaperDirectory = () => {
+    if (!wallpaperRoot || !wallpaperDirectory) return;
+    if (!wallpaperRoot.exists) wallpaperRoot.create();
+    if (!wallpaperDirectory.exists) wallpaperDirectory.create();
+  };
 
   const downloadAndSelect = (wallpaper: Wallpaper) => {
     if (Platform.OS === "web") {
-      mutateProperty("personalization", {
-        wallpaper: {
+      setWallpaperForAccount(accountId, {
           id: wallpaper.id,
           url: wallpaper.url,
           thumbnail: wallpaper.thumbnail,
           credit: wallpaper.credit,
-        },
       });
       return;
     }
@@ -149,32 +151,26 @@ const WallpaperModal = () => {
     const directory = wallpaperDirectory!;
     const wallpaperFile = new File(directory, fileName);
     if (wallpaperFile.exists) {
-      mutateProperty("personalization", {
-        wallpaper: {
+      setWallpaperForAccount(accountId, {
           id: wallpaper.id,
           path: {
-            directory: directory.name,
+            directory: directory.uri,
             name: wallpaperFile.name
           }
-        }
       })
       return;
     }
 
     setCurrentlyDownloading((prev) => [...prev, wallpaper.id]);
 
-    if (!directory.exists) {
-      directory.create();
-    }
+    ensureWallpaperDirectory();
     File.downloadFileAsync(wallpaper.url!, wallpaperFile).then((result) => {
-      mutateProperty("personalization", {
-        wallpaper: {
+      setWallpaperForAccount(accountId, {
           id: wallpaper.id,
           path: {
-            directory: directory.name,
+            directory: directory.uri,
             name: result.name
           }
-        }
       })
     }).finally(() => {
       setCurrentlyDownloading((prev) => prev.filter((id) => id !== wallpaper.id));
@@ -195,11 +191,9 @@ const WallpaperModal = () => {
       const wallpaperId = `custom:${Date.now()}`;
       if (Platform.OS === "web") {
         const dataUri = await optimizeWebWallpaper(asset.uri, asset.mimeType, asset.base64);
-        mutateProperty("personalization", {
-          wallpaper: {
+        setWallpaperForAccount(accountId, {
             id: wallpaperId,
             dataUri,
-          },
         });
         setError(null);
         return;
@@ -208,23 +202,19 @@ const WallpaperModal = () => {
         const sourceFile = new File(asset.uri);
 
         const directory = wallpaperDirectory!;
-        if (!directory.exists) {
-          directory.create();
-        }
+        ensureWallpaperDirectory();
 
         const newFileName = `${wallpaperId}.jpg`;
         const destFile = new File(directory, newFileName);
 
         sourceFile.copy(destFile);
 
-        mutateProperty("personalization", {
-          wallpaper: {
+        setWallpaperForAccount(accountId, {
             id: wallpaperId,
             path: {
-              directory: directory.name,
+              directory: directory.uri,
               name: destFile.name
             }
-          }
         });
     } catch (error) {
       setError(error instanceof Error ? error.message : "Impossible d’ajouter cette image.");
@@ -370,14 +360,10 @@ const WallpaperModal = () => {
             const action = nativeEvent.event;
             if (action === "downloads:clear") {
               wallpaperDirectory!.delete();
-              mutateProperty("personalization", {
-                wallpaper: undefined
-              })
+              setWallpaperForAccount(accountId, undefined)
             }
             if (action === "background:clear") {
-              mutateProperty("personalization", {
-                wallpaper: undefined
-              })
+              setWallpaperForAccount(accountId, undefined)
             }
           }}
         >

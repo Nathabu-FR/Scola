@@ -2,15 +2,14 @@ import { Link } from "expo-router";
 import { differenceInCalendarDays, formatDistanceToNowStrict, startOfDay } from "date-fns";
 import { t } from "i18next";
 import React from 'react';
-import { FlatList } from "react-native";
+import { View } from "react-native";
 import * as DateLocale from 'date-fns/locale';
 
-import { COURSE_CANCELLED_LABEL, CourseStatus, getManualCourseStatus } from "@/services/shared/timetable";
+import { COURSE_CANCELLED_LABEL, CourseStatus, getManualCourseStatus, type Course as SharedCourse } from "@/services/shared/timetable";
 import Course from "@/ui/components/Course";
 import { getSubjectColor } from "@/utils/subjects/colors";
 import { getSubjectName } from "@/utils/subjects/name";
 import i18n from "@/utils/i18n";
-import { useTimetableWidgetData } from "../hooks/useTimetableWidgetData";
 import { getStatusText } from '../../calendar/components/CalendarDay';
 import { getCourseRouteId } from '@/database/useTimetable';
 import Typography from "@/ui/components/Typography";
@@ -35,9 +34,7 @@ function getRelativeDayStatus(date: Date): string | null {
   return distance.charAt(0).toUpperCase() + distance.slice(1);
 }
 
-const HomeTimeTableWidget = React.memo(() => {
-  const { courses } = useTimetableWidgetData();
-
+const HomeTimeTableWidget = React.memo(({ courses }: { courses: SharedCourse[] }) => {
   if (courses.length === 0) {
     return (
       <Typography variant="body2" color="textSecondary" style={{ paddingHorizontal: 16, paddingBottom: 14 }}>
@@ -47,19 +44,16 @@ const HomeTimeTableWidget = React.memo(() => {
   }
 
   return (
-    <FlatList
-      scrollEnabled={false}
-      data={courses.slice(0, 3)}
-      style={{ width: '100%', paddingHorizontal: 10, paddingBottom: 4 }}
-      renderItem={({ item }) => {
+    <View style={{ width: '100%', paddingHorizontal: 10, paddingBottom: 4 }}>
+      {courses.slice(0, 3).map(item => {
         const manualStatus = getManualCourseStatus(item);
         return (
           <Link
-            href={{ pathname: "/(modals)/course/[id]", params: { id: getCourseRouteId(item) } }}
+            key={item.id}
+            href={{ pathname: "/(modals)/course/[id]", params: { id: getCourseRouteId(item), returnTo: "home" } }}
             asChild
           >
             <Course
-              key={item.id}
               id={item.id}
               name={getSubjectName(item.subject)}
               teacher={item.teacher}
@@ -74,8 +68,8 @@ const HomeTimeTableWidget = React.memo(() => {
             />
           </Link>
         );
-      }}
-    />
+      })}
+    </View>
   );
 });
 

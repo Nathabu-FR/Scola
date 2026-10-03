@@ -101,7 +101,7 @@ function DesktopTabLayout() {
   const visibleTabCount = ["home", "calendar", "tasks", "grades"].filter(
     tab => !disabledTabs.includes(tab)
   ).length;
-  const tabBarWidth = Math.max(288, visibleTabCount * 88 + 16);
+  const tabBarWidth = Math.max(288, visibleTabCount * 100 + 20);
 
   return (
     <Tabs
@@ -114,7 +114,7 @@ function DesktopTabLayout() {
           // Keep the web tab bar in layout so long lists finish above it.
           alignSelf: 'center',
           width: tabBarWidth,
-          maxWidth: '90%',
+          maxWidth: '94%',
           height: 56,
           marginTop: 6,
           marginBottom: 10,

@@ -5,25 +5,30 @@ import { Image, Platform, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from 'expo-router/react-navigation';
 
-import { useSettingsStore } from '@/stores/settings';
+import { useAccountStore } from '@/stores/account';
+import { getWallpaperForAccount, migrateLegacyAccountPersonalization, useSettingsStore } from '@/stores/settings';
 
 const Wallpaper = ({ height = 400, dim = true }) => {
   try {
-    const settingsStore = useSettingsStore(state => state.personalization);
+    const accountId = useAccountStore(state => state.lastUsedAccount);
+    const currentWallpaper = useSettingsStore(state => getWallpaperForAccount(state.personalization, accountId));
     const { colors } = useTheme();
-    const currentWallpaper = settingsStore.wallpaper;
 
     const [image, setImage] = useState<string | null>(null);
     const [imageAttempt, setImageAttempt] = useState(0);
 
     useEffect(() => {
+      migrateLegacyAccountPersonalization(accountId);
       setImageAttempt(0);
       if (currentWallpaper?.dataUri) {
         setImage(currentWallpaper.dataUri);
         return;
       }
       if (currentWallpaper?.path?.name) {
-        const file = new File(Paths.document, currentWallpaper.path.directory || '', currentWallpaper.path.name);
+        const directory = currentWallpaper.path.directory || '';
+        const file = directory.startsWith("file:")
+          ? new File(directory, currentWallpaper.path.name)
+          : new File(Paths.document, directory, currentWallpaper.path.name);
         if (file.exists) {
           setImage(file.uri);
         } else {
@@ -35,7 +40,7 @@ const Wallpaper = ({ height = 400, dim = true }) => {
       } else {
         setImage(null);
       }
-    }, [currentWallpaper]);
+    }, [accountId, currentWallpaper]);
 
     const thumbnail = currentWallpaper?.thumbnail;
     const imageSource = imageAttempt === 0

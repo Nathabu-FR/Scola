@@ -4,14 +4,12 @@ import React, { useEffect, useState } from 'react';
 import { Image, Platform, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from 'expo-router/react-navigation';
-import { useTheme } from 'expo-router/react-navigation';
 
 import { useSettingsStore } from '@/stores/settings';
 
 const Wallpaper = ({ height = 400, dim = true }) => {
   try {
     const settingsStore = useSettingsStore(state => state.personalization);
-    const { colors } = useTheme();
     const { colors } = useTheme();
     const currentWallpaper = settingsStore.wallpaper;
 

@@ -36,7 +36,7 @@ import uuid from "@/utils/uuid/uuid";
 import { ScrollView } from "react-native-gesture-handler";
 import LoginView from "../../components/LoginView";
 import { formatEcoleDirecteError, isEcoleDirecteServerError } from "@/services/ecoledirecte/errors";
-import { installTauriFetch } from "@/utils/network/fetch";
+import { preloadTauriFetch } from "@/utils/network/fetch";
 
 const ANIMATION_DURATION = 170;
 export const PlatformPressable = Platform.OS === 'android' ? Pressable : AnimatedPressable;
@@ -87,7 +87,7 @@ export default function EDLoginWithCredentials() {
   }, [keyboardListeners]);
 
   const handleLogin = async (username: string, password: string, keys?: DoubleAuthResult) => {
-    await installTauriFetch();
+    await preloadTauriFetch();
     const client = new Client();
     const device = uuid();
     const store = useAccountStore.getState();

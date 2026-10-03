@@ -12,7 +12,7 @@ import { checkConsent } from '@/utils/logger/consent';
 import { warn } from '@/utils/logger/logger';
 import { posthog } from '@/utils/logger/posthog';
 import { FONT_CONFIG } from '@/constants/LayoutScreenOptions';
-import { installTauriFetch } from "@/utils/network/fetch";
+import { preloadTauriFetch } from "@/utils/network/fetch";
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -72,10 +72,11 @@ export function useAppInitialization() {
     });
   }, []);
 
-  // Install the native Tauri HTTP transport before school SDKs are used.
-  // In particular, @blockshub/blocksdirecte calls global fetch() directly.
+  // Preload the native Tauri HTTP transport before school SDKs are used.
+  // Global fetch remains routed by RootLayout so Tauri IPC keeps using the
+  // original WebView fetch instead of recursively calling plugin-http.
   useEffect(() => {
-    installTauriFetch().catch(err => {
+    preloadTauriFetch().catch(err => {
       warn(`Tauri HTTP transport initialization failed: ${err}`);
     });
   }, []);

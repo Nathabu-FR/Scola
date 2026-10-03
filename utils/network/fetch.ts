@@ -26,32 +26,34 @@ const getTauriFetch = async (): Promise<TauriFetch | null> => {
 
 export const isTauriDesktop = () => isTauriWeb;
 
-let tauriFetchInstalled = false;
-let tauriFetchInstallPromise: Promise<void> | null = null;
-
 /**
- * EcoleDirecte's SDK calls the global fetch() directly instead of going through
- * appFetch(). On Tauri that would put the request back into the WebView and
- * therefore back under browser CORS rules.
+ * Preload the native HTTP plugin before school SDKs start making requests.
+ * Do not assign its fetch implementation to globalThis/window.fetch: Tauri's
+ * own IPC transport uses the WebView fetch to reach ipc.localhost. Replacing
+ * it here makes plugin:http|fetch call itself recursively through IPC.
  */
-export async function installTauriFetch(): Promise<void> {
-  if (!isTauriWeb || tauriFetchInstalled) return;
+export async function preloadTauriFetch(): Promise<void> {
+  if (!isTauriWeb) return;
 
-  tauriFetchInstallPromise ??= (async () => {
-    const nativeFetch = await getTauriFetch();
-    if (!nativeFetch) {
-      throw new Error("Tauri HTTP indisponible : le client natif ne peut pas être installé.");
-    }
-
-    globalThis.fetch = nativeFetch as typeof globalThis.fetch;
-    if (typeof window !== "undefined") {
-      window.fetch = nativeFetch as typeof window.fetch;
-    }
-    tauriFetchInstalled = true;
-  })();
-
-  await tauriFetchInstallPromise;
+  const nativeFetch = await getTauriFetch();
+  if (!nativeFetch) {
+    throw new Error("Tauri HTTP indisponible : le client natif ne peut pas être chargé.");
+  }
 }
+
+const isTauriIpcRequest = (input: RequestInfo | URL): boolean => {
+  try {
+    const rawUrl = input instanceof Request
+      ? input.url
+      : input instanceof URL
+        ? input.href
+        : String(input);
+    const url = new URL(rawUrl, "http://tauri.localhost");
+    return url.protocol === "ipc:" || url.hostname.toLowerCase() === "ipc.localhost";
+  } catch {
+    return false;
+  }
+};
 
 /**
  * Uses Tauri's Rust HTTP client in the desktop WebView so school APIs are not
@@ -61,6 +63,12 @@ export async function appFetch(
   input: RequestInfo | URL,
   init?: RequestInit,
 ): Promise<Response> {
+  // Never send Tauri's internal IPC endpoint through plugin-http. The plugin
+  // itself uses that endpoint to issue its Rust request.
+  if (isTauriWeb && isTauriIpcRequest(input)) {
+    return fetch(input, init);
+  }
+
   const tauriFetch = await getTauriFetch();
   if (tauriFetch) {
     return tauriFetch(input as string | URL | Request, init);

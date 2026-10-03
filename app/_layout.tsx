@@ -78,7 +78,13 @@ export default function RootLayout() {
 
     const shouldUseTauriTransport = (url: string) => {
       try {
-        const hostname = new URL(url).hostname.toLowerCase();
+        const parsedUrl = new URL(url, window.location.href);
+        const hostname = parsedUrl.hostname.toLowerCase();
+        // Tauri's native HTTP plugin uses this WebView endpoint for IPC.
+        // Sending it back through plugin-http recursively invokes itself.
+        if (parsedUrl.protocol === "ipc:" || hostname === "ipc.localhost") {
+          return false;
+        }
         // Tout le trafic scolaire/desktop passe par le client HTTP Rust :
         // le log montrait des fetch iCal (calendar.google.com) + wallpapers
         // (raw.githubusercontent.com) partis en window.fetch → CORS + ERR_FAILED.
@@ -137,9 +143,7 @@ export default function RootLayout() {
     window.fetch = patchedFetch;
 
     return () => {
-      // On ne restaure que si notre fetch est toujours celui en place :
-      // installTauriFetch() (useAppInitialization) peut l'avoir remplacé entre-temps
-      // par le client natif Tauri, qu'il ne faut surtout pas écraser.
+      // On ne restaure que si notre fetch est toujours celui en place.
       if (window.fetch === patchedFetch) {
         window.fetch = originalFetch;
       }

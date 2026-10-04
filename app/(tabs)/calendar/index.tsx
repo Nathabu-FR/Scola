@@ -2,7 +2,7 @@ import { Stack, useRouter } from "expo-router";
 import { useHeaderHeight, useTheme } from "expo-router/react-navigation";
 import { t } from "i18next";
 import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Platform, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
+import { ActivityIndicator, Platform, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CourseStatus } from "@/services/shared/timetable";
@@ -295,6 +295,16 @@ function TabOneScreen() {
           >
             <Typography variant="body2" weight="semibold">{t("Tab_Calendar_Icals")}</Typography>
           </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Actualiser l'emploi du temps de cette semaine et des deux suivantes"
+            disabled={manualRefreshing}
+            onPress={handleRefresh}
+            style={[styles.desktopICalButton, { opacity: manualRefreshing ? 0.7 : 1 }]}
+          >
+            {manualRefreshing ? <ActivityIndicator size="small" color={colors.primary} /> : <Typography variant="body1" weight="semibold" color="primary">↻</Typography>}
+            <Typography variant="body2" weight="semibold">Actualiser</Typography>
+          </Pressable>
           <Typography variant="body2" weight="semibold">{dayLabel}</Typography>
         </View>
       )}
@@ -342,8 +352,13 @@ function TabOneScreen() {
           <AndroidHeaderMenu
             icon="Dots"
             accessibilityLabel={t('Tab_Calendar_Icals')}
-            actions={[{ id: "icals", title: t('Tab_Calendar_Icals'), papicon: "Calendar" }]}
-            onPressAction={() => router.push({ pathname: "./calendar/icals", params: {} })}
+            actions={[
+              { id: "icals", title: t('Tab_Calendar_Icals'), papicon: "Calendar" },
+              { id: "sync_timetable", title: "Actualiser cette semaine et les deux suivantes", papicon: "Calendar" },
+            ]}
+            onPressAction={({ nativeEvent }) => nativeEvent.event === "sync_timetable"
+              ? handleRefresh()
+              : router.push({ pathname: "./calendar/icals", params: {} })}
           />
         </Stack.Toolbar>
       ) : Platform.OS === "ios" ? (
@@ -356,6 +371,9 @@ function TabOneScreen() {
               onPress={() => router.push({ pathname: "./calendar/icals", params: {} })}
             >
               {t('Tab_Calendar_Icals')}
+            </Stack.Toolbar.MenuAction>
+            <Stack.Toolbar.MenuAction icon="arrow.clockwise" onPress={handleRefresh}>
+              Actualiser cette semaine et les deux suivantes
             </Stack.Toolbar.MenuAction>
           </Stack.Toolbar.Menu>
         </Stack.Toolbar>
@@ -434,8 +452,10 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     paddingHorizontal: 14,
     borderRadius: 18,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 6,
     backgroundColor: 'rgba(127,127,127,0.14)',
   },
   container: {

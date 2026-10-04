@@ -8,6 +8,7 @@ import {
 import { getDateRangeOfWeek } from "@/database/useHomework";
 import { Homework, ReturnFormat } from "@/services/shared/homework";
 import { error } from "@/utils/logger/logger";
+import { mapPronoteAttachments } from "@/services/pronote/attachments";
 
 /**
   * Fetches homework assignments from PRONOTE for the current week.
@@ -35,12 +36,7 @@ export async function fetchPronoteHomeworks(session: SessionHandle, accountId: s
       isDone: homework.done,
       returnFormat:
         homework.return?.kind === 1 ? ReturnFormat.PAPER : ReturnFormat.FILE_UPLOAD,
-      attachments: (Array.isArray(homework.attachments) ? homework.attachments : []).map((attachment) => ({
-        type: attachment.kind,
-        name: attachment.name,
-        url: attachment.url,
-        createdByAccount: accountId,
-      })),
+      attachments: mapPronoteAttachments(homework.attachments, accountId),
       evaluation: false,
       custom: false,
       createdByAccount: accountId,

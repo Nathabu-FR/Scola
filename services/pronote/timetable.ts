@@ -10,8 +10,8 @@ import {
 } from "@blockshub/pawnote-lts";
 
 import { Course, CourseDay, CourseResource, CourseStatus, CourseType } from "@/services/shared/timetable";
-import { AttachmentType } from "@/services/shared/attachment";
 import { error, warn } from "@/utils/logger/logger";
+import { mapPronoteAttachments, readPronoteText } from "@/services/pronote/attachments";
 
 export async function fetchPronoteWeekTimetable(
   session: SessionHandle,
@@ -181,7 +181,16 @@ export async function fetchPronoteCourseResources(
     return [];
   }
 
-  const resourceData = await resource(session, course.resourceId);
+  let resourceData: unknown;
+  try {
+    resourceData = await resource(session, course.resourceId);
+  } catch (resourceError) {
+    // Some Pronote servers leave an obsolete lesson-resource reference in the
+    // timetable. The lesson itself remains valid, so keep its notes available
+    // and let the user retry without surfacing an unhandled capability error.
+    warn(`PRONOTE resource ${course.resourceId} is unavailable: ${String(resourceError)}`, "fetchPronoteCourseResources");
+    return [];
+  }
   type ResourceRecord = Record<string, unknown>;
   const asRecord = (value: unknown): ResourceRecord | undefined =>
     value && typeof value === "object" && !Array.isArray(value)
@@ -192,42 +201,18 @@ export async function fetchPronoteCourseResources(
     const record = asRecord(value);
     return Array.isArray(record?.V) ? record.V : [];
   };
-  const readText = (value: unknown, depth = 0): string => {
-    if (depth > 5) return "";
-    if (typeof value === "string") return value;
-    if (Array.isArray(value)) return value.map(item => readText(item, depth + 1)).filter(Boolean).join("\n");
-    const record = asRecord(value);
-    if (!record) return "";
-    for (const key of ["V", "value", "text", "content", "L"]) {
-      const text = readText(record[key], depth + 1);
-      if (text) return text;
-    }
-    return "";
-  };
   const payload = asRecord(resourceData);
   const resources = unwrapList(payload?.contents ?? payload?.resources ?? payload?.items ?? resourceData);
 
   return resources.flatMap(value => {
     const item = asRecord(value);
     if (!item) return [];
-    const fileList = unwrapList(item.files ?? item.attachments ?? item.documents);
+    const attachments = mapPronoteAttachments(item.files ?? item.attachments ?? item.documents, course.createdByAccount);
     return [{
-      title: readText(item.title ?? item.name),
-      description: readText(item.description ?? item.content ?? item.text),
+      title: readPronoteText(item.title ?? item.name),
+      description: readPronoteText(item.description ?? item.content ?? item.text),
       category: typeof item.category === "number" ? item.category : 0,
-      attachments: fileList.flatMap(file => {
-        const attachment = asRecord(file);
-        if (!attachment) return [];
-        const url = readText(attachment.url ?? attachment.href);
-        if (!url) return [];
-        const kind = attachment.kind ?? attachment.type;
-        return [{
-          type: kind === 0 || kind === "link" || kind === "LINK" ? AttachmentType.LINK : AttachmentType.FILE,
-          name: readText(attachment.name ?? attachment.filename) || "Document",
-          url,
-          createdByAccount: course.createdByAccount,
-        }];
-      }),
+      attachments,
     }];
   });
 }

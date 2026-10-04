@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from "react";
-import { Pressable, View, type ColorValue } from "react-native";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Animated, Easing, Pressable, View, type ColorValue } from "react-native";
 import Svg, { Circle, Path } from "react-native-svg";
 import { useTheme } from "expo-router/react-navigation";
 import { t } from "i18next";
@@ -36,6 +36,8 @@ const GRAPH_LEFT = 12;
 const GRAPH_RIGHT = GRAPH_WIDTH - 12;
 const GRAPH_TOP = 10;
 const GRAPH_BOTTOM = GRAPH_HEIGHT - 12;
+const GRAPH_DRAW_LENGTH = 1100;
+const AnimatedPath = Animated.createAnimatedComponent(Path);
 const formatValue = (value: number | null | undefined, scale: GradeDisplayScale) =>
   value === null || value === undefined || !Number.isFinite(value)
     ? "—"
@@ -139,6 +141,24 @@ export default function Averages({
         return `${path} C ${control1X.toFixed(1)} ${control1Y.toFixed(1)}, ${control2X.toFixed(1)} ${control2Y.toFixed(1)}, ${point.x.toFixed(1)} ${point.y.toFixed(1)}`;
       }, "")
     : "";
+  const lineProgress = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    lineProgress.stopAnimation();
+    lineProgress.setValue(0);
+    if (!linePath) return;
+    const animation = Animated.timing(lineProgress, {
+      toValue: 1,
+      duration: 850,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [linePath, lineProgress]);
+  const lineDashOffset = lineProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [GRAPH_DRAW_LENGTH, 0],
+  });
   const lastHistoryValue = values.length > 0 ? values[values.length - 1].average : null;
   const shownOverall = realAverage ?? lastHistoryValue;
   const dateLabel = chartPoints.length > 0
@@ -157,24 +177,36 @@ export default function Averages({
       accessibilityRole="image"
       accessibilityLabel={t("Grades_Tip_Graph_Title", "Évolution de la moyenne")}
       style={{
-        height: compact ? 64 : 116,
+        height: compact ? 58 : 108,
         minWidth: 0,
         flexGrow: 0,
         flexShrink: 0,
       }}
     >
       <Svg width="100%" height="100%" viewBox={`0 0 ${GRAPH_WIDTH} ${GRAPH_HEIGHT}`} preserveAspectRatio="none">
-        {[0.25, 0.5, 0.75].map(fraction => {
+        {!compact && [0.25, 0.5, 0.75].map(fraction => {
           const y = GRAPH_BOTTOM - fraction * (GRAPH_BOTTOM - GRAPH_TOP);
           return <Path key={fraction} d={`M ${GRAPH_LEFT} ${y} H ${GRAPH_RIGHT}`} stroke={theme.colors.border} strokeOpacity={0.55} strokeWidth={1} />;
         })}
         {linePath ? (
-          <Path d={linePath} fill="none" stroke={accent} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
+          <AnimatedPath
+            d={linePath}
+            fill="none"
+            stroke={accent}
+            strokeWidth={compact ? 3 : 2.5}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeDasharray={GRAPH_DRAW_LENGTH}
+            strokeDashoffset={lineDashOffset}
+          />
         ) : chartPoints.length === 1 ? (
           <Circle cx={chartPoints[0].x} cy={chartPoints[0].y} r={5} fill={accent} />
         ) : null}
         {chartPoints.length > 1 && (
-          <Circle cx={chartPoints[chartPoints.length - 1].x} cy={chartPoints[chartPoints.length - 1].y} r={4} fill={accent} />
+          <>
+            <Circle cx={chartPoints[chartPoints.length - 1].x} cy={chartPoints[chartPoints.length - 1].y} r={11} fill={accent} fillOpacity={0.14} />
+            <Circle cx={chartPoints[chartPoints.length - 1].x} cy={chartPoints[chartPoints.length - 1].y} r={4.5} fill={accent} />
+          </>
         )}
       </Svg>
       {!compact && (
@@ -191,21 +223,16 @@ export default function Averages({
 
   if (compact) {
     return (
-      <View style={{ backgroundColor: theme.colors.item, borderRadius: 22, paddingHorizontal: 14, paddingVertical: 10 }}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-          <View style={{ flex: 1.2, minWidth: 0 }}>{graph}</View>
-          <View style={{ flex: 1, minWidth: 0, gap: 8, paddingRight: 4 }}>
-            <AverageMetric title={overallTitle} value={shownOverall} displayScale={displayScale} color={accent} prominent />
-            {classAverage !== null && classAverage !== undefined && (
-              <AverageMetric title={classTitle} value={classAverage} displayScale={displayScale} color={theme.colors.text} />
-            )}
+      <View style={{ backgroundColor: theme.colors.item, borderRadius: 22, paddingHorizontal: 12, paddingVertical: 8 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <View style={{ flex: 1.15, minWidth: 0 }}>{graph}</View>
+          <View style={{ flex: 1, minWidth: 0, gap: 1, paddingRight: 4 }}>
+            <AverageMetric title="Moyenne des matières" value={shownOverall} displayScale={displayScale} color={accent} prominent />
+            <Typography variant="caption" color="textSecondary" numberOfLines={1}>
+              {realAverage !== null && realAverage !== undefined ? "par l’établissement" : `estimée${dateLabel ? ` · ${dateLabel}` : ""}`}
+            </Typography>
           </View>
         </View>
-        <Typography variant="caption" color="textSecondary" numberOfLines={1} style={{ marginTop: 2 }}>
-          {realAverage !== null && realAverage !== undefined
-            ? t("Grades_Avg_Source_School", "Donnée par l’établissement")
-            : t("Grades_Avg_Source_Estimated", "Estimation") + (dateLabel ? ` · ${dateLabel}` : "")}
-        </Typography>
       </View>
     );
   }

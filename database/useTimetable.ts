@@ -2,7 +2,12 @@ import { Model, Q } from "@nozbe/watermelondb";
 import { useEffect, useState } from "react";
 
 import { getICalCourseById, getICalEventsForWeek } from "@/services/local/ical";
-import { Course as SharedCourse,CourseDay as SharedCourseDay } from "@/services/shared/timetable"
+import {
+  COURSE_CANCELLED_LABEL,
+  COURSE_TEACHER_ABSENT_LABEL,
+  Course as SharedCourse,
+  CourseDay as SharedCourseDay,
+} from "@/services/shared/timetable";
 import { generateId } from "@/utils/generateId";
 import { warn } from "@/utils/logger/logger";
 
@@ -12,6 +17,11 @@ import { mapCourseToShared } from "./mappers/course";
 import Course from "./models/Timetable";
 import { getDateRangeOfWeek } from "./useHomework";
 import { safeWrite } from "./utils/safeTransaction";
+
+const getPersonalCourseStatus = (...statuses: (string | undefined)[]) =>
+  statuses.find(status =>
+    status === COURSE_CANCELLED_LABEL || status === COURSE_TEACHER_ABSENT_LABEL
+  );
 
 export function getCourseRouteId(course: SharedCourse): string {
   // Les identifiants fournis par les services scolaires sont stables.
@@ -28,11 +38,30 @@ export async function getCourseById(id: string): Promise<SharedCourse | undefine
   try {
     const sourceIds = getActiveAccountDataSourceIds();
     if (sourceIds.length === 0) return await getICalCourseById(id);
-    const courses = await getDatabaseInstance()
-      .get<Course>('courses')
+    const table = getDatabaseInstance().get<Course>('courses');
+    const exact = await table
       .query(Q.where('courseId', id), Q.where("createdByAccount", Q.oneOf(sourceIds)))
       .fetch();
-    const course = courses[0] ? mapCourseToShared(courses[0]) : undefined;
+    let course = exact[0] ? mapCourseToShared(exact[0]) : undefined;
+
+    // Older releases formed the route key from the occurrence's display
+    // fields. Resolve those links too, so a previously rendered calendar item
+    // does not turn into a dead course screen after the cache is refreshed.
+    if (!course) {
+      const accountCourses = await table
+        .query(Q.where("createdByAccount", Q.oneOf(sourceIds)))
+        .fetch();
+      course = accountCourses
+        .map(mapCourseToShared)
+        .find(item => {
+          const legacyId = generateId(
+            item.from.toISOString() + item.to.toISOString() + item.subject +
+              (item.teacher ?? "") + (item.room ?? "") + item.createdByAccount
+          );
+          return item.id === id || getCourseRouteId(item) === id || legacyId === id;
+        });
+    }
+
     return course && getActiveAccountDataSourceIds().includes(course.createdByAccount)
       ? course
       : await getICalCourseById(id);
@@ -210,7 +239,9 @@ export async function addCourseDayToDatabase(courses: SharedCourseDay[]) {
           }
 
           if (existingRecords.length === 0) {
-            const migratedCustomStatus = item.customStatus ?? oldExistingRecords[0]?.customStatus;
+            const migratedCustomStatus = getPersonalCourseStatus(
+              ...oldExistingRecords.map(record => record.customStatus)
+            ) ?? item.customStatus ?? oldExistingRecords[0]?.customStatus;
             prepared.push(db.get('courses').prepareCreate((record: Model) => {
               const course = record as Course;
               Object.assign(course, {
@@ -239,6 +270,7 @@ export async function addCourseDayToDatabase(courses: SharedCourseDay[]) {
             const courseToUpdate = existingRecords[0];
             prepared.push(courseToUpdate.prepareUpdate((model: Model) => {
               const course = model as Course;
+              const personalStatus = getPersonalCourseStatus(course.customStatus);
               Object.assign(course, {
                 subject: item.subject ?? course.subject,
                 type: item.type ?? course.type,
@@ -251,7 +283,10 @@ export async function addCourseDayToDatabase(courses: SharedCourseDay[]) {
                 backgroundColor: item.backgroundColor ?? course.backgroundColor,
                 status: item.status ?? course.status,
                 resourceId: item.resourceId ?? course.resourceId,
-                customStatus: item.customStatus ?? course.customStatus,
+                // A background timetable refresh must not replace a status
+                // added by the user with the provider's (possibly blank or
+                // unrelated) status value.
+                customStatus: personalStatus ?? item.customStatus ?? course.customStatus,
                 url: item.url ?? course.url,
                 kidName: item.kidName ?? course.kidName,
               });

@@ -124,7 +124,10 @@ export function useTimetableData(weekNumber: number, currentDate: Date = new Dat
           return;
         }
 
-        const candidates = [targetWeekNumber, targetWeekNumber - 1, targetWeekNumber + 1].map(week => {
+        const targetWeeks = forceRefresh
+          ? [targetWeekNumber, targetWeekNumber + 1, targetWeekNumber + 2]
+          : [targetWeekNumber, targetWeekNumber - 1, targetWeekNumber + 1];
+        const candidates = targetWeeks.map(week => {
           const targetDate = new Date(safeDate);
           targetDate.setDate(targetDate.getDate() + (week - targetWeekNumber) * 7);
           const year = targetDate.getFullYear();

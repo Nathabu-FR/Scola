@@ -1014,16 +1014,31 @@ function getProfileSyncWeeks(): { weekNumber: number; date: Date }[] {
   return weeks;
 }
 
+/** The first setup stores a month around today. Later syncs only touch the
+ * visible week and the next two weeks, which keeps startup responsive. */
+function getUpcomingProfileSyncWeeks(): { weekNumber: number; date: Date }[] {
+  const monday = new Date();
+  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+  monday.setHours(12, 0, 0, 0);
+  return [0, 1, 2].map(offset => {
+    const date = new Date(monday);
+    date.setDate(date.getDate() + offset * 7);
+    return { weekNumber: getWeekNumberFromDate(date), date };
+  });
+}
+
 const getConfiguredSyncIntervalMs = () =>
   (useSettingsStore.getState().personalization.dataSyncIntervalMinutes ?? 30) * 60 * 1000;
 
 /** Refreshes and persists the active profile's offline data in dependency order. */
 export const syncAccountProfile = async (
   accountId: string,
-  options: { force?: boolean; showLoading?: boolean } = {}
+  options: { force?: boolean; showLoading?: boolean; showProgress?: boolean } = {}
 ): Promise<AccountManager> => {
   const force = options.force ?? false;
-  const showLoading = options.showLoading ?? false;
+  const initialSyncComplete = useProfileSyncStore.getState().initialSyncCompleted[accountId] ?? false;
+  const blocking = (options.showLoading ?? false) && !initialSyncComplete;
+  const showProgress = options.showProgress ?? true;
   const pending = profileSyncInFlight.get(accountId);
   if (pending) return pending;
 
@@ -1041,14 +1056,20 @@ export const syncAccountProfile = async (
   }
 
   const task = (async () => {
-    if (showLoading) useAccountSwitchStore.getState().begin(accountId);
+    if (showProgress || blocking) useAccountSwitchStore.getState().begin(accountId, blocking);
 
     try {
       const manager = await initializeAccountManager(accountId);
       const isActiveProfile = () => useAccountStore.getState().lastUsedAccount === accountId;
-      const weeks = getProfileSyncWeeks();
+      const firstSync = !initialSyncComplete;
+      const weeks = firstSync ? getProfileSyncWeeks() : getUpcomingProfileSyncWeeks();
+      const reportProgress = (stage: ProfileSyncStage, fraction: number) => {
+        if (!showProgress && !blocking) return;
+        const stageIndex = PROFILE_SYNC_STAGES.indexOf(stage);
+        useAccountSwitchStore.getState().setStage(accountId, stage, ((stageIndex + fraction) / PROFILE_SYNC_STAGES.length) * 100);
+      };
       const runStage = async (stage: ProfileSyncStage, work: () => Promise<void>) => {
-        if (showLoading) useAccountSwitchStore.getState().setStage(accountId, stage);
+        reportProgress(stage, 0);
         if (!isActiveProfile()) return;
         try {
           await work();
@@ -1059,27 +1080,30 @@ export const syncAccountProfile = async (
 
       await runStage("timetable", async () => {
         if (manager.getAvailableClients(Capabilities.TIMETABLE).length === 0) return;
-        for (const week of weeks) {
+        for (const [index, week] of weeks.entries()) {
           if (!isActiveProfile()) return;
           await manager.getWeeklyTimetable(week.weekNumber, week.date);
+          reportProgress("timetable", (index + 1) / weeks.length);
         }
       });
 
       await runStage("homework", async () => {
         if (manager.getAvailableClients(Capabilities.HOMEWORK).length === 0) return;
-        for (const week of weeks) {
+        for (const [index, week] of weeks.entries()) {
           if (!isActiveProfile()) return;
           await manager.getHomeworks(week.weekNumber);
+          reportProgress("homework", (index + 1) / weeks.length);
         }
       });
 
       await runStage("grades", async () => {
         if (manager.getAvailableClients(Capabilities.GRADES).length === 0) return;
         const periods = await manager.getGradesPeriods(true);
-        for (const period of periods) {
+        for (const [index, period] of periods.entries()) {
           if (!isActiveProfile()) return;
           if (!manager.clientHasCapatibility(Capabilities.GRADES, period.createdByAccount)) continue;
           await manager.getGradesForPeriod(period, period.createdByAccount, undefined, true);
+          reportProgress("grades", (index + 1) / Math.max(1, periods.length));
         }
       });
 
@@ -1087,13 +1111,15 @@ export const syncAccountProfile = async (
         if (manager.getAvailableClients(Capabilities.NEWS).length > 0) {
           await manager.getNews();
         }
+        reportProgress("extras", 0.35);
         if (manager.getAvailableClients(Capabilities.CHAT_READ).length === 0) return;
         const chats = await manager.getChats();
-        for (const chat of chats) {
+        for (const [index, chat] of chats.entries()) {
           if (!isActiveProfile()) return;
           if (!manager.clientHasCapatibility(Capabilities.CHAT_READ, chat.createdByAccount)) continue;
           await manager.getChatRecipients(chat);
           await manager.getChatMessages(chat);
+          reportProgress("extras", 0.35 + 0.65 * ((index + 1) / Math.max(1, chats.length)));
         }
       });
 
@@ -1111,7 +1137,7 @@ export const syncAccountProfile = async (
       }
       return manager;
     } finally {
-      if (showLoading) useAccountSwitchStore.getState().finish(accountId);
+      if (showProgress || blocking) useAccountSwitchStore.getState().finish(accountId);
     }
   })();
 
@@ -1218,5 +1244,15 @@ export const switchActiveAccount = async (accountId: string): Promise<void> => {
   resetAccountManager();
   accountStore.setLastUsedAccount(accountId);
 
-  await syncAccountProfile(accountId, { force: true, showLoading: true });
+  const needsInitialSetup = !(useProfileSyncStore.getState().initialSyncCompleted[accountId] ?? false);
+  const sync = syncAccountProfile(accountId, { force: true, showLoading: needsInitialSetup, showProgress: true });
+  if (needsInitialSetup) {
+    await sync;
+  } else {
+    // Keep navigation available when returning to a prepared profile. The
+    // cache is already readable offline; manager initialization is enough for
+    // the screens to continue while the three-week refresh runs in the banner.
+    void sync.catch(syncError => warn(`Profile refresh failed: ${String(syncError)}`, "switchActiveAccount"));
+    await initializeAccountManager(accountId);
+  }
 };

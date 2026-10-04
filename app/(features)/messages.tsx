@@ -46,6 +46,14 @@ const formatDate = (value: Date) =>
     ? ""
     : value.toLocaleDateString(undefined, { day: "numeric", month: "short" });
 
+const normalizePersonName = (value?: string) =>
+  (value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("fr")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+
 export default function MessagesScreen() {
   const { colors } = useTheme();
   const accountId = useAccountStore(state => state.lastUsedAccount);
@@ -195,16 +203,27 @@ export default function MessagesScreen() {
               <Typography variant="body1" color="textSecondary" align="center">
                 Aucun message dans cette conversation.
               </Typography>
-            ) : sortedMessages.map(message => (
-              <View key={message.id} style={{ padding: 14, gap: 8, borderRadius: 16, backgroundColor: colors.card }}>
+            ) : sortedMessages.map(message => {
+              const myNames = [
+                `${activeAccount?.firstName ?? ""} ${activeAccount?.lastName ?? ""}`,
+                `${activeAccount?.lastName ?? ""} ${activeAccount?.firstName ?? ""}`,
+                activeAccount?.firstName,
+                activeAccount?.lastName,
+                "moi",
+              ].map(normalizePersonName).filter(Boolean);
+              const isOutgoing = myNames.includes(normalizePersonName(message.author));
+              const bubbleText = isOutgoing ? "#FFFFFF" : colors.text;
+              return (
+              <View key={message.id} style={{ width: "100%", flexDirection: "row", justifyContent: isOutgoing ? "flex-end" : "flex-start" }}>
+              <View style={{ maxWidth: "86%", padding: 14, gap: 8, borderRadius: 18, backgroundColor: isOutgoing ? colors.primary : colors.card, borderBottomRightRadius: isOutgoing ? 5 : 18, borderBottomLeftRadius: isOutgoing ? 18 : 5 }}>
                 <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                  <Typography variant="body1" weight="semibold" numberOfLines={1} style={{ flex: 1 }}>{message.author}</Typography>
-                  <Typography variant="caption" color="textSecondary">{formatDate(message.date)}</Typography>
+                  <Typography variant="body1" weight="semibold" numberOfLines={1} style={{ flex: 1, color: bubbleText }}>{message.author}</Typography>
+                  <Typography variant="caption" style={{ color: isOutgoing ? "#FFFFFFB8" : colors.text + "99" }}>{formatDate(message.date)}</Typography>
                 </View>
                 <Typography
                   variant="body1"
                   selectable
-                  style={{ minWidth: 0, flexShrink: 1, ...(Platform.OS === "web" ? { overflowWrap: "anywhere" } : {}) }}
+                  style={{ minWidth: 0, flexShrink: 1, color: bubbleText, ...(Platform.OS === "web" ? { overflowWrap: "anywhere" } : {}) }}
                 >
                   {plainText(message.content) || "Ce message ne contient pas de texte."}
                 </Typography>
@@ -213,17 +232,18 @@ export default function MessagesScreen() {
                     key={`${attachment.url}-${index}`}
                     accessibilityRole="link"
                     onPress={() => openAttachment(attachment)}
-                    style={{ flexDirection: "row", alignItems: "center", gap: 8, padding: 10, borderRadius: 12, backgroundColor: colors.background }}
+                    style={{ flexDirection: "row", alignItems: "center", gap: 8, padding: 10, borderRadius: 12, backgroundColor: isOutgoing ? "#FFFFFF20" : colors.background }}
                   >
-                    <Icon><Papicons name={getAttachmentIcon(attachment)} /></Icon>
+                    <Icon><Papicons name={getAttachmentIcon(attachment)} color={bubbleText} /></Icon>
                     <View style={{ flex: 1, minWidth: 0 }}>
-                      <Typography variant="body1" weight="semibold" numberOfLines={1}>{attachment.name || "Pièce jointe"}</Typography>
-                      <Typography variant="caption" color="textSecondary" numberOfLines={1}>{attachment.url}</Typography>
+                      <Typography variant="body1" weight="semibold" numberOfLines={1} style={{ color: bubbleText }}>{attachment.name || "Pièce jointe"}</Typography>
+                      <Typography variant="caption" numberOfLines={1} style={{ color: isOutgoing ? "#FFFFFFB8" : colors.text + "99" }}>{attachment.url}</Typography>
                     </View>
                   </Pressable>
                 ))}
               </View>
-            ))}
+              </View>
+            );})}
             {errorMessage ? <Typography variant="body2" color="#D60046">{errorMessage}</Typography> : null}
           </ScrollView>
 

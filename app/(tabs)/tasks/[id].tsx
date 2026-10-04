@@ -247,11 +247,17 @@ const Task = () => {
 
             {task.attachments.map(attachment => (
               <List.Item
-                onPress={() =>
-                  WebBrowser.openBrowserAsync(attachment.url, {
+                onPress={() => {
+                  if (!attachment.url) return;
+                  if (Platform.OS === "web" && typeof window !== "undefined") {
+                    const opened = window.open(attachment.url, "_blank", "noopener,noreferrer");
+                    if (!opened) window.location.assign(attachment.url);
+                    return;
+                  }
+                  void WebBrowser.openBrowserAsync(attachment.url, {
                     presentationStyle: "formSheet",
-                  })
-                }
+                  }).catch(error => Alert.alert("Document indisponible", String(error)));
+                }}
               >
                 <List.Leading>
                   <Icon>

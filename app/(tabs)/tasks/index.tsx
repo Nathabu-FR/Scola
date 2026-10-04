@@ -4,7 +4,7 @@ import { t } from 'i18next';
 import { Papicons } from "@getpapillon/papicons";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { InteractionManager, Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, InteractionManager, Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -424,11 +424,23 @@ const TasksView: React.FC = () => {
   ), [colors.card, colors.primary, colors.text, handlePickWeek, selectedWeek, toggleWeekPicker, weekLabel]);
 
   const renderWebHeaderRight = useCallback(() => (
-    <Pressable accessibilityRole="button" accessibilityLabel={t("Task_Sorting_Title")} accessibilityState={{ expanded: showWebSortings }} onPress={() => setShowWebSortings(value => !value)} style={[styles.webHeaderSortButton, { backgroundColor: colors.card }]}>
-      <Papicons name="Filter" size={17} color={colors.primary} />
-      <Typography variant="body2" weight="semibold">{t("Task_Sorting_Title")}</Typography>
-    </Pressable>
-  ), [colors.card, colors.primary, showWebSortings]);
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Actualiser les devoirs de cette semaine et des deux suivantes"
+        disabled={refreshingWeek === selectedWeek}
+        onPress={() => void handleRefresh(selectedWeek)}
+        style={[styles.webHeaderSortButton, { backgroundColor: colors.card, opacity: refreshingWeek === selectedWeek ? 0.7 : 1 }]}
+      >
+        {refreshingWeek === selectedWeek ? <ActivityIndicator size="small" color={colors.primary} /> : <Typography variant="body2" weight="semibold" color="primary">↻</Typography>}
+        <Typography variant="body2" weight="semibold">Actualiser</Typography>
+      </Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel={t("Task_Sorting_Title")} accessibilityState={{ expanded: showWebSortings }} onPress={() => setShowWebSortings(value => !value)} style={[styles.webHeaderSortButton, { backgroundColor: colors.card }]}>
+        <Papicons name="Filter" size={17} color={colors.primary} />
+        <Typography variant="body2" weight="semibold">{t("Task_Sorting_Title")}</Typography>
+      </Pressable>
+    </View>
+  ), [colors.card, colors.primary, handleRefresh, refreshingWeek, selectedWeek, showWebSortings]);
 
   return (
     <>
@@ -487,8 +499,18 @@ const TasksView: React.FC = () => {
                 papicon: "Check",
                 state: showUndoneOnly ? "on" : "off",
               },
+              {
+                id: "__sync_homework",
+                title: "Actualiser cette semaine et les deux suivantes",
+                papicon: "Calendar",
+                state: "off",
+              },
             ]}
             onPressAction={({ nativeEvent }) => {
+              if (nativeEvent.event === "__sync_homework") {
+                void handleRefresh(selectedWeek);
+                return;
+              }
               if (nativeEvent.event === "__undone_only") {
                 setShowUndoneOnly(value => !value);
                 return;
@@ -518,6 +540,9 @@ const TasksView: React.FC = () => {
               onPress={() => setShowUndoneOnly(value => !value)}
             >
               Non terminés uniquement
+            </Stack.Toolbar.MenuAction>
+            <Stack.Toolbar.MenuAction icon="arrow.clockwise" onPress={() => void handleRefresh(selectedWeek)}>
+              Actualiser cette semaine et les deux suivantes
             </Stack.Toolbar.MenuAction>
           </Stack.Toolbar.Menu>
         </Stack.Toolbar>
@@ -552,6 +577,16 @@ const TasksView: React.FC = () => {
             </Pressable>
           </View>
           <Typography variant="title" weight="semibold">{settledLabels.main}</Typography>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Actualiser les devoirs de cette semaine et des deux suivantes"
+            disabled={refreshingWeek === selectedWeek}
+            onPress={() => void handleRefresh(selectedWeek)}
+            style={[styles.webToolbarButton, { backgroundColor: colors.card, opacity: refreshingWeek === selectedWeek ? 0.7 : 1 }]}
+          >
+            {refreshingWeek === selectedWeek ? <ActivityIndicator size="small" color={colors.primary} /> : <Typography variant="body1" weight="semibold" color="primary">↻</Typography>}
+            <Typography variant="body2" weight="semibold">Actualiser</Typography>
+          </Pressable>
           <Pressable
             accessibilityRole="button"
             onPress={() => setShowWebSortings(value => !value)}

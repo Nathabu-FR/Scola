@@ -418,7 +418,11 @@ export const useHomeworkData = (
     async (week: number) => {
       setRefreshingWeek(week);
       try {
-        await fetchWeek(week, manager, true);
+        // A manual sync also fills the next two weeks, so future assignments
+        // are immediately available when paging forward.
+        for (const targetWeek of [week, week + 1, week + 2]) {
+          await fetchWeek(targetWeek, manager, true);
+        }
       } finally {
         setRefreshingWeek(null);
       }

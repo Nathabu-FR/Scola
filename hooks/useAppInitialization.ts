@@ -93,7 +93,7 @@ export function useAppInitialization() {
         const accountId = useAccountStore.getState().lastUsedAccount;
         const lastSyncedAt = useProfileSyncStore.getState().lastSyncedAt[accountId] ?? 0;
         if (accountId && Date.now() - lastSyncedAt >= syncIntervalMinutes * 60 * 1000) {
-          syncAccountProfile(accountId, { force: true }).catch(e =>
+          syncAccountProfile(accountId, { force: true, showProgress: true }).catch(e =>
             warn(`Profile refresh on resume failed: ${String(e)}`)
           );
         }
@@ -116,7 +116,7 @@ export function useAppInitialization() {
       if (AppState.currentState !== "active") return;
       const accountId = useAccountStore.getState().lastUsedAccount;
       if (!accountId) return;
-      syncAccountProfile(accountId, { force: true }).catch(e =>
+      syncAccountProfile(accountId, { force: true, showProgress: true }).catch(e =>
         warn(`Scheduled profile refresh failed: ${String(e)}`)
       );
     }, intervalMs);

@@ -57,7 +57,10 @@ export const useHomeData = () => {
     try {
       const initialSyncComplete =
         useProfileSyncStore.getState().initialSyncCompleted[lastUsedAccount] ?? false;
-      await syncAccountProfile(lastUsedAccount, { showLoading: !initialSyncComplete });
+      await syncAccountProfile(lastUsedAccount, {
+        showLoading: !initialSyncComplete,
+        showProgress: true,
+      });
       debug("Refreshed Manager received");
 
       if (settingsstore.showAlertAtLogin) {

@@ -42,10 +42,22 @@ export async function getHomeworkById(id: string): Promise<SharedHomework | unde
   const database = getDatabaseInstance();
   const sourceIds = getActiveAccountDataSourceIds();
   if (sourceIds.length === 0) return undefined;
-  const records = await database
+  let records = await database
     .get<Homework>("homework")
     .query(Q.where("homeworkId", id), Q.where("createdByAccount", Q.oneOf(sourceIds)))
     .fetch();
+  if (records.length === 0) {
+    // Cache keys changed across releases. Keep old task links valid by
+    // resolving the currently active profile's rows against their route key.
+    const accountRecords = await database
+      .get<Homework>("homework")
+      .query(Q.where("createdByAccount", Q.oneOf(sourceIds)))
+      .fetch();
+    records = accountRecords.filter(record => {
+      const homework = mapHomeworkToShared(record);
+      return getHomeworkRouteId(homework) === id || record.homeworkId === id;
+    }).slice(0, 1);
+  }
   const cachedHomework = records[0] ? mapHomeworkToShared(records[0]) : undefined;
 
   if (!cachedHomework) return undefined;

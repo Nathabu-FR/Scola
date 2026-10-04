@@ -1,7 +1,7 @@
 import { Link } from "expo-router";
 import { t } from "i18next";
 import React, { useMemo, useRef } from "react";
-import { FlatList, RefreshControl, StyleSheet, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { COURSE_CANCELLED_LABEL, Course as SharedCourse, CourseStatus, getManualCourseStatus } from "@/services/shared/timetable";
@@ -17,6 +17,7 @@ interface CalendarDayProps {
   dayDate: Date;
   courses: SharedCourse[];
   isRefreshing: boolean;
+  isLoading?: boolean;
   onRefresh: () => void;
   colors: { primary: string, background: string };
   tabBarHeight: number;
@@ -48,7 +49,7 @@ function areCoursesEquivalent(a: SharedCourse[], b: SharedCourse[]) {
   return true;
 }
 
-export const CalendarDay = React.memo(({ dayDate, courses, isRefreshing, onRefresh, colors, tabBarHeight, transportInfo, hasError = false }: CalendarDayProps) => {
+export const CalendarDay = React.memo(({ dayDate, courses, isRefreshing, isLoading = false, onRefresh, colors, tabBarHeight, transportInfo, hasError = false }: CalendarDayProps) => {
   const { width: windowWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   // Cache to preserve event object identity by id
@@ -139,7 +140,11 @@ export const CalendarDay = React.memo(({ dayDate, courses, isRefreshing, onRefre
           />
         }
         keyExtractor={item => item.id || `${item.type}-${item.from || item.targetTime}`}
-        ListEmptyComponent={<EmptyCalendar hasError={hasError} />}
+        ListEmptyComponent={isLoading && isEmpty ? (
+          <View style={{ paddingTop: 18, alignItems: "center" }}>
+            <ActivityIndicator size="small" color={colors.primary} />
+          </View>
+        ) : <EmptyCalendar hasError={hasError} />}
         renderItem={({ item }: { item: SharedCourse }) => {
           if ((item as any).type === "separator") {
             return (
@@ -186,6 +191,7 @@ export const CalendarDay = React.memo(({ dayDate, courses, isRefreshing, onRefre
   return (
     prevProps.dayDate.getTime() === nextProps.dayDate.getTime() &&
     prevProps.isRefreshing === nextProps.isRefreshing &&
+    prevProps.isLoading === nextProps.isLoading &&
     prevProps.hasError === nextProps.hasError &&
     prevProps.onRefresh === nextProps.onRefresh &&
     areCoursesEquivalent(prevProps.courses, nextProps.courses)

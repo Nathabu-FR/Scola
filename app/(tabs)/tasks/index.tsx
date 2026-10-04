@@ -19,7 +19,13 @@ import Reanimated, {
 import type { SFSymbol } from 'sf-symbols-typescript';
 
 import { TipIds } from '@/constants/Tips';
-import { getDateRangeOfWeek, getWeekNumberFromDate } from '@/database/useHomework';
+import {
+  getDateRangeOfWeek,
+  getHomeworkRouteId,
+  getWeekNumberFromDate,
+  useAllHomeworkFromCache,
+} from '@/database/useHomework';
+import type { Homework } from '@/services/shared/homework';
 import { retireTip } from '@/stores/tips';
 import { useAlert } from "@/ui/components/AlertProvider";
 import Search from '@/ui/components/Search';
@@ -40,6 +46,7 @@ import { useHomeworkData } from './hooks/useHomeworkData';
 import { useTaskFilters } from './hooks/useTaskFilters';
 import { useWeekSelection } from './hooks/useWeekSelection';
 import type { SortMethod } from './hooks/useTaskFilters';
+import { getWeekIndexOfDate } from './utils/weekGrid';
 
 const isAndroid = Platform.OS === 'android';
 
@@ -186,11 +193,61 @@ const TasksView: React.FC = () => {
     failures: homeworkFailures,
   } = useHomeworkData(weeksToLoad, alert);
 
+  // Home reads assignments from the all-cache observer while Tasks used three
+  // narrow week queries. Build the pager pages from that same complete cache so
+  // every assignment visible on Home can also be found in its due week here.
+  const allCachedHomeworks = useAllHomeworkFromCache();
+  const tasksByWeek = useMemo(() => {
+    const grouped = new Map<number, Map<string, Homework>>();
+    const add = (homework: Homework, preferIncoming: boolean) => {
+      const week = getWeekIndexOfDate(homework.dueDate);
+      let items = grouped.get(week);
+      if (!items) {
+        items = new Map();
+        grouped.set(week, items);
+      }
+
+      const key = `${homework.createdByAccount}:${getHomeworkRouteId(homework)}`;
+      const existing = items.get(key);
+      items.set(
+        key,
+        existing && preferIncoming
+          ? { ...existing, ...homework, id: existing.id || homework.id, fromCache: homework.fromCache }
+          : existing ?? homework
+      );
+    };
+
+    allCachedHomeworks.forEach(homework => add(homework, false));
+    Object.values(homeworkByWeek).flat().forEach(homework => add(homework, true));
+
+    return Object.fromEntries(
+      [...grouped.entries()].map(([week, items]) => [
+        week,
+        [...items.values()].sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime()),
+      ])
+    ) as Record<number, Homework[]>;
+  }, [allCachedHomeworks, homeworkByWeek]);
+
+  // The home widget previews the next three due assignments, which can belong
+  // to the following week (especially when opening Tasks on Sunday). Keep the
+  // week pager intact, but give those cached assignments a direct route from
+  // an otherwise empty current week.
+  const nextHomeworkWeek = useMemo(() => {
+    if ((tasksByWeek[selectedWeek] ?? []).length > 0) return undefined;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return allCachedHomeworks
+      .filter(homework => !homework.isDone && homework.dueDate.getTime() >= today.getTime())
+      .map(homework => getWeekIndexOfDate(homework.dueDate))
+      .filter(week => week !== selectedWeek && (tasksByWeek[week] ?? []).length > 0)
+      .sort((a, b) => a - b)[0];
+  }, [allCachedHomeworks, selectedWeek, tasksByWeek]);
+
   const hasHomeworkError = Boolean(homeworkError) || homeworkFailures.length > 0;
 
   const currentWeekTaskCounts = useMemo(() => {
     const seen = new Set<string>();
-    const items = (homeworkByWeek[selectedWeek] ?? []).filter(homework => {
+    const items = (tasksByWeek[selectedWeek] ?? []).filter(homework => {
       const key = homework.id
         ? `${homework.createdByAccount}:${homework.id}`
         : `${homework.createdByAccount}:${homework.subject}:${homework.content}:${homework.dueDate.getTime()}`;
@@ -202,7 +259,7 @@ const TasksView: React.FC = () => {
       total: items.length,
       remaining: items.filter(homework => !homework.isDone).length,
     };
-  }, [homeworkByWeek, selectedWeek]);
+  }, [tasksByWeek, selectedWeek]);
 
   const {
     searchTerm,
@@ -567,10 +624,24 @@ const TasksView: React.FC = () => {
                 {showUndoneOnly ? "Activé" : "Filtrer"}
               </Typography>
             </Pressable>
-            {Platform.OS === "web" && homeworkByWeek[selectedWeek] !== undefined && (
+            {Platform.OS === "web" && tasksByWeek[selectedWeek] !== undefined && (
               <TasksSummary inline totalCount={currentWeekTaskCounts.total} remainingCount={currentWeekTaskCounts.remaining} headerHeight={0} />
             )}
           </View>
+        )}
+        {nextHomeworkWeek !== undefined && (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => handlePickWeek(nextHomeworkWeek)}
+            style={[styles.nextHomeworkHint, { backgroundColor: colors.card, borderColor: colors.border }]}
+          >
+            <Typography variant="body2" color="textSecondary" style={{ flex: 1 }}>
+              Des devoirs à venir sont enregistrés pour la semaine {getDisplayedWeekNumber(nextHomeworkWeek)}.
+            </Typography>
+            <Typography variant="body2" weight="semibold" color="primary">
+              Afficher →
+            </Typography>
+          </Pressable>
         )}
         <GestureDetector gesture={panGesture}>
           <Reanimated.View style={[styles.pager, rowStyle]}>
@@ -589,7 +660,7 @@ const TasksView: React.FC = () => {
                   <SafeAreaView edges={['left', 'right']} style={{ flex: 1, backgroundColor: colors.overground }}>
                     <TasksWeekPage
                       week={week}
-                      homeworks={homeworkByWeek[week]}
+                      homeworks={tasksByWeek[week]}
                       animateItems={index === INITIAL_INDEX}
                       searchTerm={searchTerm}
                       sortMethod={sortMethod}
@@ -684,6 +755,18 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginTop: 6,
     marginBottom: 4,
+  },
+  nextHomeworkHint: {
+    minHeight: 42,
+    marginHorizontal: 16,
+    marginTop: 6,
+    marginBottom: 4,
+    paddingHorizontal: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
   },
   webDesktopFilter: {
     flex: 1,

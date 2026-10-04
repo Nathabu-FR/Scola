@@ -248,6 +248,7 @@ const GradesView = () => {
                 }}>
                 <View style={{ paddingLeft: contentPaddingLeft, paddingRight: contentPaddingRight }}>
                   <Averages
+                    compact
                     history={history}
                     realAverage={isAverageServiceProvided ? averages.student?.value : undefined}
                     classAverage={averages.class?.value}

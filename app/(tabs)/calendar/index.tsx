@@ -127,6 +127,7 @@ function TabOneScreen() {
   const {
     timetable,
     manualRefreshing,
+    isLoading,
     handleRefresh,
     error: timetableError,
     failures: timetableFailures,
@@ -256,6 +257,7 @@ function TabOneScreen() {
         dayDate={dayDate}
         courses={dayCourses}
         isRefreshing={manualRefreshing}
+        isLoading={isLoading}
         onRefresh={handleRefresh}
         colors={colors}
         tabBarHeight={tabBarHeight}
@@ -263,7 +265,7 @@ function TabOneScreen() {
         hasError={hasTimetableError}
       />
     );
-  }, [getDateFromIndex, timetable, manualRefreshing, handleRefresh, colors, tabBarHeight, transportInfo, hasTimetableError]);
+  }, [getDateFromIndex, timetable, manualRefreshing, isLoading, handleRefresh, colors, tabBarHeight, transportInfo, hasTimetableError]);
 
   return (
     <>
@@ -383,7 +385,7 @@ function TabOneScreen() {
           initialNumToRender={3}
           showsVerticalScrollIndicator={false}
           removeClippedSubviews
-          extraData={{ manualRefreshing, colors, timetable }}
+          extraData={{ manualRefreshing, isLoading, colors, timetable }}
         />
       </View>
     </>

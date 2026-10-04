@@ -11,7 +11,7 @@ import {
 
 import { Course, CourseDay, CourseResource, CourseStatus, CourseType } from "@/services/shared/timetable";
 import { AttachmentType } from "@/services/shared/attachment";
-import { error } from "@/utils/logger/logger";
+import { error, warn } from "@/utils/logger/logger";
 
 export async function fetchPronoteWeekTimetable(
   session: SessionHandle,
@@ -23,18 +23,64 @@ export async function fetchPronoteWeekTimetable(
     throw error("Session is undefined", "fetchPronoteTimetable");
   }
 
-  const weekNumber = translateToWeekNumber(date, session.instance.firstMonday);
+  const translatedWeekNumber = translateToWeekNumber(date, session.instance.firstMonday);
+  const weekNumber = Number.isFinite(translatedWeekNumber)
+    ? translatedWeekNumber
+    : weekNumberRaw;
   const timetable = await timetableFromWeek(session, weekNumber);
 
-  parseTimetable(session, timetable, {
+  const parseOptions = {
     withSuperposedCanceledClasses: true,
     withCanceledClasses: true,
     withPlannedClasses: true,
+  };
+  const sourceClasses = Array.isArray(timetable.classes)
+    ? timetable.classes.map(sourceClass => ({ ...sourceClass }))
+    : [];
+  let parsedClasses = sourceClasses;
+  const parseIndividually = () => sourceClasses.flatMap(sourceClass => {
+    const isolatedTimetable = {
+      ...timetable,
+      classes: [{ ...sourceClass }],
+    };
+
+    try {
+      parseTimetable(session, isolatedTimetable, parseOptions);
+      return Array.isArray(isolatedTimetable.classes) ? isolatedTimetable.classes : [];
+    } catch {
+      return [];
+    }
   });
+
+  try {
+    parseTimetable(session, timetable, parseOptions);
+    parsedClasses = Array.isArray(timetable.classes) ? [...timetable.classes] : [];
+    // Some PRONOTE payloads parse without throwing but still lose rows. In
+    // that case retry the source entries independently and keep the fuller
+    // result; this also preserves every valid course in a partially parsed week.
+    if (parsedClasses.length < sourceClasses.length) {
+      const individuallyParsed = parseIndividually();
+      const currentCourseCount = mapCourses(accountId, parsedClasses).length;
+      const recoveredCourseCount = mapCourses(accountId, individuallyParsed).length;
+      if (recoveredCourseCount > currentCourseCount) {
+        warn(`PRONOTE recovered ${recoveredCourseCount - currentCourseCount} missing timetable entries individually.`);
+        parsedClasses = individuallyParsed;
+      }
+    }
+  } catch {
+    // A malformed entry should not discard every other class in the week.
+    // Retry each source row independently so valid lessons still reach the UI.
+    warn("PRONOTE could not parse the full timetable; retrying entries individually.");
+    parsedClasses = parseIndividually();
+
+    if (parsedClasses.length < sourceClasses.length) {
+      warn(`PRONOTE skipped ${sourceClasses.length - parsedClasses.length} unparseable timetable entries.`);
+    }
+  }
 
   const mappedCourses = mapCourses(
     accountId,
-    Array.isArray(timetable.classes) ? timetable.classes : []
+    parsedClasses
   );
   const dayMap: Record<string, Course[]> = {};
 
@@ -69,6 +115,19 @@ const mapCourses = (
   const courseList: Course[] = [];
 
   for (const c of courses) {
+    if (
+      !(c.startDate instanceof Date) ||
+      !Number.isFinite(c.startDate.getTime()) ||
+      !(c.endDate instanceof Date) ||
+      !Number.isFinite(c.endDate.getTime())
+    ) {
+      continue;
+    }
+
+    // Some timetable providers reuse an identifier for each occurrence of a
+    // recurring class. Include the occurrence start so one lesson cannot hide
+    // another during calendar de-duplication or database updates.
+    const courseId = `${c.id}:${c.startDate.getTime()}`;
     const baseCourse = {
       from: c.startDate,
       to: c.endDate,
@@ -79,7 +138,7 @@ const mapCourses = (
     if (c.is === "lesson") {
       courseList.push({
         subject: c.subject?.name ?? "Cours",
-        id: c.id,
+        id: courseId,
         type: CourseType.LESSON,
         room: Array.isArray(c.classrooms) ? c.classrooms.join(", ") : "",
         teacher: Array.isArray(c.teacherNames) ? c.teacherNames.join(", ") : "",
@@ -91,7 +150,7 @@ const mapCourses = (
       });
     } else if (c.is === "detention") {
       courseList.push({
-        id: c.id,
+        id: courseId,
         type: CourseType.DETENTION,
         subject: c.title ?? "Detention",
         room: Array.isArray(c.classrooms) ? c.classrooms.join(", ") : "",
@@ -99,7 +158,7 @@ const mapCourses = (
       });
     } else if (c.is === "activity") {
       courseList.push({
-        id: c.id,
+        id: courseId,
         type: CourseType.ACTIVITY,
         subject: c.title,
         ...baseCourse

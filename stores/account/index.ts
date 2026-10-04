@@ -7,6 +7,7 @@ import { initializeTransport } from "@/utils/transport";
 
 import { createMMKVStorage } from '../global'
 import { AccountsStorage, Auth, TransportAddress } from "./types";
+import { useProfileSyncStore } from "@/stores/profileSync";
 
 export const useAccountStore = create<AccountsStorage>()(
   persist(
@@ -14,12 +15,14 @@ export const useAccountStore = create<AccountsStorage>()(
       lastUsedAccount: "",
       accounts: [],
       reset: () => {
+        useProfileSyncStore.getState().clear();
         set({
           lastUsedAccount: "",
           accounts: [],
         });
       },
       removeAccount: account => {
+        useProfileSyncStore.getState().removeAccount(account.id);
         const accounts = get().accounts.filter(a => a.id !== account.id);
         const lastUsedAccount = get().lastUsedAccount;
 

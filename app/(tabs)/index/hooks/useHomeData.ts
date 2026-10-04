@@ -1,50 +1,27 @@
 import { router } from 'expo-router';
 import { t } from 'i18next';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect } from 'react';
 import { InteractionManager } from 'react-native';
 
-import { getWeekNumberFromDate } from '@/database/useHomework';
 import { AuthenticationError } from '@/services/errors/AuthenticationError';
 import { SecurityChallengeError } from '@/services/errors/SecurityChallengeError';
 import { ServiceUnavailableError } from '@/services/errors/ServiceUnavailableError';
-import { getManager, initializeAccountManager, resetAccountManager } from "@/services/shared";
+import { getManager, resetAccountManager, syncAccountProfile } from "@/services/shared";
 import { Services } from '@/stores/account/types';
 import { useSettingsStore } from '@/stores/settings';
 import { useAlert } from '@/ui/components/AlertProvider';
 import { debug, warn } from '@/utils/logger/logger';
 import { setPendingPronoteChallenge } from '@/utils/pronote/challenge';
 import { useAccountStore } from '@/stores/account';
+import { useProfileSyncStore } from '@/stores/profileSync';
 
 const REMOVED_SERVICE_ID = 9;
-
-const HOME_SYNC_TTL_MS = 5 * 60 * 1000;
-const lastHomeSync = new Map<string, number>();
 
 export const useHomeData = () => {
   const alert = useAlert();
   const settingsstore = useSettingsStore(state => state.personalization);
   const lastUsedAccount = useAccountStore(state => state.lastUsedAccount);
   const removeAccount = useAccountStore(state => state.removeAccount);
-  const previousAccount = useRef(lastUsedAccount);
-
-  useEffect(() => {
-    if (previousAccount.current !== lastUsedAccount) {
-      lastHomeSync.delete(lastUsedAccount);
-      previousAccount.current = lastUsedAccount;
-    }
-  }, [lastUsedAccount]);
-
-  const fetchEDT = useCallback(async () => {
-    const manager = getManager();
-    if (!manager) {
-      warn('Manager is null, skipping timetable fetch');
-      return;
-    }
-    const date = new Date();
-    const weekNumber = getWeekNumberFromDate(date);
-    await manager.getWeeklyTimetable(weekNumber, date);
-  }, []);
-
   const initialize = useCallback(async () => {
     if (!lastUsedAccount) {
       return;
@@ -77,16 +54,11 @@ export const useHomeData = () => {
       return;
     }
 
-    if (Date.now() - (lastHomeSync.get(lastUsedAccount) ?? 0) < HOME_SYNC_TTL_MS) {
-      return;
-    }
-
     try {
-      await initializeAccountManager(lastUsedAccount);
+      const initialSyncComplete =
+        useProfileSyncStore.getState().initialSyncCompleted[lastUsedAccount] ?? false;
+      await syncAccountProfile(lastUsedAccount, { showLoading: !initialSyncComplete });
       debug("Refreshed Manager received");
-
-      await fetchEDT();
-      lastHomeSync.set(lastUsedAccount, Date.now());
 
       if (settingsstore.showAlertAtLogin) {
         alert.showAlert({
@@ -212,7 +184,7 @@ export const useHomeData = () => {
         });
       }
     }
-  }, [alert, fetchEDT, settingsstore.showAlertAtLogin, lastUsedAccount, removeAccount]);
+  }, [alert, settingsstore.showAlertAtLogin, lastUsedAccount, removeAccount]);
 
   useEffect(() => {
     const task = InteractionManager.runAfterInteractions(() => {

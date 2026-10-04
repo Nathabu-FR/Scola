@@ -42,6 +42,8 @@ export interface Personalization {
   showDevMode?: boolean;
   mockDataEnabled?: boolean;
   magicModelURL?: string;
+  /** Background refresh interval in minutes; defaults to 30. */
+  dataSyncIntervalMinutes?: 15 | 30 | 60 | 120;
   language?: string | null;
   wallpaper?: Wallpaper;
   /** Profile-scoped wallpaper; null means the profile explicitly chose no wallpaper. */

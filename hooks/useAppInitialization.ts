@@ -4,7 +4,9 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
 
 import { configureTips, resetTipsDatastore, showAllTips } from '@/modules/papillon-tips';
-import { initializeAccountManager } from '@/services/shared';
+import { syncAccountProfile } from '@/services/shared';
+import { useAccountStore } from '@/stores/account';
+import { useProfileSyncStore } from '@/stores/profileSync';
 import { useSettingsStore } from '@/stores/settings';
 import { useTipsStore } from '@/stores/tips';
 import i18n from '@/utils/i18n';
@@ -23,6 +25,7 @@ export function useAppInitialization() {
   // Settings
   const customLanguage = useSettingsStore(state => state.personalization.language);
   const selectedTheme = useSettingsStore(state => state.personalization.theme);
+  const syncIntervalMinutes = useSettingsStore(state => state.personalization.dataSyncIntervalMinutes ?? 30);
   const mutateProperty = useSettingsStore(state => state.mutateProperty);
 
   useEffect(() => {
@@ -83,23 +86,17 @@ export function useAppInitialization() {
 
   // AppState Monitoring
   const appState = useRef<AppStateStatus>(AppState.currentState);
-  const lastBackgroundRef = useRef<number | null>(null);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextAppState) => {
       if (appState.current.match(/inactive|background/) && nextAppState === "active") {
-        if (lastBackgroundRef.current) {
-          const now = Date.now();
-          const durationMs = now - lastBackgroundRef.current;
-
-          if (durationMs > 5 * 60 * 1000) {
-            initializeAccountManager().catch(e => warn(`Background account refresh failed: ${e}`));
-          }
+        const accountId = useAccountStore.getState().lastUsedAccount;
+        const lastSyncedAt = useProfileSyncStore.getState().lastSyncedAt[accountId] ?? 0;
+        if (accountId && Date.now() - lastSyncedAt >= syncIntervalMinutes * 60 * 1000) {
+          syncAccountProfile(accountId, { force: true }).catch(e =>
+            warn(`Profile refresh on resume failed: ${String(e)}`)
+          );
         }
-      }
-
-      if (nextAppState === "background") {
-        lastBackgroundRef.current = Date.now();
       }
 
       appState.current = nextAppState;
@@ -108,7 +105,24 @@ export function useAppInitialization() {
     return () => {
       subscription.remove();
     };
-  }, []);
+  }, [syncIntervalMinutes]);
+
+  // Timers are suspended by mobile operating systems while the app is fully
+  // backgrounded. Refresh on this interval while active, and check the saved
+  // timestamp again when the app becomes active.
+  useEffect(() => {
+    const intervalMs = Math.max(1, syncIntervalMinutes) * 60 * 1000;
+    const timer = setInterval(() => {
+      if (AppState.currentState !== "active") return;
+      const accountId = useAccountStore.getState().lastUsedAccount;
+      if (!accountId) return;
+      syncAccountProfile(accountId, { force: true }).catch(e =>
+        warn(`Scheduled profile refresh failed: ${String(e)}`)
+      );
+    }, intervalMs);
+
+    return () => clearInterval(timer);
+  }, [syncIntervalMinutes]);
 
   // PostHog Consent Sync
   useEffect(() => {

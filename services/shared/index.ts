@@ -30,6 +30,7 @@ import {
 } from "@/database/useGrades";
 import {
   addHomeworkToDatabase,
+  getWeekNumberFromDate,
   getHomeworksFromCache,
 } from "@/database/useHomework";
 import { addKidToDatabase, getKidsFromCache } from "@/database/useKids";
@@ -59,6 +60,9 @@ import {
 } from "@/services/shared/types";
 import { useAccountStore } from "@/stores/account";
 import { useAccountSwitchStore } from "@/stores/accountSwitch";
+import type { ProfileSyncStage } from "@/stores/accountSwitch";
+import { useProfileSyncStore } from "@/stores/profileSync";
+import { useSettingsStore } from "@/stores/settings";
 import { Account, ServiceAccount, Services } from "@/stores/account/types";
 import { migrateLegacyAccountPersonalization } from "@/stores/settings";
 import { getAccountDataSourceIds } from "@/database/accountScope";
@@ -102,6 +106,8 @@ import { Kid } from "./kid";
 export class AccountManager {
   private clients: Record<string, SchoolServicePlugin> = {};
   private failures = new Map<Capabilities, ServiceFailure[]>();
+  private timetableRequests = new Map<string, Promise<CourseDay[]>>();
+  private timetableQueue: Promise<void> = Promise.resolve();
   private gradesPeriodsCache?: { expiresAt: number; value: Period[] };
   private gradesPeriodsInFlight?: Promise<Period[]>;
   private periodGradesCache = new Map<string, { expiresAt: number; value: PeriodGrades }>();
@@ -467,22 +473,35 @@ export class AccountManager {
   }
 
   async getWeeklyTimetable(weekNumber: number, date: Date): Promise<CourseDay[]> {
-    return await this.fetchData(
-      Capabilities.TIMETABLE,
-      async client =>
-        client.getWeeklyTimetable
-          ? await client.getWeeklyTimetable(weekNumber, date)
-          : [],
-      {
-        multiple: true,
-        fallback: async () => getCoursesFromCache([weekNumber], date.getFullYear(), getAccountDataSourceIds(this.account)),
-        saveToCache: async (data: CourseDay[]) => {
-          // L'oubli d'await laissait des écritures EDT en vol pendant le
-          // fetchData suivant → « capability 1 failed » + Writer occupé.
-          await addCourseDayToDatabase(data);
-        },
+    const key = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}:${weekNumber}`;
+    const pending = this.timetableRequests.get(key);
+    if (pending) return pending;
+
+    const request = this.timetableQueue.then(() => this.fetchData(
+        Capabilities.TIMETABLE,
+        async client =>
+          client.getWeeklyTimetable
+            ? await client.getWeeklyTimetable(weekNumber, date)
+            : [],
+        {
+          multiple: true,
+          fallback: async () => getCoursesFromCache([weekNumber], date.getFullYear(), getAccountDataSourceIds(this.account)),
+          saveToCache: async (data: CourseDay[]) => {
+            // L'oubli d'await laissait des écritures EDT en vol pendant le
+            // fetchData suivant → « capability 1 failed » + Writer occupé.
+            await addCourseDayToDatabase(data);
+          },
+        }
+      ));
+    this.timetableRequests.set(key, request);
+    this.timetableQueue = request.then(() => undefined, () => undefined);
+    try {
+      return await request;
+    } finally {
+      if (this.timetableRequests.get(key) === request) {
+        this.timetableRequests.delete(key);
       }
-    );
+    }
   }
 
   async getCourseResources(course: Course): Promise<CourseResource[]> {
@@ -956,6 +975,155 @@ const notifyManagerListeners = (manager: AccountManager) => {
 };
 
 const managerInFlight = new Map<string, Promise<AccountManager>>();
+const profileSyncInFlight = new Map<string, Promise<AccountManager>>();
+const synchronizedProfilesThisProcess = new Set<string>();
+
+const PROFILE_SYNC_STAGES: ProfileSyncStage[] = [
+  "timetable",
+  "homework",
+  "grades",
+  "extras",
+  "magic",
+];
+
+function getProfileSyncWeeks(): { weekNumber: number; date: Date }[] {
+  const now = new Date();
+  const firstDate = new Date(now);
+  firstDate.setDate(firstDate.getDate() - 30);
+  firstDate.setHours(12, 0, 0, 0);
+  const lastDate = new Date(now);
+  lastDate.setDate(lastDate.getDate() + 30);
+  lastDate.setHours(12, 0, 0, 0);
+
+  const toMonday = (date: Date) => {
+    const monday = new Date(date);
+    monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+    monday.setHours(12, 0, 0, 0);
+    return monday;
+  };
+
+  const weeks: { weekNumber: number; date: Date }[] = [];
+  for (
+    let date = toMonday(firstDate);
+    date <= toMonday(lastDate);
+    date.setDate(date.getDate() + 7)
+  ) {
+    const weekDate = new Date(date);
+    weeks.push({ weekNumber: getWeekNumberFromDate(weekDate), date: weekDate });
+  }
+  return weeks;
+}
+
+const getConfiguredSyncIntervalMs = () =>
+  (useSettingsStore.getState().personalization.dataSyncIntervalMinutes ?? 30) * 60 * 1000;
+
+/** Refreshes and persists the active profile's offline data in dependency order. */
+export const syncAccountProfile = async (
+  accountId: string,
+  options: { force?: boolean; showLoading?: boolean } = {}
+): Promise<AccountManager> => {
+  const force = options.force ?? false;
+  const showLoading = options.showLoading ?? false;
+  const pending = profileSyncInFlight.get(accountId);
+  if (pending) return pending;
+
+  const syncState = useProfileSyncStore.getState();
+  const lastSyncedAt = syncState.lastSyncedAt[accountId] ?? 0;
+  if (
+    !force &&
+    synchronizedProfilesThisProcess.has(accountId) &&
+    Date.now() - lastSyncedAt < getConfiguredSyncIntervalMs()
+  ) {
+    const activeManager = getManager(true);
+    return activeManager?.getAccount().id === accountId
+      ? activeManager
+      : initializeAccountManager(accountId);
+  }
+
+  const task = (async () => {
+    if (showLoading) useAccountSwitchStore.getState().begin(accountId);
+
+    try {
+      const manager = await initializeAccountManager(accountId);
+      const isActiveProfile = () => useAccountStore.getState().lastUsedAccount === accountId;
+      const weeks = getProfileSyncWeeks();
+      const runStage = async (stage: ProfileSyncStage, work: () => Promise<void>) => {
+        if (showLoading) useAccountSwitchStore.getState().setStage(accountId, stage);
+        if (!isActiveProfile()) return;
+        try {
+          await work();
+        } catch (syncError) {
+          warn(`Profile ${stage} sync failed: ${String(syncError)}`, "syncAccountProfile");
+        }
+      };
+
+      await runStage("timetable", async () => {
+        if (manager.getAvailableClients(Capabilities.TIMETABLE).length === 0) return;
+        for (const week of weeks) {
+          if (!isActiveProfile()) return;
+          await manager.getWeeklyTimetable(week.weekNumber, week.date);
+        }
+      });
+
+      await runStage("homework", async () => {
+        if (manager.getAvailableClients(Capabilities.HOMEWORK).length === 0) return;
+        for (const week of weeks) {
+          if (!isActiveProfile()) return;
+          await manager.getHomeworks(week.weekNumber);
+        }
+      });
+
+      await runStage("grades", async () => {
+        if (manager.getAvailableClients(Capabilities.GRADES).length === 0) return;
+        const periods = await manager.getGradesPeriods(true);
+        for (const period of periods) {
+          if (!isActiveProfile()) return;
+          if (!manager.clientHasCapatibility(Capabilities.GRADES, period.createdByAccount)) continue;
+          await manager.getGradesForPeriod(period, period.createdByAccount, undefined, true);
+        }
+      });
+
+      await runStage("extras", async () => {
+        if (manager.getAvailableClients(Capabilities.NEWS).length > 0) {
+          await manager.getNews();
+        }
+        if (manager.getAvailableClients(Capabilities.CHAT_READ).length === 0) return;
+        const chats = await manager.getChats();
+        for (const chat of chats) {
+          if (!isActiveProfile()) return;
+          if (!manager.clientHasCapatibility(Capabilities.CHAT_READ, chat.createdByAccount)) continue;
+          await manager.getChatRecipients(chat);
+          await manager.getChatMessages(chat);
+        }
+      });
+
+      await runStage("magic", async () => {
+        if (!useSettingsStore.getState().personalization.magicEnabled) return;
+        const { default: ModelManager } = await import("@/utils/magic/ModelManager");
+        await ModelManager.safeInit();
+      });
+
+      if (isActiveProfile()) {
+        const syncedAt = Date.now();
+        useProfileSyncStore.getState().markInitialSyncCompleted(accountId);
+        useProfileSyncStore.getState().markSynced(accountId, syncedAt);
+        synchronizedProfilesThisProcess.add(accountId);
+      }
+      return manager;
+    } finally {
+      if (showLoading) useAccountSwitchStore.getState().finish(accountId);
+    }
+  })();
+
+  profileSyncInFlight.set(accountId, task);
+  try {
+    return await task;
+  } finally {
+    if (profileSyncInFlight.get(accountId) === task) {
+      profileSyncInFlight.delete(accountId);
+    }
+  }
+};
 
 export const initializeAccountManager = async (
   accountId?: string
@@ -1047,13 +1215,8 @@ export const switchActiveAccount = async (accountId: string): Promise<void> => {
   const previousAccountId = accountStore.lastUsedAccount;
   if (previousAccountId) migrateLegacyAccountPersonalization(previousAccountId);
 
-  useAccountSwitchStore.getState().begin(accountId);
   resetAccountManager();
   accountStore.setLastUsedAccount(accountId);
 
-  try {
-    await initializeAccountManager(accountId);
-  } finally {
-    useAccountSwitchStore.getState().finish(accountId);
-  }
+  await syncAccountProfile(accountId, { force: true, showLoading: true });
 };

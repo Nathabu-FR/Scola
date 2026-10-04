@@ -23,6 +23,7 @@ export default function SettingsFeatures() {
 
   const iOSBottomAccessoryEnabled = settingsStore.iOSBottomAccessoryEnabled ?? true;
   const showTabBarLabels = settingsStore.showTabBarLabels ?? true;
+  const dataSyncIntervalMinutes = settingsStore.dataSyncIntervalMinutes ?? 30;
   const selectedGradeScale = getGradeDisplayScale(settingsStore.gradesDisplayScale);
 
   const gradeScaleOptions = [
@@ -47,6 +48,12 @@ export default function SettingsFeatures() {
   const selectedGradeScaleIndex = useMemo(() => {
     return Math.max(0, gradeScaleOptions.findIndex(option => option.value === selectedGradeScale));
   }, [selectedGradeScale]);
+
+  const syncIntervalOptions = [15, 30, 60, 120] as const;
+  const selectedSyncIntervalIndex = Math.max(
+    0,
+    syncIntervalOptions.indexOf(dataSyncIntervalMinutes)
+  );
 
   return (
     <List
@@ -104,6 +111,36 @@ export default function SettingsFeatures() {
                 })
               }
             />
+          </List.Trailing>
+        </List.Item>
+      </List.Section>
+
+      <List.Section>
+        <List.SectionTitle>
+          <List.Label>Hors connexion</List.Label>
+        </List.SectionTitle>
+        <List.Item>
+          <List.Leading>
+            <Icon>
+              <Papicons name={"Calendar"} />
+            </Icon>
+          </List.Leading>
+          <Typography variant="title">Actualisation automatique</Typography>
+          <Typography color="textSecondary" numberOfLines={2}>
+            Les données se mettent à jour à cette fréquence quand l’app est ouverte, puis à sa réouverture.
+          </Typography>
+          <List.Trailing>
+            <View style={{ width: 145, alignItems: "flex-end" }}>
+              <Picker
+                options={syncIntervalOptions.map(minutes => `${minutes} min`)}
+                selectedIndex={selectedSyncIntervalIndex}
+                onValueChange={index =>
+                  mutateProperty("personalization", {
+                    dataSyncIntervalMinutes: syncIntervalOptions[index],
+                  })
+                }
+              />
+            </View>
           </List.Trailing>
         </List.Item>
       </List.Section>

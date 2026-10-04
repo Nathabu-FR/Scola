@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { getCourseRouteId, useTimetable } from '@/database/useTimetable';
+import { getCourseRouteId, rememberCourseForRoute, useTimetable } from '@/database/useTimetable';
 import { useActiveAccountDataSourceIds } from '@/database/accountScope';
 import { useLoadErrorAlert } from '@/hooks/useLoadErrorAlert';
 import { useManagerSubscription } from '@/hooks/useManagerSubscription';
@@ -149,7 +149,11 @@ export function useTimetableData(weekNumber: number, currentDate: Date = new Dat
               try {
                 const result = await managerToUse.getWeeklyTimetable(candidate.week, candidate.targetDate);
                 if (useAccountStore.getState().lastUsedAccount !== managerToUse.getAccount().id) return;
-                freshResults[candidate.key] = Array.isArray(result) ? result : [];
+                const days = Array.isArray(result) ? result : [];
+                for (const day of days) {
+                  for (const course of day.courses) rememberCourseForRoute(course);
+                }
+                freshResults[candidate.key] = days;
                 fetchedWeeks.current.add(candidate.key);
               } catch (requestError) {
                 firstRequestError ??= requestError;

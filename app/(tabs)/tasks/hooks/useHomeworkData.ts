@@ -12,6 +12,7 @@ import { generateId } from "@/utils/generateId";
 import { error, warn } from '@/utils/logger/logger';
 import { trackAdvancedEvent } from '@/utils/logger/analytics';
 import { notificationAsync, NotificationFeedbackType } from "expo-haptics";
+import { getCurrentWeekIndex } from "../utils/weekGrid";
 
 // Cache reads are coalesced over this window: fetching five weeks would
 // otherwise re-query every one of them five times over.
@@ -250,7 +251,9 @@ export const useHomeworkData = (
   // A week is fetched from the service once per session; `inFlightWeeks` keeps a
   // swipe back and forth from queueing the same request twice.
   const fetchedWeeks = useRef<Set<number>>(new Set());
-  const inFlightWeeks = useRef<Set<number>>(new Set());
+  const inFlightWeeks = useRef<Map<number, { promise: Promise<void>; forced: boolean }>>(new Map());
+  const forceAfterCurrentWeeks = useRef<Set<number>>(new Set());
+  const fetchWeekRef = useRef<((week: number, managerToUse?: AccountManager, force?: boolean) => Promise<void>) | null>(null);
   const weeksRef = useRef(weeks);
   weeksRef.current = weeks;
   const prefetchGeneration = useRef(0);
@@ -288,41 +291,63 @@ export const useHomeworkData = (
       // Do not cache an empty fallback while account services are still being
       // initialized. The manager listener retries once homework-capable clients appear.
       if (getHomeworkClientsKey(managerToUse) === "") { return; }
-      if (inFlightWeeks.current.has(week)) { return; }
+      const activeRequest = inFlightWeeks.current.get(week);
+      if (activeRequest) {
+        // A manual refresh must not silently reuse an older request already
+        // underway. Queue one real forced request as soon as that request ends.
+        if (force && !activeRequest.forced) forceAfterCurrentWeeks.current.add(week);
+        await activeRequest.promise;
+        if (forceAfterCurrentWeeks.current.delete(week)) {
+          await fetchWeekRef.current?.(week, managerToUse, true);
+        }
+        return;
+      }
       if (!force && fetchedWeeks.current.has(week)) { return; }
 
-      inFlightWeeks.current.add(week);
-      try {
-        const result = await fetchSharedHomeworkWeek(managerToUse, week, force);
-        if (managerToUse.getAccount().id !== useAccountStore.getState().lastUsedAccount) return;
-        const fetched: Record<string, Homework> = {};
-        for (const value of result) {
-          const hw = normalizeHomework(value, managerToUse.getAccount().id);
-          if (!hw) {
-            continue;
+      const request: { promise: Promise<void>; forced: boolean } = {
+        promise: Promise.resolve(),
+        forced: force,
+      };
+      const runRequest = async () => {
+        try {
+          const result = await fetchSharedHomeworkWeek(managerToUse, week, force);
+          if (managerToUse.getAccount().id !== useAccountStore.getState().lastUsedAccount) return;
+          const fetched: Record<string, Homework> = {};
+          for (const value of result) {
+            const hw = normalizeHomework(value, managerToUse.getAccount().id);
+            if (!hw) {
+              continue;
+            }
+            const id = homeworkKey(hw);
+            fetched[id] = { ...hw, id: hw.id || id };
           }
-          const id = homeworkKey(hw);
-          fetched[id] = { ...hw, id: hw.id || id };
+          fetchedWeeks.current.add(week);
+          setHomework(prev => ({ ...prev, ...fetched }));
+          setLoadedWeeks(prev => ({ ...prev, [week]: true }));
+          scheduleRefresh();
+          // The manager falls back to the cache rather than throwing, so a service
+          // that failed is only visible through its recorded failures.
+          setFailures(managerToUse.getFailures(Capabilities.HOMEWORK));
+          setLoadError(null);
+        } catch (e) {
+          if (managerToUse.getAccount().id !== useAccountStore.getState().lastUsedAccount) return;
+          error("Fetch error", String(e));
+          setFailures(managerToUse.getFailures(Capabilities.HOMEWORK));
+          setLoadError(e instanceof Error ? e : new Error(String(e)));
+        } finally {
+          if (inFlightWeeks.current.get(week) === request) inFlightWeeks.current.delete(week);
         }
-        fetchedWeeks.current.add(week);
-        setHomework(prev => ({ ...prev, ...fetched }));
-        setLoadedWeeks(prev => ({ ...prev, [week]: true }));
-        scheduleRefresh();
-        // The manager falls back to the cache rather than throwing, so a service
-        // that failed is only visible through its recorded failures.
-        setFailures(managerToUse.getFailures(Capabilities.HOMEWORK));
-        setLoadError(null);
-      } catch (e) {
-        if (managerToUse.getAccount().id !== useAccountStore.getState().lastUsedAccount) return;
-        error("Fetch error", String(e));
-        setFailures(managerToUse.getFailures(Capabilities.HOMEWORK));
-        setLoadError(e instanceof Error ? e : new Error(String(e)));
-      } finally {
-        inFlightWeeks.current.delete(week);
+      };
+      request.promise = Promise.resolve().then(runRequest);
+      inFlightWeeks.current.set(week, request);
+      await request.promise;
+      if (forceAfterCurrentWeeks.current.delete(week)) {
+        await fetchWeekRef.current?.(week, managerToUse, true);
       }
     },
     [manager, scheduleRefresh]
   );
+  fetchWeekRef.current = fetchWeek;
 
   const fetchWeeks = useCallback((
     weeksToFetch: number[],
@@ -384,6 +409,7 @@ export const useHomeworkData = (
     weekCache.current = {};
     fetchedWeeks.current.clear();
     inFlightWeeks.current.clear();
+    forceAfterCurrentWeeks.current.clear();
     prefetchGeneration.current++;
     if (prefetchTimer.current) {
       clearTimeout(prefetchTimer.current);
@@ -418,9 +444,12 @@ export const useHomeworkData = (
     async (week: number) => {
       setRefreshingWeek(week);
       try {
-        // A manual sync also fills the next two weeks, so future assignments
-        // are immediately available when paging forward.
-        for (const targetWeek of [week, week + 1, week + 2]) {
+        // Refresh the current window even if the pager is showing a different
+        // week, and also refresh the visible week so its contents update now.
+        const currentWeek = getCurrentWeekIndex();
+        const targetWeeks = [...new Set([currentWeek, currentWeek + 1, currentWeek + 2, week])]
+          .sort((a, b) => a - b);
+        for (const targetWeek of targetWeeks) {
           await fetchWeek(targetWeek, manager, true);
         }
       } finally {

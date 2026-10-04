@@ -23,6 +23,44 @@ const getPersonalCourseStatus = (...statuses: (string | undefined)[]) =>
     status === COURSE_CANCELLED_LABEL || status === COURSE_TEACHER_ABSENT_LABEL
   );
 
+// A timetable service can return a usable occurrence before its database write
+// has completed (or if that write failed). Keep those fresh rows briefly so a
+// tap from the Cours tab can resolve the same detail route as the home screen.
+const transientCourseRoutes = new Map<string, { course: SharedCourse; expiresAt: number }>();
+const TRANSIENT_COURSE_TTL_MS = 15 * 60 * 1000;
+const MAX_TRANSIENT_COURSES = 500;
+
+export function rememberCourseForRoute(course: SharedCourse) {
+  const now = Date.now();
+  for (const [key, entry] of transientCourseRoutes) {
+    if (entry.expiresAt <= now) transientCourseRoutes.delete(key);
+  }
+  const id = getCourseRouteId(course);
+  const key = `${course.createdByAccount}:${id}`;
+  transientCourseRoutes.delete(key);
+  transientCourseRoutes.set(key, { course, expiresAt: now + TRANSIENT_COURSE_TTL_MS });
+  while (transientCourseRoutes.size > MAX_TRANSIENT_COURSES) {
+    const oldest = transientCourseRoutes.keys().next().value;
+    if (oldest === undefined) break;
+    transientCourseRoutes.delete(oldest);
+  }
+}
+
+function getRememberedCourse(id: string, sourceIds: string[]): SharedCourse | undefined {
+  const now = Date.now();
+  for (const [key, entry] of transientCourseRoutes) {
+    if (entry.expiresAt <= now) {
+      transientCourseRoutes.delete(key);
+    } else if (
+      getCourseRouteId(entry.course) === id &&
+      sourceIds.includes(entry.course.createdByAccount)
+    ) {
+      return entry.course;
+    }
+  }
+  return undefined;
+}
+
 export function getCourseRouteId(course: SharedCourse): string {
   // Les identifiants fournis par les services scolaires sont stables.
   // L'ancienne version reconstruisait l'ID avec l'horaire, la matière et le
@@ -62,11 +100,12 @@ export async function getCourseById(id: string): Promise<SharedCourse | undefine
         });
     }
 
-    return course && getActiveAccountDataSourceIds().includes(course.createdByAccount)
-      ? course
-      : await getICalCourseById(id);
+    if (course && getActiveAccountDataSourceIds().includes(course.createdByAccount)) return course;
+    const remembered = getRememberedCourse(id, getActiveAccountDataSourceIds());
+    return remembered ?? await getICalCourseById(id);
   } catch {
-    return getICalCourseById(id);
+    const remembered = getRememberedCourse(id, getActiveAccountDataSourceIds());
+    return remembered ?? await getICalCourseById(id);
   }
 }
 
@@ -74,9 +113,19 @@ export async function updateCourseCustomStatus(courseId: string, customStatus?: 
   const db = getDatabaseInstance();
   const sourceIds = getActiveAccountDataSourceIds();
   if (sourceIds.length === 0) throw new Error("Aucun compte actif.");
-  const records = await db.get<Course>("courses")
+  let records = await db.get<Course>("courses")
     .query(Q.where("courseId", courseId), Q.where("createdByAccount", Q.oneOf(sourceIds)))
     .fetch();
+  if (!records[0]) {
+    const remembered = getRememberedCourse(courseId, sourceIds);
+    if (!remembered) throw new Error("Ce cours n’est plus disponible dans ce compte.");
+    const date = new Date(remembered.from.getTime());
+    date.setHours(0, 0, 0, 0);
+    await addCourseDayToDatabase([{ date, courses: [remembered] }]);
+    records = await db.get<Course>("courses")
+      .query(Q.where("courseId", courseId), Q.where("createdByAccount", Q.oneOf(sourceIds)))
+      .fetch();
+  }
   if (!records[0]) throw new Error("Ce cours n’est plus disponible dans ce compte.");
 
   await safeWrite(db, async () => {

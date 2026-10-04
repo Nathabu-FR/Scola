@@ -4,7 +4,7 @@ import { useActiveAccountDataSourceIds } from "@/database/accountScope";
 import type { AccountManager } from "@/services/shared";
 import { getManager } from "@/services/shared";
 import { Homework } from "@/services/shared/homework";
-import { useHomeworkForWeeks, updateHomeworkIsDone } from "@/database/useHomework";
+import { getDateRangeOfWeek, useHomeworkForWeeks, updateHomeworkIsDone } from "@/database/useHomework";
 import { useLoadErrorAlert } from "@/hooks/useLoadErrorAlert";
 import { useManagerSubscription } from "@/hooks/useManagerSubscription";
 import { Capabilities, ServiceFailure } from "@/services/shared/types";
@@ -28,6 +28,13 @@ type SharedHomeworkRequest = {
 // Share their service requests so opening Tasks does not download the same week
 // a second time immediately after the home screen already loaded it.
 const sharedHomeworkRequests = new WeakMap<AccountManager, Map<string, SharedHomeworkRequest>>();
+
+const getHomeworkClientsKey = (manager: AccountManager | null) =>
+  manager
+    ?.getAvailableClients(Capabilities.HOMEWORK)
+    .map(client => String(client.service))
+    .sort()
+    .join(",") ?? "";
 
 const fetchSharedHomeworkWeek = (
   manager: AccountManager,
@@ -76,6 +83,11 @@ const homeworkKey = (homework: Homework) =>
     homework.createdByAccount +
     new Date(homework.dueDate).toDateString()
   );
+
+const homeworkIdentity = (homework: Homework) =>
+  homework.custom && homework.id
+    ? `${homework.createdByAccount}:custom:${homework.id}`
+    : homeworkKey(homework);
 
 // Older caches and third-party services can omit fields that the Homework
 // type normally guarantees. One malformed row must not crash the whole Tasks
@@ -145,6 +157,7 @@ export const useHomeworkData = (
   const [refreshingWeek, setRefreshingWeek] = useState<number | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [homework, setHomework] = useState<Record<string, Homework>>({});
+  const [loadedWeeks, setLoadedWeeks] = useState<Record<number, true>>({});
 
   const lastUsedAccount = useAccountStore(state => state.lastUsedAccount);
   // A refreshed auth token replaces the Account object. Subscribe to the
@@ -154,6 +167,7 @@ export const useHomeworkData = (
     () => accountSources.filter(sourceId => sourceId !== lastUsedAccount),
     [accountSources, lastUsedAccount]
   );
+
   const [manager, setManager] = useState(() => getManager(true));
   const [loadError, setLoadError] = useState<Error | null>(null);
   const [failures, setFailures] = useState<ServiceFailure[]>([]);
@@ -169,25 +183,60 @@ export const useHomeworkData = (
     const previousWeeks = weekCache.current;
     const nextWeeks: Record<number, Homework[]> = {};
 
-    for (const [key, list] of Object.entries(cacheByWeek)) {
-      const week = Number(key);
-      const items = list.flatMap(value => {
+    // Network results must remain visible even if WatermelonDB is temporarily
+    // busy and the service manager has to skip its cache write. Previously the
+    // screen rendered only cacheByWeek, silently discarding those fresh rows.
+    const weekNumbers = new Set([
+      ...Object.keys(cacheByWeek).map(Number),
+      ...Object.keys(loadedWeeks).map(Number),
+    ]);
+
+    for (const week of weekNumbers) {
+      const { start, end } = getDateRangeOfWeek(week);
+      const itemsByIdentity = new Map<string, Homework>();
+      for (const value of cacheByWeek[week] ?? []) {
         const cached = normalizeHomework(value, lastUsedAccount ?? "");
         if (
           !cached ||
-            (!services.includes(cached.createdByAccount) &&
+          (!services.includes(cached.createdByAccount) &&
             !(cached.custom && cached.createdByAccount === lastUsedAccount))
         ) {
-          return [];
+          continue;
         }
 
-        const merged = (cached.id ? homework[cached.id] : undefined) ?? cached;
-        const id = merged.id || homeworkKey(merged);
-        const previous = previousItems.get(id);
-        const item = previous && isSameHomework(previous, merged) ? previous : merged;
-        nextItems.set(id, item);
-        return [item];
-      });
+        const identity = homeworkIdentity(cached);
+        const fresh = homework[cached.id] ?? homework[homeworkKey(cached)];
+        itemsByIdentity.set(identity, fresh ? { ...cached, ...fresh, id: cached.id || fresh.id } : cached);
+      }
+
+      for (const value of Object.values(homework)) {
+        const fresh = normalizeHomework(value, lastUsedAccount ?? "");
+        if (
+          !fresh ||
+          fresh.dueDate < start ||
+          fresh.dueDate > end ||
+          (!services.includes(fresh.createdByAccount) &&
+            !(fresh.custom && fresh.createdByAccount === lastUsedAccount))
+        ) {
+          continue;
+        }
+
+        const identity = homeworkIdentity(fresh);
+        const cached = itemsByIdentity.get(identity);
+        itemsByIdentity.set(
+          identity,
+          cached ? { ...cached, ...fresh, id: cached.id || fresh.id, fromCache: cached.fromCache } : fresh
+        );
+      }
+
+      const items = [...itemsByIdentity.entries()]
+        .sort(([, a], [, b]) => a.dueDate.getTime() - b.dueDate.getTime())
+        .map(([identity, merged]) => {
+          const previous = previousItems.get(identity);
+          const item = previous && isSameHomework(previous, merged) ? previous : merged;
+          nextItems.set(identity, item);
+          return item;
+        });
 
       const previous = previousWeeks[week];
       nextWeeks[week] = previous && isSameList(previous, items) ? previous : items;
@@ -196,7 +245,7 @@ export const useHomeworkData = (
     itemCache.current = nextItems;
     weekCache.current = nextWeeks;
     return nextWeeks;
-  }, [cacheByWeek, homework, services, lastUsedAccount]);
+  }, [cacheByWeek, homework, loadedWeeks, services, lastUsedAccount]);
 
   // A week is fetched from the service once per session; `inFlightWeeks` keeps a
   // swipe back and forth from queueing the same request twice.
@@ -206,6 +255,8 @@ export const useHomeworkData = (
   weeksRef.current = weeks;
   const prefetchGeneration = useRef(0);
   const prefetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const managerRef = useRef(manager);
+  const managerClientsKey = useRef(getHomeworkClientsKey(manager));
 
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scheduleRefresh = useCallback(() => {
@@ -234,6 +285,9 @@ export const useHomeworkData = (
         !managerToUse ||
         managerToUse.getAccount().id !== useAccountStore.getState().lastUsedAccount
       ) { return; }
+      // Do not cache an empty fallback while account services are still being
+      // initialized. The manager listener retries once homework-capable clients appear.
+      if (getHomeworkClientsKey(managerToUse) === "") { return; }
       if (inFlightWeeks.current.has(week)) { return; }
       if (!force && fetchedWeeks.current.has(week)) { return; }
 
@@ -252,6 +306,7 @@ export const useHomeworkData = (
         }
         fetchedWeeks.current.add(week);
         setHomework(prev => ({ ...prev, ...fetched }));
+        setLoadedWeeks(prev => ({ ...prev, [week]: true }));
         scheduleRefresh();
         // The manager falls back to the cache rather than throwing, so a service
         // that failed is only visible through its recorded failures.
@@ -282,7 +337,14 @@ export const useHomeworkData = (
     }
 
     if (!deferRemainingWeeks || weeksToFetch.length <= 1) {
-      weeksToFetch.forEach(week => { void fetchWeek(week, managerToUse ?? undefined, force); });
+      // School-service sessions can return incomplete data when several weeks
+      // are requested at once. Fetch the visible week first, then its neighbours.
+      void (async () => {
+        for (const week of weeksToFetch) {
+          if (prefetchGeneration.current !== generation) return;
+          await fetchWeek(week, managerToUse ?? undefined, force);
+        }
+      })();
       return;
     }
 
@@ -308,12 +370,13 @@ export const useHomeworkData = (
     fetchWeeks(weeksRef.current, manager, false);
   }, [weeksKey, fetchWeeks, manager]);
 
-  const managerRef = useRef(manager);
   useEffect(() => {
     const activeManager = getManager(true);
     managerRef.current = activeManager;
+    managerClientsKey.current = getHomeworkClientsKey(activeManager);
     setManager(activeManager);
     setHomework({});
+    setLoadedWeeks({});
     setRefreshingWeek(null);
     setLoadError(null);
     setFailures([]);
@@ -330,11 +393,12 @@ export const useHomeworkData = (
 
   const handleManager = useCallback((updatedManager: AccountManager) => {
     if (updatedManager.getAccount().id !== useAccountStore.getState().lastUsedAccount) return;
-    // The subscription is re-established whenever `fetchWeek` changes, and fires
-    // straight away with the manager already in hand: only an actually new
-    // manager is worth re-fetching every week for.
-    if (managerRef.current === updatedManager) { return; }
+    // A manager can be refreshed in place. Retry if that refresh installed or
+    // removed a homework-capable service, even though the manager identity stayed put.
+    const clientsKey = getHomeworkClientsKey(updatedManager);
+    if (managerRef.current === updatedManager && managerClientsKey.current === clientsKey) { return; }
     managerRef.current = updatedManager;
+    managerClientsKey.current = clientsKey;
     setManager(updatedManager);
     fetchedWeeks.current.clear();
     setLoadError(null);

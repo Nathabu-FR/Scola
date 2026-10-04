@@ -105,17 +105,39 @@ export default function Averages({
 
     const plotWidth = GRAPH_RIGHT - GRAPH_LEFT;
     const plotHeight = GRAPH_BOTTOM - GRAPH_TOP;
+    const dataMin = Math.min(...valid.map(point => point.value));
+    const dataMax = Math.max(...valid.map(point => point.value));
+    const spread = Math.max(dataMax - dataMin, 0.5);
+    const padding = Math.max(spread * 0.2, 0.5);
+    let scaleMin = Math.max(0, dataMin - padding);
+    let scaleMaxValue = Math.min(maxScale, dataMax + padding);
+    if (scaleMaxValue <= scaleMin) {
+      scaleMin = 0;
+      scaleMaxValue = maxScale;
+    }
+    const visibleRange = scaleMaxValue - scaleMin;
+
     return valid.map((point, index) => ({
       ...point,
       x: valid.length > 1
         ? GRAPH_LEFT + (index / (valid.length - 1)) * plotWidth
         : GRAPH_WIDTH / 2,
-      y: GRAPH_BOTTOM - (Math.max(0, Math.min(maxScale, point.value)) / maxScale) * plotHeight,
+      y: GRAPH_BOTTOM - ((Math.max(scaleMin, Math.min(scaleMaxValue, point.value)) - scaleMin) / visibleRange) * plotHeight,
     }));
   }, [values, displayScale, maxScale]);
 
   const linePath = chartPoints.length > 1
-    ? chartPoints.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(" ")
+    ? chartPoints.reduce((path, point, index, points) => {
+        if (index === 0) return `M ${point.x.toFixed(1)} ${point.y.toFixed(1)}`;
+        const previous = points[index - 1];
+        const beforePrevious = points[index - 2] ?? previous;
+        const next = points[index + 1] ?? point;
+        const control1X = previous.x + (point.x - beforePrevious.x) / 6;
+        const control1Y = previous.y + (point.y - beforePrevious.y) / 6;
+        const control2X = point.x - (next.x - previous.x) / 6;
+        const control2Y = point.y - (next.y - previous.y) / 6;
+        return `${path} C ${control1X.toFixed(1)} ${control1Y.toFixed(1)}, ${control2X.toFixed(1)} ${control2Y.toFixed(1)}, ${point.x.toFixed(1)} ${point.y.toFixed(1)}`;
+      }, "")
     : "";
   const lastHistoryValue = values.length > 0 ? values[values.length - 1].average : null;
   const shownOverall = realAverage ?? lastHistoryValue;
@@ -134,7 +156,12 @@ export default function Averages({
     <View
       accessibilityRole="image"
       accessibilityLabel={t("Grades_Tip_Graph_Title", "Évolution de la moyenne")}
-      style={{ height: compact ? 102 : 164, minWidth: 0, flex: 1 }}
+      style={{
+        height: compact ? 64 : 116,
+        minWidth: 0,
+        flexGrow: 0,
+        flexShrink: 0,
+      }}
     >
       <Svg width="100%" height="100%" viewBox={`0 0 ${GRAPH_WIDTH} ${GRAPH_HEIGHT}`} preserveAspectRatio="none">
         {[0.25, 0.5, 0.75].map(fraction => {
@@ -142,12 +169,12 @@ export default function Averages({
           return <Path key={fraction} d={`M ${GRAPH_LEFT} ${y} H ${GRAPH_RIGHT}`} stroke={theme.colors.border} strokeOpacity={0.55} strokeWidth={1} />;
         })}
         {linePath ? (
-          <Path d={linePath} fill="none" stroke={accent} strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" />
+          <Path d={linePath} fill="none" stroke={accent} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
         ) : chartPoints.length === 1 ? (
-          <Circle cx={chartPoints[0].x} cy={chartPoints[0].y} r={7} fill={accent} />
+          <Circle cx={chartPoints[0].x} cy={chartPoints[0].y} r={5} fill={accent} />
         ) : null}
         {chartPoints.length > 1 && (
-          <Circle cx={chartPoints[chartPoints.length - 1].x} cy={chartPoints[chartPoints.length - 1].y} r={6} fill={accent} />
+          <Circle cx={chartPoints[chartPoints.length - 1].x} cy={chartPoints[chartPoints.length - 1].y} r={4} fill={accent} />
         )}
       </Svg>
       {!compact && (

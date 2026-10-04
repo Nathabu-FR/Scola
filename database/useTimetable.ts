@@ -172,10 +172,29 @@ export async function addCourseDayToDatabase(courses: SharedCourseDay[]) {
         const refreshedServiceIds = new Set(
           items.map(({ item }) => item.createdByAccount)
         );
+        const incomingCountByService = new Map<string, number>();
+        const cachedCountByService = new Map<string, number>();
+        for (const { item } of items) {
+          incomingCountByService.set(
+            item.createdByAccount,
+            (incomingCountByService.get(item.createdByAccount) ?? 0) + 1
+          );
+        }
+        for (const cachedCourse of dbCourses) {
+          cachedCountByService.set(
+            cachedCourse.createdByAccount,
+            (cachedCountByService.get(cachedCourse.createdByAccount) ?? 0) + 1
+          );
+        }
 
         const coursesToDelete = dbCourses.filter(
           dbCourse =>
             refreshedServiceIds.has(dbCourse.createdByAccount) &&
+            // A shorter response can be a truncated timetable refresh. Keep
+            // the last known complete day rather than deleting the other
+            // lessons just because this response only contained a few.
+            (incomingCountByService.get(dbCourse.createdByAccount) ?? 0) >=
+              (cachedCountByService.get(dbCourse.createdByAccount) ?? 0) &&
             !dayCourseIds.has(dbCourse.courseId)
         );
 

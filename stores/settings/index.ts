@@ -25,6 +25,8 @@ const defaultPersonalization: Personalization = {
   mockDataEnabled: false,
   magicModelURL: MAGIC_URL,
   gradesDisplayScale: "20",
+  homeworkRemindersEnabled: false,
+  homeworkReminderDaysBefore: 1,
   welcomeModalSeen: false,
 };
 

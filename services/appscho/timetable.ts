@@ -1,5 +1,5 @@
 import { User, getPlanning, Lesson } from "@blockshub/blockscho";
-import { getDateRangeOfWeek } from "@/database/useHomework";
+import { getDateRangeOfWeek, getWeekNumberFromDate } from "@/database/useHomework";
 import { Course, CourseDay, CourseType } from "../shared/timetable";
 import { parseADEDescription } from "../local/parsers/ade-parser";
 
@@ -11,11 +11,13 @@ function parseAppschoDate(dateStr: string): Date {
 export async function fetchAppschoTimetable(
   session: User,
   accountId: string,
-  weekNumber: number,
+  _weekNumber: number,
+  date: Date,
   instanceId: string,
   _forceRefresh?: boolean
 ): Promise<CourseDay[]> {
-  const { start, end } = getDateRangeOfWeek(weekNumber);
+  const targetWeek = getWeekNumberFromDate(date);
+  const { start, end } = getDateRangeOfWeek(targetWeek, date.getFullYear());
   try {
     const planning = await getPlanning(instanceId, session.token);
     if(!planning || planning.length === 0) {

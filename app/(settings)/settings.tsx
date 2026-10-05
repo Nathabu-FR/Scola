@@ -104,6 +104,13 @@ export default function SettingsIndex() {
           onPress: () => router.navigate("/(settings)/transport"),
         },
         {
+          title: t("Settings_Notifications_Title"),
+          description: "Activer et régler les rappels de devoirs",
+          papicon: <Papicons name={"Clock"} />,
+          color: "#0059DD",
+          onPress: () => router.navigate("/(modals)/notifications"),
+        },
+        {
           title: t("Settings_Features_Title"),
           description: t("Settings_Features_Description"),
           papicon: <Papicons name={"Sparkles"} />,

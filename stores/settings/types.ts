@@ -44,6 +44,10 @@ export interface Personalization {
   magicModelURL?: string;
   /** Background refresh interval in minutes; defaults to 30. */
   dataSyncIntervalMinutes?: 15 | 30 | 60 | 120;
+  /** Send a local notification before an unfinished homework is due. */
+  homeworkRemindersEnabled?: boolean;
+  /** 0 = due date morning, 1 = previous day, 2 = two days before. */
+  homeworkReminderDaysBefore?: 0 | 1 | 2;
   language?: string | null;
   wallpaper?: Wallpaper;
   /** Profile-scoped wallpaper; null means the profile explicitly chose no wallpaper. */

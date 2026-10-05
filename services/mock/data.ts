@@ -118,12 +118,20 @@ const getDateRangeOfWeek = (weekNumber: number, year: number) => {
   return { start, end };
 };
 
+function getWeekNumberForDate(date: Date): number {
+  const firstWeekStart = getDateRangeOfWeek(1, date.getFullYear()).start;
+  const startDay = Date.UTC(firstWeekStart.getFullYear(), firstWeekStart.getMonth(), firstWeekStart.getDate());
+  const dateDay = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+  return Math.floor((dateDay - startDay) / (7 * 24 * 60 * 60 * 1000)) + 1;
+}
+
 export function generateMockTimetable(
   accountId: string,
   weekNumber: number,
   referenceDate: Date
 ): CourseDay[] {
-  const { start } = getDateRangeOfWeek(weekNumber, referenceDate.getFullYear());
+  const actualWeek = getWeekNumberForDate(referenceDate);
+  const { start } = getDateRangeOfWeek(actualWeek, referenceDate.getFullYear());
   const slots = [
     [8, 0, 9, 0],
     [9, 10, 10, 10],

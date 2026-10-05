@@ -57,10 +57,20 @@ export default function AccountSwitchOverlay() {
         <View
           pointerEvents="box-none"
           style={{
-            position: "absolute",
-            top: Platform.OS === "web" ? 8 : insets.top + 6,
-            left: 16,
-            right: 16,
+            ...(Platform.OS === "web"
+              ? {
+                  position: "relative" as const,
+                  height: 56,
+                  marginTop: 8,
+                  marginBottom: 6,
+                  marginHorizontal: 16,
+                }
+              : {
+                  position: "absolute" as const,
+                  top: insets.top + 6,
+                  left: 16,
+                  right: 16,
+                }),
             zIndex: 10000,
             elevation: 20,
           }}

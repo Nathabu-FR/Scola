@@ -162,7 +162,13 @@ export const CalendarDay = React.memo(({ dayDate, courses, isRefreshing, isLoadi
           const manualStatus = getManualCourseStatus(item);
           return (
             <Link
-              href={{ pathname: "/(modals)/course/[id]", params: { id: getCourseRouteId(item) } }}
+              href={{
+                pathname: "/(modals)/course/[id]",
+                params: {
+                  id: getCourseRouteId(item),
+                  courseData: JSON.stringify(item),
+                },
+              }}
               asChild
             >
               <Course

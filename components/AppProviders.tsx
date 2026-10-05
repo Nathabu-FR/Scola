@@ -1,19 +1,45 @@
 import { ThemeProvider } from "expo-router/react-navigation";
 import * as SystemUI from 'expo-system-ui';
 import { PostHogProvider } from 'posthog-react-native';
-import React, { useEffect, useMemo } from 'react';
-import { useColorScheme } from 'react-native';
+import React, { useCallback, useEffect, useMemo } from 'react';
+import { AppState, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { DatabaseProvider } from "@/database/DatabaseProvider";
+import { useAllHomeworkFromCache } from "@/database/useHomework";
 import { DEFAULT_MATERIAL_YOU_ENABLED, useSettingsStore } from '@/stores/settings';
+import { useAccountStore } from "@/stores/account";
 import { AlertProvider } from '@/ui/components/AlertProvider';
 import { AppColors } from "@/utils/colors";
 import { posthog } from '@/utils/logger/posthog';
+import { syncHomeworkReminders } from "@/services/local/homeworkNotifications";
+import { warn } from "@/utils/logger/logger";
 import { createDarkTheme, createDefaultTheme } from '@/utils/theme/Theme';
 
 interface AppProvidersProps {
   children: React.ReactNode;
+}
+
+function HomeworkReminderScheduler() {
+  const homeworks = useAllHomeworkFromCache({ upcomingOnly: true });
+  const accountId = useAccountStore(state => state.lastUsedAccount);
+  const remindersEnabled = useSettingsStore(state => state.personalization.homeworkRemindersEnabled ?? false);
+  const daysBefore = useSettingsStore(state => state.personalization.homeworkReminderDaysBefore ?? 1);
+
+  const syncReminders = useCallback(() => {
+    void syncHomeworkReminders(accountId, homeworks, remindersEnabled, daysBefore)
+      .catch(error => warn(`Could not update homework reminders: ${String(error)}`));
+  }, [accountId, daysBefore, homeworks, remindersEnabled]);
+
+  useEffect(() => {
+    syncReminders();
+    const subscription = AppState.addEventListener("change", state => {
+      if (state === "active") syncReminders();
+    });
+    return () => subscription.remove();
+  }, [syncReminders]);
+
+  return null;
 }
 
 export function AppProviders({ children }: AppProvidersProps) {
@@ -48,6 +74,7 @@ export function AppProviders({ children }: AppProvidersProps) {
         <DatabaseProvider>
           <ThemeProvider value={theme}>
             <AlertProvider>
+              <HomeworkReminderScheduler />
               {children}
             </AlertProvider>
           </ThemeProvider>

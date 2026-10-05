@@ -473,7 +473,7 @@ export class AccountManager {
   }
 
   async getWeeklyTimetable(weekNumber: number, date: Date): Promise<CourseDay[]> {
-    const key = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}:${weekNumber}`;
+    const key = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
     const pending = this.timetableRequests.get(key);
     if (pending) return pending;
 
@@ -485,7 +485,7 @@ export class AccountManager {
             : [],
         {
           multiple: true,
-          fallback: async () => getCoursesFromCache([weekNumber], date.getFullYear(), getAccountDataSourceIds(this.account)),
+          fallback: async () => getCoursesFromCache([getWeekNumberFromDate(date)], date.getFullYear(), getAccountDataSourceIds(this.account)),
           saveToCache: async (data: CourseDay[]) => {
             // L'oubli d'await laissait des écritures EDT en vol pendant le
             // fetchData suivant → « capability 1 failed » + Writer occupé.

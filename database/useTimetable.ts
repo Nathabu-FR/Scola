@@ -15,7 +15,7 @@ import { getDatabaseInstance, useDatabase } from "./DatabaseProvider"
 import { getActiveAccountDataSourceIds, useActiveAccountDataSourceIds } from "./accountScope";
 import { mapCourseToShared } from "./mappers/course";
 import Course from "./models/Timetable";
-import { getDateRangeOfWeek } from "./useHomework";
+import { getDateRangeOfWeek, getWeekNumberFromDate } from "./useHomework";
 import { safeWrite } from "./utils/safeTransaction";
 
 const getPersonalCourseStatus = (...statuses: (string | undefined)[]) =>
@@ -70,6 +70,42 @@ export function getCourseRouteId(course: SharedCourse): string {
   // timetable ID format. Regenerating it made stale courses impossible to open.
   if (course.createdByAccount.startsWith('ical_') || course.fromCache) return course.id;
   return generateId(course.createdByAccount + ':' + course.id);
+}
+
+export function parseCourseRouteData(
+  serializedCourse: string | undefined,
+  routeId: string
+): SharedCourse | undefined {
+  if (!serializedCourse || !routeId) return undefined;
+  try {
+    const value = JSON.parse(serializedCourse) as Record<string, unknown>;
+    const from = value.from;
+    const to = value.to;
+    if (
+      typeof value.id !== "string" ||
+      typeof value.createdByAccount !== "string" ||
+      typeof value.subject !== "string" ||
+      !(typeof from === "string" || typeof from === "number" || from instanceof Date) ||
+      !(typeof to === "string" || typeof to === "number" || to instanceof Date)
+    ) return undefined;
+
+    const course = {
+      ...value,
+      from: new Date(from instanceof Date ? from.getTime() : from),
+      to: new Date(to instanceof Date ? to.getTime() : to),
+    } as SharedCourse;
+    if (
+      !Number.isFinite(course.from.getTime()) ||
+      !Number.isFinite(course.to.getTime()) ||
+      !getActiveAccountDataSourceIds().includes(course.createdByAccount) ||
+      (getCourseRouteId(course) !== routeId && course.id !== routeId)
+    ) return undefined;
+
+    rememberCourseForRoute(course);
+    return course;
+  } catch {
+    return undefined;
+  }
 }
 
 export async function getCourseById(id: string): Promise<SharedCourse | undefined> {
@@ -152,7 +188,7 @@ export function useTimetable(refresh = 0, weekNumber: number | number[] = 0, dat
 
     const fetchTimetable = async () => {
       const currentRequest = ++requestId;
-      const timetableFetched = await getCoursesFromCache(weeks, year, sourceIds);
+      const timetableFetched = await getCoursesFromCache(weeks, year, sourceIds, date);
       if (!cancelled && currentRequest === requestId) {
         setTimetable(timetableFetched);
       }
@@ -160,7 +196,7 @@ export function useTimetable(refresh = 0, weekNumber: number | number[] = 0, dat
 
     // Courses written by a sync (e.g. right after adding an account) must show up
     // without the caller having to bump `refresh`.
-    const { start, end } = getWeeksRange(weeks, year);
+    const { start, end } = getWeeksRange(weeks, year, date);
     const courseSubscription = database
       .get('courses')
       .query(Q.where('from', Q.between(start.getTime(), end.getTime())))
@@ -361,12 +397,20 @@ function startOfLocalDay(date: Date): number {
   return day.getTime();
 }
 
-function getWeeksRange(weeks: number[], year: number): { start: Date; end: Date } {
+function getWeeksRange(weeks: number[], year: number, anchorDate?: Date): { start: Date; end: Date } {
   let start = new Date(8640000000000000);
   let end = new Date(-8640000000000000);
+  const anchorWeek = anchorDate ? getWeekNumberFromDate(anchorDate) : undefined;
 
   for (const w of weeks) {
-    const range = getDateRangeOfWeek(w, year);
+    let range: { start: Date; end: Date };
+    if (anchorDate && anchorWeek !== undefined) {
+      const targetDate = new Date(anchorDate);
+      targetDate.setDate(targetDate.getDate() + (w - anchorWeek) * 7);
+      range = getDateRangeOfWeek(getWeekNumberFromDate(targetDate), targetDate.getFullYear());
+    } else {
+      range = getDateRangeOfWeek(w, year);
+    }
     if (range.start < start) {start = range.start;}
     if (range.end > end) {end = range.end;}
   }
@@ -377,11 +421,12 @@ function getWeeksRange(weeks: number[], year: number): { start: Date; end: Date 
 export async function getCoursesFromCache(
   weeks: number[],
   year: number,
-  sourceIds: string[] = getActiveAccountDataSourceIds()
+  sourceIds: string[] = getActiveAccountDataSourceIds(),
+  anchorDate?: Date
 ): Promise<SharedCourseDay[]> {
   try {
     const database = getDatabaseInstance();
-    const { start: minStart, end: maxEnd } = getWeeksRange(weeks, year);
+    const { start: minStart, end: maxEnd } = getWeeksRange(weeks, year, anchorDate);
 
     const courses = await database
       .get<Course>('courses')

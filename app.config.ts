@@ -118,6 +118,7 @@ export default {
       "expo-ios-scene-lifecycle-plugin",
       "expo-router",
       "expo-status-bar",
+      "expo-notifications",
       "expo-font",
       "expo-video",
       [

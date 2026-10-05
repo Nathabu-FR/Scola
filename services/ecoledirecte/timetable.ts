@@ -1,11 +1,12 @@
 import { Client, TimetableCourse, TimetableCourseType } from "@blockshub/blocksdirecte";
 
-import { getDateRangeOfWeek } from "@/database/useHomework";
+import { getDateRangeOfWeek, getWeekNumberFromDate } from "@/database/useHomework";
 import { Course, CourseDay, CourseStatus, CourseType } from "../shared/timetable";
 
-export async function fetchEDTimetable(session: Client, accountId: string, weekNumber: number): Promise<CourseDay[]> {
+export async function fetchEDTimetable(session: Client, accountId: string, _weekNumber: number, date: Date): Promise<CourseDay[]> {
   try {
-    const { start, end } = getDateRangeOfWeek(weekNumber);
+    const targetWeek = getWeekNumberFromDate(date);
+    const { start, end } = getDateRangeOfWeek(targetWeek, date.getFullYear());
 
     // EcoleDirecte can answer an empty week (holidays, no timetable published
     // yet) with something other than an array, so this guards before filtering

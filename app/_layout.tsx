@@ -16,7 +16,7 @@ import { checkConsent } from '@/utils/logger/consent';
 import { posthog } from '@/utils/logger/posthog';
 import uuid from '@/utils/uuid/uuid';
 import { useWidgetSync } from '@/widgets';
-import { LogBox } from 'react-native';
+import { LogBox, View } from 'react-native';
 import { appFetch, isTauriDesktop } from "@/utils/network/fetch";
 
 // Keep the real WebView fetch available for URLs that are intentionally not
@@ -158,9 +158,13 @@ export default function RootLayout() {
 
   return (
     <AppProviders>
-      <FakeSplash isAppReady={isAppReady} instant={true} />
-      <RootNavigator />
-      <AccountSwitchOverlay />
+      <View style={{ flex: 1 }}>
+        <FakeSplash isAppReady={isAppReady} instant={true} />
+        <AccountSwitchOverlay />
+        <View style={{ flex: 1 }}>
+          <RootNavigator />
+        </View>
+      </View>
     </AppProviders>
   );
 }

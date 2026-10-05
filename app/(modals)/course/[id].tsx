@@ -10,7 +10,12 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as WebBrowser from "expo-web-browser";
 
 import ModalOverhead from "@/components/ModalOverhead";
-import { getCourseById, getCourseRouteId, updateCourseCustomStatus } from "@/database/useTimetable";
+import {
+  getCourseById,
+  getCourseRouteId,
+  parseCourseRouteData,
+  updateCourseCustomStatus,
+} from "@/database/useTimetable";
 import { getManager, initializeAccountManager } from "@/services/shared";
 import { Attachment } from "@/services/shared/attachment";
 import { COURSE_CANCELLED_LABEL, COURSE_TEACHER_ABSENT_LABEL, Course as SharedCourse, CourseResource, getManualCourseStatus } from "@/services/shared/timetable";
@@ -37,7 +42,11 @@ interface SubjectInfo {
 }
 
 export default function CourseModal() {
-  const { id, returnTo } = useLocalSearchParams<{ id: string; returnTo?: string }>();
+  const { id, returnTo, courseData } = useLocalSearchParams<{
+    id: string;
+    returnTo?: string;
+    courseData?: string;
+  }>();
   const { colors } = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -65,6 +74,16 @@ export default function CourseModal() {
 
   useEffect(() => {
     let cancelled = false;
+    const routeCourse = parseCourseRouteData(courseData, id);
+    if (routeCourse) {
+      setCourse(routeCourse);
+      setCourseLoadError(false);
+      setLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
     setLoading(true);
     setCourseLoadError(false);
     getCourseById(id)
@@ -85,7 +104,7 @@ export default function CourseModal() {
     return () => {
       cancelled = true;
     };
-  }, [id, courseLoadAttempt]);
+  }, [id, courseData, courseLoadAttempt]);
 
   useEffect(() => {
     if (activeTab !== "content") return;

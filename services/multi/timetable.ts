@@ -1,6 +1,6 @@
 import { EventResponse, Multi } from "esup-multi.js";
 
-import { getDateRangeOfWeek } from "@/database/useHomework";
+import { getDateRangeOfWeek, getWeekNumberFromDate } from "@/database/useHomework";
 
 import {
   Course,
@@ -12,9 +12,11 @@ import {
 export async function fetchMultiTimetable(
   session: Multi,
   accountId: string,
-  weekNumber: number
+  _weekNumber: number,
+  date: Date
 ): Promise<CourseDay[]> {
-  const { start, end } = getDateRangeOfWeek(weekNumber);
+  const targetWeek = getWeekNumberFromDate(date);
+  const { start, end } = getDateRangeOfWeek(targetWeek, date.getFullYear());
   const result: CourseDay[] = [];
 
   const timetable = await session.getSchedules({

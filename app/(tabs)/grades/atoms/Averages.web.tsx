@@ -31,10 +31,10 @@ const METHODS: { key: AverageMethodKey; label: string }[] = [
 ];
 
 const GRAPH_WIDTH = 640;
-const GRAPH_HEIGHT = 156;
+const GRAPH_HEIGHT = 120;
 const GRAPH_LEFT = 12;
 const GRAPH_RIGHT = GRAPH_WIDTH - 12;
-const GRAPH_TOP = 10;
+const GRAPH_TOP = 14;
 const GRAPH_BOTTOM = GRAPH_HEIGHT - 12;
 const GRAPH_DRAW_LENGTH = 1100;
 const AnimatedPath = Animated.createAnimatedComponent(Path);
@@ -103,7 +103,8 @@ export default function Averages({
         value: toDisplayScaleFrom20(point.average, displayScale),
         date: point.date,
       }))
-      .filter(point => Number.isFinite(point.date.getTime()));
+      .filter(point => Number.isFinite(point.date.getTime()))
+      .sort((a, b) => a.date.getTime() - b.date.getTime());
 
     const plotWidth = GRAPH_RIGHT - GRAPH_LEFT;
     const plotHeight = GRAPH_BOTTOM - GRAPH_TOP;
@@ -118,11 +119,16 @@ export default function Averages({
       scaleMaxValue = maxScale;
     }
     const visibleRange = scaleMaxValue - scaleMin;
+    const firstDate = valid[0]?.date.getTime() ?? 0;
+    const lastDate = valid[valid.length - 1]?.date.getTime() ?? firstDate;
+    const dateRange = lastDate - firstDate;
 
     return valid.map((point, index) => ({
       ...point,
       x: valid.length > 1
-        ? GRAPH_LEFT + (index / (valid.length - 1)) * plotWidth
+        ? GRAPH_LEFT + (dateRange > 0
+          ? ((point.date.getTime() - firstDate) / dateRange) * plotWidth
+          : (index / (valid.length - 1)) * plotWidth)
         : GRAPH_WIDTH / 2,
       y: GRAPH_BOTTOM - ((Math.max(scaleMin, Math.min(scaleMaxValue, point.value)) - scaleMin) / visibleRange) * plotHeight,
     }));
@@ -177,7 +183,7 @@ export default function Averages({
       accessibilityRole="image"
       accessibilityLabel={t("Grades_Tip_Graph_Title", "Évolution de la moyenne")}
       style={{
-        height: compact ? 58 : 108,
+        height: compact ? 56 : 92,
         minWidth: 0,
         flexGrow: 0,
         flexShrink: 0,
@@ -193,7 +199,7 @@ export default function Averages({
             d={linePath}
             fill="none"
             stroke={accent}
-            strokeWidth={compact ? 3 : 2.5}
+            strokeWidth={compact ? 2.5 : 2.25}
             strokeLinecap="round"
             strokeLinejoin="round"
             strokeDasharray={GRAPH_DRAW_LENGTH}
@@ -204,8 +210,8 @@ export default function Averages({
         ) : null}
         {chartPoints.length > 1 && (
           <>
-            <Circle cx={chartPoints[chartPoints.length - 1].x} cy={chartPoints[chartPoints.length - 1].y} r={11} fill={accent} fillOpacity={0.14} />
-            <Circle cx={chartPoints[chartPoints.length - 1].x} cy={chartPoints[chartPoints.length - 1].y} r={4.5} fill={accent} />
+            <Circle cx={chartPoints[chartPoints.length - 1].x} cy={chartPoints[chartPoints.length - 1].y} r={9} fill={accent} fillOpacity={0.14} />
+            <Circle cx={chartPoints[chartPoints.length - 1].x} cy={chartPoints[chartPoints.length - 1].y} r={4} fill={accent} />
           </>
         )}
       </Svg>
@@ -238,7 +244,7 @@ export default function Averages({
   }
 
   return (
-    <View style={{ backgroundColor: theme.colors.item, borderRadius: 24, padding: 18, gap: 14, width: "100%" }}>
+    <View style={{ backgroundColor: theme.colors.item, borderRadius: 24, padding: 16, gap: 10, width: "100%" }}>
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
         <Typography variant="title" weight="semibold">{t("Grades_Avg_History_Title", "Évolution des moyennes")}</Typography>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>

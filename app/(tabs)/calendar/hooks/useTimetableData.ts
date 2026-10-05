@@ -124,14 +124,11 @@ export function useTimetableData(weekNumber: number, currentDate: Date = new Dat
           return;
         }
 
-        const targetWeeks = forceRefresh
-          ? [targetWeekNumber, targetWeekNumber + 1, targetWeekNumber + 2]
-          : [targetWeekNumber, targetWeekNumber - 1, targetWeekNumber + 1];
+        const targetWeeks = [targetWeekNumber - 1, targetWeekNumber, targetWeekNumber + 1];
         const candidates = targetWeeks.map(week => {
           const targetDate = new Date(safeDate);
           targetDate.setDate(targetDate.getDate() + (week - targetWeekNumber) * 7);
-          const year = targetDate.getFullYear();
-          const key = `${lastUsedAccount}:${year}-${week}`;
+          const key = `${lastUsedAccount}:${targetDate.getFullYear()}-${targetDate.getMonth() + 1}-${targetDate.getDate()}`;
           return { week, targetDate, key };
         });
 

@@ -215,9 +215,9 @@ const Averages = ({
         enablePanGesture
         onPointSelected={handleGestureUpdate}
         onGestureEnd={handleGestureEnd}
-        verticalPadding={compact ? 8 : 24}
-        horizontalPadding={compact ? 20 : 32}
-        lineThickness={compact ? 2.5 : 4}
+        verticalPadding={compact ? 8 : 16}
+        horizontalPadding={compact ? 20 : 24}
+        lineThickness={compact ? 2.25 : 3}
         panGestureDelay={0}
         indicatorPulsating
         enableIndicator
@@ -413,7 +413,7 @@ const Averages = ({
 
     return (
       <View style={{ backgroundColor: theme.colors.item, borderRadius: 24, overflow: "hidden" }}>
-        <View style={{ height: 140, marginBottom: -16 }}>
+        <View style={{ height: 108, marginBottom: -12 }}>
           {graph}
 
           {/* Pinned into the body of the graph rather than along its bottom

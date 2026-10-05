@@ -1,7 +1,12 @@
 // Hides the console window on release builds for Windows.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use tauri::{webview::NewWindowResponse, Emitter, Manager, WebviewWindowBuilder, WebviewUrl};
+use tauri::{
+    menu::{Menu, MenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    webview::NewWindowResponse,
+    Emitter, Manager, WebviewWindowBuilder, WebviewUrl, WindowEvent,
+};
 
 const PRONOTE_WINDOW_LABEL: &str = "pronote-auth";
 const PRONOTE_INFO_MOBILE_ID: &str = "0D264427-EEFC-4810-A9E9-346942A862A4";
@@ -188,10 +193,63 @@ fn close_pronote_login(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+fn show_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_http::init())
         .invoke_handler(tauri::generate_handler![open_pronote_login, close_pronote_login])
+        .setup(|app| {
+            let open_item = MenuItem::with_id(app, "open", "Ouvrir Scola", true, None::<&str>)?;
+            let quit_item = MenuItem::with_id(app, "quit", "Quitter Scola", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&open_item, &quit_item])?;
+
+            let tray = TrayIconBuilder::with_id("scola-tray")
+                .tooltip("Scola reste active en arrière-plan")
+                .menu(&menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "open" => show_main_window(app),
+                    "quit" => app.exit(0),
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if matches!(
+                        event,
+                        TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            button_state: MouseButtonState::Up,
+                            ..
+                        }
+                    ) {
+                        show_main_window(tray.app_handle());
+                    }
+                });
+
+            let tray = if let Some(icon) = app.default_window_icon() {
+                tray.icon(icon.clone())
+            } else {
+                tray
+            };
+            tray.build(app)?;
+            Ok(())
+        })
+        .on_window_event(|window, event| {
+            if window.label() != "main" {
+                return;
+            }
+
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+            }
+        })
         .run(tauri::generate_context!())
         .expect("erreur au lancement de Scola");
 }

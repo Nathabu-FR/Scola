@@ -298,7 +298,7 @@ function TabOneScreen() {
             <Typography variant="body2" weight="semibold" numberOfLines={1} align="center">
               {settledLabels.main}
             </Typography>
-          </Pressable>
+          </View>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Jour suivant"

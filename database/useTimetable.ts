@@ -7,6 +7,7 @@ import {
   COURSE_TEACHER_ABSENT_LABEL,
   Course as SharedCourse,
   CourseDay as SharedCourseDay,
+  CourseStatus,
 } from "@/services/shared/timetable";
 import { generateId } from "@/utils/generateId";
 import { warn } from "@/utils/logger/logger";
@@ -231,7 +232,10 @@ export function useTimetable(refresh = 0, weekNumber: number | number[] = 0, dat
   return timetable;
 }
 
-export async function addCourseDayToDatabase(courses: SharedCourseDay[]) {
+export async function addCourseDayToDatabase(
+  courses: SharedCourseDay[],
+  refreshedScope?: { sourceIds: string[]; from: number; to: number }
+) {
   const db = getDatabaseInstance();
 
   // 1) Toutes les lectures HORS writer (les awaits dans un writer WatermelonDB
@@ -243,6 +247,7 @@ export async function addCourseDayToDatabase(courses: SharedCourseDay[]) {
     items: { item: SharedCourseDay["courses"][number]; oldId: string; id: string; existingRecords: Course[]; oldExistingRecords: Course[] }[];
   };
   const snapshots: DaySnapshot[] = [];
+  const refreshedCourseIds = new Set<string>();
   const oneDayMs = 24 * 60 * 60 * 1000;
   for (const day of courses) {
     const dayTimestamp = day.date.getTime();
@@ -258,6 +263,8 @@ export async function addCourseDayToDatabase(courses: SharedCourseDay[]) {
       // MIGRATION TO AVOID DUPES, DO NOT DELETE
       const oldId = generateId(item.from.toISOString() + item.to.toISOString() + item.subject + item.teacher + item.room + item.createdByAccount);
       const id = getCourseRouteId(item);
+      refreshedCourseIds.add(oldId);
+      refreshedCourseIds.add(id);
 
       const oldExistingRecords = (await db.get<Course>('courses')
         .query(Q.where('courseId', oldId))
@@ -270,6 +277,18 @@ export async function addCourseDayToDatabase(courses: SharedCourseDay[]) {
     snapshots.push({ dayTimestamp, dbCourses, items });
   }
 
+  // Canceled or absent overrides remain conspicuous after the provider removes
+  // their lesson. Prune stale service rows across the refreshed week, even on
+  // days with no replacement course rows.
+  const staleCanceledCourses = refreshedScope?.sourceIds.length
+    ? await db.get<Course>("courses").query(
+        Q.where("from", Q.between(refreshedScope.from, refreshedScope.to)),
+        Q.where("createdByAccount", Q.oneOf(refreshedScope.sourceIds))
+      ).fetch().then(records => records.filter(course =>
+        course.status === CourseStatus.CANCELED || Boolean(getPersonalCourseStatus(course.customStatus))
+      ))
+    : [];
+
   // 2) Un seul writer : tout est préparé (create/update/delete) puis batché
   // d'un coup, sans aucun await intermédiaire.
   await safeWrite(
@@ -277,6 +296,19 @@ export async function addCourseDayToDatabase(courses: SharedCourseDay[]) {
     async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const prepared: any[] = [];
+      const deletedRecordIds = new Set<string>();
+      const prepareDelete = (record: Course) => {
+        if (deletedRecordIds.has(record.id)) return;
+        deletedRecordIds.add(record.id);
+        prepared.push(record.prepareMarkAsDeleted());
+      };
+
+      for (const staleCourse of staleCanceledCourses) {
+        if (!refreshedCourseIds.has(staleCourse.courseId)) {
+          prepareDelete(staleCourse);
+        }
+      }
+
       for (const snapshot of snapshots) {
         const { dbCourses, items } = snapshot;
 
@@ -313,13 +345,13 @@ export async function addCourseDayToDatabase(courses: SharedCourseDay[]) {
         );
 
         for (const course of coursesToDelete) {
-          prepared.push(course.prepareMarkAsDeleted());
+          prepareDelete(course);
         }
 
         for (const { item, oldId, id, existingRecords, oldExistingRecords } of items) {
           if (oldId !== id) {
             for (const oldRecord of oldExistingRecords) {
-              prepared.push(oldRecord.prepareMarkAsDeleted());
+              prepareDelete(oldRecord);
             }
           }
 

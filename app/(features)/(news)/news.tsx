@@ -1,5 +1,5 @@
 import { useNews } from '@/database/useNews'
-import { getManager, subscribeManagerUpdate } from '@/services/shared'
+import { getManager, initializeAccountManager, subscribeManagerUpdate } from '@/services/shared'
 import Avatar from '@/ui/components/Avatar'
 import ChipButton from '@/ui/components/ChipButton'
 import { Dynamic } from '@/ui/components/Dynamic'
@@ -19,7 +19,7 @@ import { Papicons } from '@getpapillon/papicons'
 import { useTheme } from "expo-router/react-navigation"
 import { router } from 'expo-router'
 import { t } from 'i18next'
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Platform } from 'react-native'
 import { RefreshControl } from 'react-native-gesture-handler'
 import Reanimated, { LayoutAnimationConfig, useAnimatedStyle } from 'react-native-reanimated'
@@ -38,6 +38,7 @@ const NewsView = () => {
 
   const [isLoading, setIsLoading] = useState(false)
   const [isManuallyLoading, setIsManuallyLoading] = useState(false)
+  const newsRequestRef = useRef<Promise<void> | null>(null)
 
   const keyboardHeight = useKeyboardHeight()
 
@@ -52,29 +53,37 @@ const NewsView = () => {
   }, [news])
 
   const fetchNews = useCallback(async () => {
-    try {
-      setIsLoading(true)
-      const manager = getManager()
-      if (!manager) {
-        warn('Manager is null, skipping news fetch')
-        return
+    if (newsRequestRef.current) return newsRequestRef.current
+
+    const request = (async () => {
+      try {
+        setIsLoading(true)
+        const manager = getManager(true) ?? await initializeAccountManager()
+        await manager.getNews()
+      } catch (error) {
+        warn(`Error fetching news: ${String(error)}`)
+      } finally {
+        setIsLoading(false)
+        setIsManuallyLoading(false)
       }
-      await manager.getNews()
-    } catch (error) {
-      warn(`Error fetching news: ${String(error)}`)
+    })()
+    newsRequestRef.current = request
+
+    try {
+      await request
     } finally {
-      setIsLoading(false)
-      setIsManuallyLoading(false)
+      if (newsRequestRef.current === request) newsRequestRef.current = null
     }
   }, [])
 
   useEffect(() => {
+    void fetchNews()
     const unsubscribe = subscribeManagerUpdate(() => {
       void fetchNews()
     })
 
     return () => unsubscribe()
-  }, [])
+  }, [fetchNews])
 
   const [searchText, setSearchText] = useState('')
 

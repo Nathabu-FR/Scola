@@ -489,7 +489,16 @@ export class AccountManager {
           saveToCache: async (data: CourseDay[]) => {
             // L'oubli d'await laissait des écritures EDT en vol pendant le
             // fetchData suivant → « capability 1 failed » + Writer occupé.
-            await addCourseDayToDatabase(data);
+            const weekStart = new Date(date);
+            weekStart.setHours(0, 0, 0, 0);
+            weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
+            const weekEnd = new Date(weekStart);
+            weekEnd.setDate(weekEnd.getDate() + 7);
+            await addCourseDayToDatabase(data, {
+              sourceIds: this.account.services.map(service => service.id),
+              from: weekStart.getTime(),
+              to: weekEnd.getTime() - 1,
+            });
           },
         }
       ));

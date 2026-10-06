@@ -1,6 +1,7 @@
 import { Stack, useRouter } from "expo-router";
 import { useHeaderHeight, useTheme } from "expo-router/react-navigation";
 import { t } from "i18next";
+import { ChevronLeft, ChevronRight, House, Link2, RefreshCw } from "lucide-react-native";
 import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Platform, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -242,6 +243,12 @@ function TabOneScreen() {
     setSettledIndex(INITIAL_INDEX);
   }, [handleDateChange, scrollPage, lastEmittedPage, INITIAL_INDEX]);
 
+  const shiftCalendarDate = useCallback((days: number) => {
+    const nextDate = new Date(date);
+    nextDate.setDate(nextDate.getDate() + days);
+    handlePickDate(nextDate);
+  }, [date, handlePickDate]);
+
   const renderDay = useCallback(({ index }: { index: number }) => {
     const dayDate = getDateFromIndex(index);
     const normalizedDate = new Date(dayDate);
@@ -279,20 +286,42 @@ function TabOneScreen() {
 
       {Platform.OS === 'web' && (
         <View style={styles.desktopDayBar}>
-          <Pressable style={styles.desktopDayButton} onPress={() => handlePickDate(new Date(date.getTime() - 86400000))}>
-            <Typography variant="body2">‹</Typography>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Jour précédent"
+            style={styles.desktopDayButton}
+            onPress={() => shiftCalendarDate(-1)}
+          >
+            <ChevronLeft size={17} color={colors.text} />
           </Pressable>
-          <Pressable style={styles.desktopTodayButton} onPress={() => handlePickDate(new Date())}>
-            <Typography variant="body2" weight="semibold">Aujourd'hui</Typography>
-          </Pressable>
-          <Pressable style={styles.desktopDayButton} onPress={() => handlePickDate(new Date(date.getTime() + 86400000))}>
-            <Typography variant="body2">›</Typography>
+          <View style={styles.desktopDateLabel}>
+            <Typography variant="body2" weight="semibold" numberOfLines={1} align="center">
+              {settledLabels.main}
+            </Typography>
           </Pressable>
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel="Jour suivant"
+            style={styles.desktopDayButton}
+            onPress={() => shiftCalendarDate(1)}
+          >
+            <ChevronRight size={17} color={colors.text} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t("Today")}
+            style={styles.desktopTodayButton}
+            onPress={() => handlePickDate(new Date())}
+          >
+            <House size={16} color={colors.text} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('Tab_Calendar_Icals')}
             onPress={() => router.push("/(tabs)/calendar/icals")}
             style={styles.desktopICalButton}
           >
+            <Link2 size={15} color={colors.text} />
             <Typography variant="body2" weight="semibold">{t("Tab_Calendar_Icals")}</Typography>
           </Pressable>
           <Pressable
@@ -302,10 +331,9 @@ function TabOneScreen() {
             onPress={handleRefresh}
             style={[styles.desktopICalButton, { opacity: manualRefreshing ? 0.7 : 1 }]}
           >
-            {manualRefreshing ? <ActivityIndicator size="small" color={colors.primary} /> : <Typography variant="body1" weight="semibold" color="primary">↻</Typography>}
+            {manualRefreshing ? <ActivityIndicator size="small" color={colors.primary} /> : <RefreshCw size={15} color={colors.primary} />}
             <Typography variant="body2" weight="semibold">Actualiser</Typography>
           </Pressable>
-          <Typography variant="body2" weight="semibold">{dayLabel}</Typography>
         </View>
       )}
 
@@ -438,13 +466,17 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(127,127,127,0.14)',
   },
   desktopTodayButton: {
-    minWidth: 110,
+    width: 36,
     height: 36,
-    paddingHorizontal: 14,
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(127,127,127,0.14)',
+  },
+  desktopDateLabel: {
+    width: 220,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   desktopICalButton: {
     minWidth: 92,

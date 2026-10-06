@@ -4,7 +4,7 @@ import { getCourseRouteId, rememberCourseForRoute, useTimetable } from '@/databa
 import { useActiveAccountDataSourceIds } from '@/database/accountScope';
 import { useLoadErrorAlert } from '@/hooks/useLoadErrorAlert';
 import { useManagerSubscription } from '@/hooks/useManagerSubscription';
-import type { Course, CourseDay } from '@/services/shared/timetable';
+import { CourseStatus, type Course, type CourseDay } from '@/services/shared/timetable';
 import type { AccountManager } from "@/services/shared";
 import { getManager } from "@/services/shared";
 import { Capabilities, ServiceFailure } from "@/services/shared/types";
@@ -17,6 +17,25 @@ const getTimetableClientsKey = (manager: AccountManager | null) =>
     .map(client => String(client.service))
     .sort()
     .join(",") ?? "";
+
+const normalizeCourseLabel = (value?: string) =>
+  (value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("fr")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const getVisibleCourseIdentity = (course: Course) => [
+  course.createdByAccount,
+  course.type,
+  course.from.getTime(),
+  course.to.getTime(),
+  normalizeCourseLabel(course.subject),
+  normalizeCourseLabel(course.room),
+  normalizeCourseLabel(course.teacher),
+  normalizeCourseLabel(course.group),
+].join(":");
 
 export function useTimetableData(weekNumber: number, currentDate: Date = new Date()) {
   const safeDate = currentDate;
@@ -68,7 +87,7 @@ export function useTimetableData(weekNumber: number, currentDate: Date = new Dat
     mergeDays(rawTimetable, false);
     mergeDays(Object.values(freshTimetableByWeek).flat(), true);
 
-    const byDay = new Map<number, Course[]>();
+    const uniqueVisibleCourses = new Map<string, Course>();
     for (const course of byCourse.values()) {
       if (
         !services.includes(course.createdByAccount) &&
@@ -76,6 +95,26 @@ export function useTimetableData(weekNumber: number, currentDate: Date = new Dat
       ) {
         continue;
       }
+      const identity = getVisibleCourseIdentity(course);
+      const existing = uniqueVisibleCourses.get(identity);
+      if (!existing) {
+        uniqueVisibleCourses.set(identity, course);
+      } else if (
+        (existing.fromCache && !course.fromCache) ||
+        (Boolean(existing.fromCache) === Boolean(course.fromCache) &&
+          course.status === CourseStatus.CANCELED && existing.status !== CourseStatus.CANCELED)
+      ) {
+        uniqueVisibleCourses.set(identity, {
+          ...existing,
+          ...course,
+          customStatus: existing.customStatus ?? course.customStatus,
+          manualStatus: existing.manualStatus ?? course.manualStatus,
+        });
+      }
+    }
+
+    const byDay = new Map<number, Course[]>();
+    for (const course of uniqueVisibleCourses.values()) {
       const day = new Date(course.from);
       day.setHours(0, 0, 0, 0);
       const dayKey = day.getTime();

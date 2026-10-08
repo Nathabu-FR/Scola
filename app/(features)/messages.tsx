@@ -1,4 +1,3 @@
-import * as WebBrowser from "expo-web-browser";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronLeft, MessageCircle, Send } from "lucide-react-native";
 import {
@@ -18,6 +17,7 @@ import { Services } from "@/stores/account/types";
 
 import { getManager, initializeAccountManager } from "@/services/shared";
 import { Attachment } from "@/services/shared/attachment";
+import { openAttachment as openDocumentAttachment } from "@/utils/attachments/openAttachment";
 import { Chat, Message } from "@/services/shared/chat";
 import { getAttachmentIcon } from "@/utils/news/getAttachmentIcon";
 import { Papicons } from "@getpapillon/papicons";
@@ -161,14 +161,8 @@ export default function MessagesScreen() {
   }, [accountId, draft, selectedChat, sending]);
 
   const openAttachment = useCallback((attachment: Attachment) => {
-    if (!attachment.url) return;
-    if (Platform.OS === "web" && typeof window !== "undefined") {
-      const opened = window.open(attachment.url, "_blank", "noopener,noreferrer");
-      if (!opened) window.location.assign(attachment.url);
-      return;
-    }
-    void WebBrowser.openBrowserAsync(attachment.url, { presentationStyle: "formSheet" })
-      .catch(error => setErrorMessage(`La pièce jointe n’a pas pu être ouverte : ${String(error)}`));
+    void openDocumentAttachment(attachment)
+      .catch(error => setErrorMessage(`La pièce jointe n’a pas pu être téléchargée : ${String(error)}`));
   }, []);
 
   const chatKey = useCallback((chat: Chat) => `${chat.createdByAccount}:${chat.id}:${chat.date.getTime()}`, []);

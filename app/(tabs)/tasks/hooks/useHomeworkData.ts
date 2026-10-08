@@ -470,9 +470,18 @@ export const useHomeworkData = (
       const id = getHomeworkRouteId(item);
 
       try {
-        // Persist the checkbox locally first. Some school services, including
-        // PRONOTE configurations that expose read-only homework, cannot update
-        // completion remotely; that must not make the control appear broken.
+        // Update the school platform first for provider assignments. If it
+        // rejects the change, leave the local checkbox alone instead of
+        // claiming that the provider now considers the homework complete.
+        if (!item.custom) {
+          const accountManager = getManager();
+          if (!accountManager) throw new Error("Le compte scolaire n’est pas disponible.");
+          const updated = await accountManager.setHomeworkCompletion(item, done);
+          if (updated.isDone !== done) {
+            throw new Error("Le service scolaire n’a pas confirmé le changement.");
+          }
+        }
+
         try {
           await updateHomeworkIsDone(id, done);
         } catch (cacheMiss) {
@@ -489,17 +498,6 @@ export const useHomeworkData = (
           }
         }));
         scheduleRefresh();
-
-        if (!item.custom) {
-          const accountManager = getManager();
-          if (accountManager) {
-            try {
-              await accountManager.setHomeworkCompletion(item, done);
-            } catch (remoteError) {
-              warn(`Could not sync homework completion with the school service: ${String(remoteError)}`);
-            }
-          }
-        }
         if (done) {
           notificationAsync(NotificationFeedbackType.Success);
         }

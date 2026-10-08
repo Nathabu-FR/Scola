@@ -48,6 +48,20 @@ export interface Personalization {
   homeworkRemindersEnabled?: boolean;
   /** 0 = due date morning, 1 = previous day, 2 = two days before. */
   homeworkReminderDaysBefore?: 0 | 1 | 2;
+  /** Notify about newly received school messages and announcements. */
+  messageNotificationsEnabled?: boolean;
+  newsNotificationsEnabled?: boolean;
+  /** Last seen message cursor by account and cached conversation id. */
+  notificationMessageCursorByAccount?: Record<string, Record<string, string>>;
+  /** Last seen announcement cursor by account. */
+  notificationNewsCursorByAccount?: Record<string, string>;
+  /** Desktop preferences, applied by the Windows Tauri host. */
+  desktopCloseToTray?: boolean;
+  desktopLaunchAtStartup?: boolean;
+  desktopLaunchInBackground?: boolean;
+  /** Release version ignored by the user or reminder timestamp. */
+  ignoredUpdateVersion?: string;
+  updateReminderAt?: number;
   language?: string | null;
   wallpaper?: Wallpaper;
   /** Profile-scoped wallpaper; null means the profile explicitly chose no wallpaper. */

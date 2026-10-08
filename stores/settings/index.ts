@@ -27,6 +27,11 @@ const defaultPersonalization: Personalization = {
   gradesDisplayScale: "20",
   homeworkRemindersEnabled: false,
   homeworkReminderDaysBefore: 1,
+  messageNotificationsEnabled: false,
+  newsNotificationsEnabled: false,
+  desktopCloseToTray: true,
+  desktopLaunchAtStartup: false,
+  desktopLaunchInBackground: false,
   welcomeModalSeen: false,
 };
 

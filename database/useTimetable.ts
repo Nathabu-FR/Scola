@@ -167,7 +167,9 @@ export async function updateCourseCustomStatus(courseId: string, customStatus?: 
 
   await safeWrite(db, async () => {
     await records[0].update((record: Model) => {
-      (record as Course).customStatus = customStatus;
+      // WatermelonDB fields are nullable. Assign null explicitly so clearing a
+      // personal status survives the next cache observation and timetable sync.
+      (record as Course).customStatus = customStatus ?? null;
     });
   }, 10000, "updateCourseCustomStatus");
 }

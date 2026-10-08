@@ -4,9 +4,10 @@ on:
   workflow_dispatch: {}
   push:
     branches: [dev]
+    tags: ["v*"]
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: build-tauri-${{ github.ref }}
@@ -71,6 +72,24 @@ jobs:
           New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\expo-metro-restore" | Out-Null
           New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\expo-metro-output" | Out-Null
 
+      - name: Set app version from release tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          $version = $env:RELEASE_TAG -replace '^v', ''
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid release tag: $env:RELEASE_TAG" }
+          $package = Get-Content package.json -Raw | ConvertFrom-Json
+          $package.version = $version
+          $package | ConvertTo-Json -Depth 100 | Set-Content package.json -Encoding utf8
+          $tauri = Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
+          $tauri.version = $version
+          $tauri | ConvertTo-Json -Depth 100 | Set-Content src-tauri/tauri.conf.json -Encoding utf8
+          $cargo = Get-Content src-tauri/Cargo.toml -Raw
+          $cargo = [regex]::Replace($cargo, '(?m)^version = "[^"]+"', "version = `"$version`"", 1)
+          Set-Content src-tauri/Cargo.toml $cargo -Encoding utf8
+
       - name: Export web bundle
         id: export-web
         run: npx expo export --platform web
@@ -98,7 +117,19 @@ jobs:
       - name: Check exported web bundle for ExpoUI native module
         run: node scripts/check-web-bundle.js
 
+      - name: Build Scola for GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: tauri-apps/tauri-action@v0
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: ${{ github.ref_name }}
+          releaseDraft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build Scola
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

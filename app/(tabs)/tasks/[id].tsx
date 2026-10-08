@@ -2,7 +2,6 @@ import { Papicons } from "@getpapillon/papicons";
 import { useTheme } from "expo-router/react-navigation";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
-import * as WebBrowser from "expo-web-browser";
 import { t } from "i18next";
 import React, { useEffect, useState } from "react";
 
@@ -16,6 +15,7 @@ import Stack from "@/ui/components/Stack";
 import { NativeHeaderPressable, NativeHeaderSide } from "@/ui/components/NativeHeader";
 import { formatHTML } from "@/utils/format/html";
 import { getAttachmentIcon } from "@/utils/news/getAttachmentIcon";
+import { openAttachment as openDocumentAttachment } from "@/utils/attachments/openAttachment";
 import { getSubjectColor } from "@/utils/subjects/colors";
 import { getSubjectEmoji } from "@/utils/subjects/emoji";
 import { getSubjectName } from "@/utils/subjects/name";
@@ -73,26 +73,20 @@ const Task = () => {
 
   const setAsDone = async (done: boolean) => {
     if (!task) return;
-    // Optimiste : la case se coche immédiatement. L'ancien code attendait le
-    // retour réseau (setHomeworkCompletion) avant setIsDone, donc un service
-    // en lecture seule / hors-ligne donnait l'impression que « cocher ne
-    // fonctionne pas ». Le cache local fait foi, la synchro distante suit.
-    setIsDone(done);
     try {
-      await updateHomeworkIsDone(id, done);
-    } catch (error) {
-      // Rollback visuel : le cache n'a pas pu suivre, on restaure l'état.
-      setIsDone(!done);
-      if (Platform.OS === "web") window.alert(`Ce devoir n’a pas pu être mis à jour.\n\n${String(error)}`);
-      else Alert.alert("Mise à jour impossible", "Ce devoir n’a pas pu être mis à jour.");
-      return;
-    }
-    if (!task.custom) {
-      try {
-        await getManager()?.setHomeworkCompletion(task, done);
-      } catch {
-        // Completion stays saved locally when the school service is read-only.
+      if (!task.custom) {
+        const manager = getManager();
+        if (!manager) throw new Error("Le compte scolaire n’est pas disponible.");
+        const updated = await manager.setHomeworkCompletion(task, done);
+        if (updated.isDone !== done) {
+          throw new Error("Le service scolaire n’a pas confirmé le changement.");
+        }
       }
+      await updateHomeworkIsDone(id, done);
+      setIsDone(done);
+    } catch (error) {
+      if (Platform.OS === "web") window.alert(`Le devoir n’a pas été modifié sur la plateforme scolaire.\n\n${String(error)}`);
+      else Alert.alert("Mise à jour impossible", "Le devoir n’a pas été modifié sur la plateforme scolaire.");
     }
   }
 
@@ -248,15 +242,10 @@ const Task = () => {
             {task.attachments.map(attachment => (
               <List.Item
                 onPress={() => {
-                  if (!attachment.url) return;
-                  if (Platform.OS === "web" && typeof window !== "undefined") {
-                    const opened = window.open(attachment.url, "_blank", "noopener,noreferrer");
-                    if (!opened) window.location.assign(attachment.url);
-                    return;
-                  }
-                  void WebBrowser.openBrowserAsync(attachment.url, {
-                    presentationStyle: "formSheet",
-                  }).catch(error => Alert.alert("Document indisponible", String(error)));
+                  void openDocumentAttachment(attachment).catch(error => {
+                    if (Platform.OS === "web") window.alert(`Document indisponible : ${String(error)}`);
+                    else Alert.alert("Document indisponible", String(error));
+                  });
                 }}
               >
                 <List.Leading>

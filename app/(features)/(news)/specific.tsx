@@ -7,7 +7,7 @@ import Stack from "@/ui/components/Stack";
 import TypographyLegacy, { VARIANTS } from "@/ui/components/Typography";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { Linking, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { Attachment, News as SkolengoNews } from "skolengojs";
 import { NewsQuestionKind } from "@blockshub/pawnote-lts";
 import { CheckSquare, Circle, CircleCheck, Square } from "lucide-react-native";
@@ -33,6 +33,7 @@ import ActivityIndicator from "@/ui/components/ActivityIndicator";
 import { useSafeHorizontalPadding } from "@/ui/hooks/useSafeHorizontalPadding";
 import { warn } from "@/utils/logger/logger";
 import { NewsSurveyAnswers } from "@/services/shared/news";
+import { openAttachment as openDocumentAttachment } from "@/utils/attachments/openAttachment";
 
 const NewsPage = () => {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -375,7 +376,12 @@ const NewsPage = () => {
       {news.attachments.length > 0 && (
         <ListLegacy>
           {news.attachments.map((attachment, index) => (
-            <Item key={index} onPress={() => Linking.openURL(attachment.url)}>
+            <Item key={index} onPress={() => {
+              void openDocumentAttachment(attachment).catch(error => {
+                if (Platform.OS === "web") window.alert(`Document indisponible : ${String(error)}`);
+                else Alert.alert("Document indisponible", String(error));
+              });
+            }}>
               <Leading>
                 <Icon size={28}>
                   <Papicons name={getAttachmentIcon(attachment)} />

@@ -29,6 +29,7 @@ import List, { ListTouchable } from '@/ui/new/List';
 import Typography from '@/ui/new/Typography';
 import { useSafeHorizontalPadding } from "@/ui/hooks/useSafeHorizontalPadding";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { isTauriDesktop } from "@/utils/network/fetch";
 
 export default function SettingsIndex() {
   const safePadding = useSafeHorizontalPadding(16);
@@ -110,6 +111,13 @@ export default function SettingsIndex() {
           color: "#0059DD",
           onPress: () => router.navigate("/(modals)/notifications"),
         },
+        ...(isTauriDesktop() ? [{
+          title: "Scola sur Windows",
+          description: "Zone de notification, démarrage automatique et mises à jour",
+          papicon: <Papicons name={"Calendar"} />,
+          color: "#0059DD",
+          onPress: () => router.navigate("/(modals)/desktop"),
+        }] : []),
         {
           title: t("Settings_Features_Title"),
           description: t("Settings_Features_Description"),

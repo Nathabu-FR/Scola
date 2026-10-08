@@ -1,14 +1,94 @@
 import { Model, Q } from "@nozbe/watermelondb";
+import { useEffect, useState } from "react";
 
 import { Chat as SharedChat, Message as SharedMessage, Recipient as SharedRecipient } from "@/services/shared/chat";
 import { generateId } from "@/utils/generateId";
 import { error } from "@/utils/logger/logger";
 
-import { getDatabaseInstance } from "./DatabaseProvider";
+import { getDatabaseInstance, useDatabase } from "./DatabaseProvider";
 import { mapChatsToShared, mapMessagesToShared, mapRecipientsToShared } from "./mappers/chats";
 import { Chat, Message, Recipient } from "./models/Chat";
 import { safeWrite } from "./utils/safeTransaction";
-import { getActiveAccountDataSourceIds } from "./accountScope";
+import { getActiveAccountDataSourceIds, useActiveAccountDataSourceIds } from "./accountScope";
+
+export type CachedLatestMessage = {
+  accountId: string;
+  conversationId: string;
+  messageId: string;
+  author: string;
+  subject: string;
+  content: string;
+};
+
+/** Observe the last stored message in each active conversation for notifications. */
+export function useLatestMessagesFromCache(): CachedLatestMessage[] {
+  const database = useDatabase();
+  const sourceIds = useActiveAccountDataSourceIds();
+  const sourceKey = sourceIds.join("\u0000");
+  const [latestMessages, setLatestMessages] = useState<CachedLatestMessage[]>([]);
+
+  useEffect(() => {
+    setLatestMessages([]);
+    let cancelled = false;
+
+    const refresh = async () => {
+      if (sourceIds.length === 0) {
+        if (!cancelled) setLatestMessages([]);
+        return;
+      }
+      try {
+        const chats = await database.get<Chat>("chats").query(
+          Q.where("createdByAccount", Q.oneOf(sourceIds))
+        ).fetch();
+        const chatsById = new Map(chats.map(chat => [chat.chatId, chat]));
+        if (chatsById.size === 0) {
+          if (!cancelled) setLatestMessages([]);
+          return;
+        }
+
+        const messages = await database.get<Message>("messages").query(
+          Q.where("chatId", Q.oneOf([...chatsById.keys()]))
+        ).fetch();
+        const latestByChat = new Map<string, Message>();
+        for (const message of messages) {
+          const current = latestByChat.get(message.chatId);
+          if (!current || message.date > current.date) latestByChat.set(message.chatId, message);
+        }
+        const result = [...latestByChat.entries()].flatMap(([chatId, message]) => {
+          const chat = chatsById.get(chatId);
+          if (!chat) return [];
+          return [{
+            accountId: chat.createdByAccount,
+            conversationId: chatId,
+            messageId: `${message.messageId}:${message.date}`,
+            author: message.author,
+            subject: chat.subject || message.subject,
+            content: message.content.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 180),
+          }];
+        });
+        if (!cancelled) setLatestMessages(result);
+      } catch {
+        if (!cancelled) setLatestMessages([]);
+      }
+    };
+
+    const messageSubscription = database.get<Message>("messages").query()
+      .observeWithColumns(["messageId", "content", "author", "date", "chatId"])
+      .subscribe(() => { void refresh(); });
+    const chatSubscription = database.get<Chat>("chats").query()
+      .observeWithColumns(["createdByAccount", "chatId", "subject"])
+      .subscribe(() => { void refresh(); });
+    void refresh();
+
+    return () => {
+      cancelled = true;
+      messageSubscription.unsubscribe();
+      chatSubscription.unsubscribe();
+    };
+  }, [database, sourceKey]);
+
+  return latestMessages.filter(message => sourceIds.includes(message.accountId));
+}
 
 export async function addChatsToDatabase(chats: SharedChat[]) {
   const db = getDatabaseInstance();

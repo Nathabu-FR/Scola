@@ -7,13 +7,13 @@ import i18n, { t } from "i18next";
 import React, { useEffect, useState } from "react";
 import { Alert, Platform, Pressable, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import * as WebBrowser from "expo-web-browser";
 
 import ModalOverhead from "@/components/ModalOverhead";
 import {
   getCourseById,
   getCourseRouteId,
   parseCourseRouteData,
+  rememberCourseForRoute,
   updateCourseCustomStatus,
 } from "@/database/useTimetable";
 import { getManager, initializeAccountManager } from "@/services/shared";
@@ -33,6 +33,7 @@ import { getStatusText } from "../../(tabs)/calendar/components/CalendarDay";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getAttachmentIcon } from "@/utils/news/getAttachmentIcon";
 import { warn } from "@/utils/logger/logger";
+import { openAttachment as openDocumentAttachment } from "@/utils/attachments/openAttachment";
 
 interface SubjectInfo {
   name: string;
@@ -188,15 +189,10 @@ export default function CourseModal() {
   const startTime = Math.floor(course.from.getTime() / 1000);
   const endTime = Math.floor(course.to.getTime() / 1000);
   const openAttachment = (attachment: Attachment) => {
-    if (!attachment.url) return;
-    if (Platform.OS === "web" && typeof window !== "undefined") {
-      const opened = window.open(attachment.url, "_blank", "noopener,noreferrer");
-      if (!opened) window.location.assign(attachment.url);
-      return;
-    }
-    void WebBrowser.openBrowserAsync(attachment.url, {
-      presentationStyle: "formSheet",
-    }).catch(error => Alert.alert("Document indisponible", String(error)));
+    void openDocumentAttachment(attachment).catch(error => {
+      if (Platform.OS === "web") window.alert(`Document indisponible : ${String(error)}`);
+      else Alert.alert("Document indisponible", String(error));
+    });
   };
   const setManualCourseStatus = async (customStatus?: string) => {
     // Les cours iCal n'ont pas de record modifiable : on persiste le statut
@@ -210,11 +206,15 @@ export default function CourseModal() {
         if (Platform.OS === "web" && typeof window !== "undefined") {
           window.localStorage.setItem(`ical-course-status:${course.id}`, customStatus ?? "");
         }
-        setCourse({ ...course, manualStatus: customStatus });
+        const updatedCourse = { ...course, manualStatus: customStatus };
+        rememberCourseForRoute(updatedCourse);
+        setCourse(updatedCourse);
         return;
       }
       await updateCourseCustomStatus(getCourseRouteId(course), customStatus);
-      setCourse({ ...course, customStatus });
+      const updatedCourse = { ...course, customStatus };
+      rememberCourseForRoute(updatedCourse);
+      setCourse(updatedCourse);
     } catch (error) {
       if (Platform.OS === "web") window.alert(String(error));
       else Alert.alert("Mise à jour impossible", String(error));

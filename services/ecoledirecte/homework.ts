@@ -92,6 +92,9 @@ function unwrapHomeworkSubjects(value: unknown): EcoleDirecteHomeworkSubject[] {
 export async function setEDHomeworkAsDone(session: Client, homework: Homework, state?: boolean): Promise<Homework> {
   const finalState = state ?? !homework.isDone
   const homeworkId = Number(homework.id)
+  if (!Number.isSafeInteger(homeworkId) || homeworkId <= 0) {
+    throw new Error("Identifiant de devoir EcoleDirecte invalide.");
+  }
   
   if (finalState) {
     await session.homework.markHomeworkAsDone(homeworkId)

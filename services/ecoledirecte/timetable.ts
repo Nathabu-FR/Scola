@@ -66,19 +66,26 @@ function unwrapCourseList(value: unknown): TimetableCourse[] {
 }
 
 function mapEcoleDirecteCourses(data: TimetableCourse[], accountId: string): Course[] {
-  return data.map(item => ({
-    createdByAccount: accountId,
-    subject: item.matiere,
-    id: String(item.id),
-    type: mapCourseKind(item.typeCours),
-    from: new Date(item.start_date),
-    to: new Date(item.end_date),
-    additionalInfo: item.text,
-    room: item.salle,
-    teacher: item.prof,
-    backgroundColor: item.color,
-    status: item.isAnnule ? CourseStatus.CANCELED : undefined
-  }))
+  return data.map(item => {
+    const from = new Date(item.start_date);
+    // Some school feeds reuse one identifier for a recurring lesson. Keep
+    // local statuses attached to this occurrence instead of every matching
+    // lesson on other days.
+    const occurrenceId = `${String(item.id)}:${from.getTime()}`;
+    return {
+      createdByAccount: accountId,
+      subject: item.matiere,
+      id: occurrenceId,
+      type: mapCourseKind(item.typeCours),
+      from,
+      to: new Date(item.end_date),
+      additionalInfo: item.text,
+      room: item.salle,
+      teacher: item.prof,
+      backgroundColor: item.color,
+      status: item.isAnnule ? CourseStatus.CANCELED : undefined
+    };
+  });
 }
 
 function mapCourseKind(kind: TimetableCourseType): CourseType {

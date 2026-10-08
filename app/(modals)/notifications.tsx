@@ -2,6 +2,7 @@ import { Papicons } from "@getpapillon/papicons";
 import { useTheme } from "expo-router/react-navigation";
 import { useState } from "react";
 import { Alert, Platform, View } from "react-native";
+import { Bell, MessageCircle, Newspaper } from "lucide-react-native";
 
 import { useSettingsStore } from "@/stores/settings";
 import List from "@/ui/new/List";
@@ -16,6 +17,8 @@ export default function NotificationsModal() {
   const mutateProperty = useSettingsStore(state => state.mutateProperty);
   const enabled = settings.homeworkRemindersEnabled ?? false;
   const daysBefore = settings.homeworkReminderDaysBefore ?? 1;
+  const messageNotificationsEnabled = settings.messageNotificationsEnabled ?? false;
+  const newsNotificationsEnabled = settings.newsNotificationsEnabled ?? false;
   const [requestingPermission, setRequestingPermission] = useState(false);
   const options = ["Le jour même à 8 h", "La veille à 18 h", "2 jours avant à 18 h"];
   const selectedIndex = daysBefore;
@@ -35,6 +38,27 @@ export default function NotificationsModal() {
         return;
       }
       mutateProperty("personalization", { homeworkRemindersEnabled: true });
+    } catch (error) {
+      Alert.alert("Notifications indisponibles", String(error));
+    } finally {
+      setRequestingPermission(false);
+    }
+  };
+
+  const setSchoolNotificationsEnabled = async (key: "messageNotificationsEnabled" | "newsNotificationsEnabled", next: boolean) => {
+    if (!next) {
+      mutateProperty("personalization", { [key]: false });
+      return;
+    }
+
+    setRequestingPermission(true);
+    try {
+      const granted = await requestHomeworkReminderPermission();
+      if (!granted) {
+        Alert.alert("Notifications désactivées", "Autorise les notifications de Scola dans les réglages de ton appareil pour recevoir les nouveautés scolaires.");
+        return;
+      }
+      mutateProperty("personalization", { [key]: true });
     } catch (error) {
       Alert.alert("Notifications indisponibles", String(error));
     } finally {
@@ -92,6 +116,41 @@ export default function NotificationsModal() {
                 })}
               />
             </View>
+          </List.Trailing>
+        </List.Item>
+      </List.Section>
+
+      <View style={{ alignItems: "center", gap: 6, paddingVertical: 18 }}>
+        <Bell size={28} color={colors.primary} />
+        <Typography variant="h3" weight="semibold">Nouveautés scolaires</Typography>
+        <Typography variant="body1" color="textSecondary" style={{ textAlign: "center" }}>
+          Choisis les alertes à recevoir quand Scola récupère de nouvelles informations.
+        </Typography>
+      </View>
+
+      <List.Section>
+        <List.Item>
+          <List.Leading><MessageCircle color={colors.text} size={20} /></List.Leading>
+          <Typography variant="title">Nouveaux messages</Typography>
+          <Typography color="textSecondary" numberOfLines={2}>Prévenir quand un message entrant est synchronisé.</Typography>
+          <List.Trailing>
+            <NativeSwitch
+              value={messageNotificationsEnabled}
+              disabled={requestingPermission || !webNotificationsAvailable}
+              onValueChange={value => void setSchoolNotificationsEnabled("messageNotificationsEnabled", value)}
+            />
+          </List.Trailing>
+        </List.Item>
+        <List.Item>
+          <List.Leading><Newspaper color={colors.text} size={20} /></List.Leading>
+          <Typography variant="title">Nouvelles actualités</Typography>
+          <Typography color="textSecondary" numberOfLines={2}>Prévenir quand une actualité arrive sur le profil actif.</Typography>
+          <List.Trailing>
+            <NativeSwitch
+              value={newsNotificationsEnabled}
+              disabled={requestingPermission || !webNotificationsAvailable}
+              onValueChange={value => void setSchoolNotificationsEnabled("newsNotificationsEnabled", value)}
+            />
           </List.Trailing>
         </List.Item>
       </List.Section>

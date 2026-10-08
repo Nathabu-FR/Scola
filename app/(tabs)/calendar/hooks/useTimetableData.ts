@@ -75,8 +75,10 @@ export function useTimetableData(weekNumber: number, currentDate: Date = new Dat
             byCourse.set(identity, {
               ...existing,
               ...course,
-              customStatus: existing.customStatus ?? course.customStatus,
-              manualStatus: existing.manualStatus ?? course.manualStatus,
+              // The cache is the authority for device-local overrides. Do not
+              // resurrect an older transient override after the user cleared it.
+              customStatus: existing.customStatus,
+              manualStatus: existing.manualStatus,
               fromCache: existing.fromCache,
             });
           }

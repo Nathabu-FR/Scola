@@ -141,6 +141,19 @@ function RootNavigatorContent() {
           }}
         />
         <Stack.Screen
+          name="(modals)/desktop"
+          options={{
+            headerShown: false,
+            headerTitle: "Scola sur Windows",
+            headerLargeTitle: false,
+            presentation: "formSheet",
+            sheetGrabberVisible: true,
+            sheetAllowedDetents: [0.5, 0.75, 1],
+            sheetCornerRadius: runsIOS26 ? undefined : 30,
+            contentStyle: { backgroundColor: runsIOS26 ? "transparent" : undefined },
+          }}
+        />
+        <Stack.Screen
           name="(modals)/welcome"
           options={{
             headerShown: false,

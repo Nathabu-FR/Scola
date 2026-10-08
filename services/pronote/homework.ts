@@ -47,18 +47,11 @@ export async function fetchPronoteHomeworks(session: SessionHandle, accountId: s
 }
 
 export async function setPronoteHomeworkAsDone(session: SessionHandle, homework: Homework, status?: boolean): Promise<Homework> {
-  if (homework.fromCache) {
-    error("You can't set data from cache as done.")
-    return homework;
-  }
-
   const finalState = status ?? !homework.isDone;
-  try {
-    await assignmentStatus(session, homework.id, finalState)
-  } catch (err) {
-    error(String(err), "setPronoteHomeworkAsDone");
-    return homework;
-  }
+  // Cached assignments keep their PRONOTE identifier, so the status update can
+  // still be sent while the homework list itself is being rendered from cache.
+  // Propagate failures so the UI does not show a false local-only tick.
+  await assignmentStatus(session, homework.id, finalState);
   return {
     ...homework,
     isDone: finalState,

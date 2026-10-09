@@ -5,11 +5,13 @@ import { error } from "@/utils/logger/logger";
 
 import { Attendance } from "../shared/attendance";
 import { Period, PeriodGrades } from "../shared/grade";
+import { Chat, Message, Recipient } from "../shared/chat";
 import { Homework } from "../shared/homework";
 import { News } from "../shared/news";
 import { CourseDay } from "../shared/timetable";
 import { Capabilities, SchoolServicePlugin } from "../shared/types";
 import { fetchEDAttendance, fetchEDAttendancePeriods } from "./attendance";
+import { fetchEDChatMessages, fetchEDChats } from "./chat";
 import { fetchEDGradePeriods, fetchEDGrades } from "./grades";
 import { fetchEDHomeworks, setEDHomeworkAsDone } from "./homework";
 import { fetchEDNews } from "./news";
@@ -26,7 +28,8 @@ export class EcoleDirecte implements SchoolServicePlugin {
     Capabilities.ATTENDANCE_PERIODS,
     Capabilities.GRADES,
     Capabilities.HOMEWORK,
-    Capabilities.TIMETABLE
+    Capabilities.TIMETABLE,
+    Capabilities.CHAT_READ
   ];
   session: Client | undefined;
   authData: Auth = {};
@@ -34,7 +37,7 @@ export class EcoleDirecte implements SchoolServicePlugin {
   constructor(public accountId: string) {}
 
   async refreshAccount(credentials: Auth): Promise<EcoleDirecte> {
-    const refresh = (await refreshEDAccount(this.accountId, credentials))
+    const refresh = (await refreshEDAccount(this.accountId, credentials, this.session))
 
     this.authData = refresh.auth
     this.session = refresh.account
@@ -48,6 +51,26 @@ export class EcoleDirecte implements SchoolServicePlugin {
     }
 
     throw error("Session or account is not valid", "EcoleDirecte.getHomeworks")
+  }
+
+  async getChats(): Promise<Chat[]> {
+    if (this.session) {
+      return fetchEDChats(this.session, this.accountId);
+    }
+
+    throw error("Session or account is not valid", "EcoleDirecte.getChats");
+  }
+
+  async getChatRecipients(chat: Chat): Promise<Recipient[]> {
+    return chat.creator ? [{ id: chat.creator, name: chat.creator }] : [];
+  }
+
+  async getChatMessages(chat: Chat): Promise<Message[]> {
+    if (this.session) {
+      return fetchEDChatMessages(this.session, chat);
+    }
+
+    throw error("Session or account is not valid", "EcoleDirecte.getChatMessages");
   }
 
   async getNews(): Promise<News[]> {

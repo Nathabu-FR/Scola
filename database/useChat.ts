@@ -91,30 +91,39 @@ export function useLatestMessagesFromCache(): CachedLatestMessage[] {
 }
 
 export async function addChatsToDatabase(chats: SharedChat[]) {
+  if (chats.length === 0) return;
   const db = getDatabaseInstance();
-  for (const item of chats) {
-    const id = generateId(item.createdByAccount + item.subject + item.date)
-    const existing = await db.get<Chat>('chats').query(
-      Q.where('chatId', id),
-      Q.where('createdByAccount', item.createdByAccount)
-    ).fetch();
+  const entries = chats.map(item => ({
+    item,
+    id: generateId(item.createdByAccount + item.subject + item.date),
+  }));
 
-    if (existing.length === 0) {
-      await safeWrite(db, async () => {
-        await db.get('chats').create((record: Model) => {
-          const chat = record as Chat;
-          Object.assign(chat, {
-            chatId: id,
-            subject: item.subject,
-            recipient: item.recipient,
-            creator: item.creator,
-            date: item.date.getTime(),
-            createdByAccount: item.createdByAccount
-          })
-        })
-      }, 10000, 'addChatsToDatabase')
-    }
+  const existing = await db.get<Chat>('chats').query(
+    Q.where('chatId', Q.oneOf(entries.map(entry => entry.id)))
+  ).fetch();
+  const known = new Set(existing.map(record => `${record.chatId}|${record.createdByAccount}`));
+
+  const prepared: Model[] = [];
+  for (const { item, id } of entries) {
+    const key = `${id}|${item.createdByAccount}`;
+    if (known.has(key)) continue;
+    known.add(key);
+    prepared.push(db.get<Chat>('chats').prepareCreate((record: Model) => {
+      Object.assign(record as Chat, {
+        chatId: id,
+        subject: item.subject,
+        recipient: item.recipient,
+        creator: item.creator,
+        date: item.date.getTime(),
+        createdByAccount: item.createdByAccount
+      });
+    }));
   }
+
+  if (prepared.length === 0) return;
+  await safeWrite(db, async () => {
+    await db.batch(...prepared);
+  }, 15000, 'addChatsToDatabase');
 }
 
 async function ensureChatInDatabase(chat: SharedChat): Promise<string> {
@@ -141,58 +150,74 @@ async function ensureChatInDatabase(chat: SharedChat): Promise<string> {
 }
 
 export async function addRecipientsToDatabase(chat: SharedChat, recipients: SharedRecipient[]) {
+  if (recipients.length === 0) return;
   const db = getDatabaseInstance();
   const chatId = await ensureChatInDatabase(chat);
 
-  for (const item of recipients) {
-    const id = generateId(chatId + item.name + item.class)
-    const existing = await db.get('recipients').query(
-      Q.where('recipientId', id)
-    ).fetch();
+  const entries = recipients.map(item => ({
+    item,
+    id: generateId(chatId + item.name + item.class),
+  }));
+  const existing = await db.get<Recipient>('recipients').query(
+    Q.where('recipientId', Q.oneOf(entries.map(entry => entry.id)))
+  ).fetch();
+  const known = new Set(existing.map(record => record.recipientId));
 
-    if (existing.length > 0) {continue;}
-		
-    await safeWrite(db, async () => {
-      await db.get('recipients').create((record: Model) => {
-        const recipient = record as Recipient;
-        Object.assign(recipient, {
-          recipientId: id,
-          name: item.name,
-          class: item.class,
-          chatId: chatId
-        })
-      })
-    }, 10000, 'addRecipientsToDatabase')
+  const prepared: Model[] = [];
+  for (const { item, id } of entries) {
+    if (known.has(id)) continue;
+    known.add(id);
+    prepared.push(db.get<Recipient>('recipients').prepareCreate((record: Model) => {
+      Object.assign(record as Recipient, {
+        recipientId: id,
+        name: item.name,
+        class: item.class,
+        chatId: chatId
+      });
+    }));
   }
+
+  if (prepared.length === 0) return;
+  await safeWrite(db, async () => {
+    await db.batch(...prepared);
+  }, 15000, 'addRecipientsToDatabase');
 }
 
 export async function addMessagesToDatabase(chat: SharedChat, messages: SharedMessage[]) {
+  if (messages.length === 0) return;
   const db = getDatabaseInstance();
   const chatId = await ensureChatInDatabase(chat);
 
-  for (const item of messages) {
-    const id = generateId(chatId + item.content + item.author + item.date + item.subject)
-    const existing = await db.get('messages').query(
-      Q.where('messageId', id)
-    ).fetch();
+  const entries = messages.map(item => ({
+    item,
+    id: generateId(chatId + item.content + item.author + item.date + item.subject),
+  }));
+  const existing = await db.get<Message>('messages').query(
+    Q.where('messageId', Q.oneOf(entries.map(entry => entry.id)))
+  ).fetch();
+  const known = new Set(existing.map(record => record.messageId));
 
-    if (existing.length > 0) {continue;}
-		
-    await safeWrite(db, async () => {
-      await db.get('messages').create((record: Model) => {
-        const message = record as Message;
-        Object.assign(message, {
-          messageId: id,
-          subject: item.subject,
-          content: item.content,
-          author: item.author,
-          date: item.date.getTime(),
-          attachments: JSON.stringify(item.attachments),
-          chatId: chatId
-        })
-      })
-    }, 10000, 'addMessagesToDatabase')
+  const prepared: Model[] = [];
+  for (const { item, id } of entries) {
+    if (known.has(id)) continue;
+    known.add(id);
+    prepared.push(db.get<Message>('messages').prepareCreate((record: Model) => {
+      Object.assign(record as Message, {
+        messageId: id,
+        subject: item.subject,
+        content: item.content,
+        author: item.author,
+        date: item.date.getTime(),
+        attachments: JSON.stringify(item.attachments),
+        chatId: chatId
+      });
+    }));
   }
+
+  if (prepared.length === 0) return;
+  await safeWrite(db, async () => {
+    await db.batch(...prepared);
+  }, 15000, 'addMessagesToDatabase');
 }
 
 export async function getChatsFromCache(

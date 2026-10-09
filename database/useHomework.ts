@@ -245,123 +245,101 @@ export async function addHomeworkToDatabase(homeworks: SharedHomework[]) {
 
   const weekNumber = getWeekNumberFromDate(homeworks[0].dueDate);
   const { start, end } = getDateRangeOfWeek(weekNumber);
-  const dbHomeworks = await db.get<Homework>("homework")
-    .query(Q.where("dueDate", Q.between(start.getTime(), end.getTime())))
-    .fetch();
 
-  const homeworkIds: string[] = [];
   const refreshedServiceIds = new Set(
     homeworks.map(homework => homework.createdByAccount)
   );
-  for (const hw of homeworks) {
-    const oldId = generateId(hw.subject + hw.content + hw.createdByAccount);
-    const id = getHomeworkRouteId(hw);
+  const entries = homeworks.map(hw => ({
+    hw,
+    oldId: generateId(hw.subject + hw.content + hw.createdByAccount),
+    id: getHomeworkRouteId(hw),
+  }));
+  const knownIds = new Set<string>();
+  entries.forEach(entry => {
+    knownIds.add(entry.oldId);
+    knownIds.add(entry.id);
+  });
 
-    homeworkIds.push(oldId, id);
-  }
+  // Toutes les lectures se font HORS writer, en deux requêtes seulement
+  // (au lieu de 2 requêtes par devoir).
+  const [dbHomeworks, matching] = await Promise.all([
+    db.get<Homework>("homework")
+      .query(Q.where("dueDate", Q.between(start.getTime(), end.getTime())))
+      .fetch(),
+    db.get<Homework>("homework")
+      .query(Q.where("homeworkId", Q.oneOf(Array.from(knownIds))))
+      .fetch(),
+  ]);
 
-  const homeworksToDelete = dbHomeworks.filter(
-    dbHomework =>
+  const byKey = new Map<string, Homework>();
+  matching.forEach(record => {
+    byKey.set(`${record.homeworkId}|${record.createdByAccount}`, record);
+  });
+
+  const toDelete = new Map<string, Homework>();
+  dbHomeworks.forEach(dbHomework => {
+    if (
       refreshedServiceIds.has(dbHomework.createdByAccount) &&
-      !homeworkIds.includes(dbHomework.homeworkId)
-  );
+      !knownIds.has(dbHomework.homeworkId)
+    ) {
+      toDelete.set(dbHomework.id, dbHomework);
+    }
+  });
 
-  // Batch WatermelonDB : markAsDeleted() doit rester dans le Writer synchrone.
-  // On prépare hors writer puis on batch, plutôt que d'appeler en boucle
-  // des sub-writers (le log « can only be called from inside of a Writer »
-  // venait d'écritures concurrentes imbriquées).
-  if (homeworksToDelete.length > 0) {
-    await safeWrite(
-      db,
-      async () => {
-        await db.batch(
-          ...homeworksToDelete.map(homework => homework.prepareMarkAsDeleted())
-        );
-      },
-      10000,
-      "removeStaleHomeworks"
-    );
-  }
-
-  for (const hw of homeworks) {
-    const oldId = generateId(hw.subject + hw.content + hw.createdByAccount);
-    const id = getHomeworkRouteId(hw);
-
-    const existing = await db
-      .get("homework")
-      .query(Q.where("homeworkId", id), Q.where("createdByAccount", hw.createdByAccount))
-      .fetch();
-    const oldExisting = await db
-      .get("homework")
-      .query(Q.where("homeworkId", oldId), Q.where("createdByAccount", hw.createdByAccount))
-      .fetch();
-
-    if (oldExisting.length > 0) {
-      await safeWrite(
-        db,
-        async () => {
-          await db.batch(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            ...oldExisting.map(oldRecord => (oldRecord as any).prepareMarkAsDeleted())
-          );
-        },
-        10000,
-        "removeMigratedHomework"
-      );
+  const operations: Model[] = [];
+  for (const { hw, oldId, id } of entries) {
+    const oldRecord = byKey.get(`${oldId}|${hw.createdByAccount}`);
+    if (oldRecord && oldId !== id) {
+      toDelete.set(oldRecord.id, oldRecord);
     }
 
-    if (existing.length === 0) {
-      await safeWrite(
-        db,
-        async () => {
-          await db.get("homework").create((record: Model) => {
-            const homework = record as Homework;
-            Object.assign(homework, {
-              homeworkId: id,
-              subject: hw.subject,
-              content: hw.content,
-              dueDate: hw.dueDate.getTime(),
-              isDone: hw.isDone,
-              returnFormat: hw.returnFormat,
-              attachments: JSON.stringify(hw.attachments),
-              evaluation: hw.evaluation,
-              custom: hw.custom,
-              createdByAccount: hw.createdByAccount,
-              kidName: hw.kidName,
-              fromCache: true,
-            });
-          });
-        },
-        10000,
-        "addHomeworkToDatabase"
+    const fields = {
+      subject: hw.subject,
+      content: hw.content,
+      dueDate: hw.dueDate.getTime(),
+      isDone: hw.isDone,
+      returnFormat: hw.returnFormat,
+      attachments: JSON.stringify(hw.attachments),
+      evaluation: hw.evaluation,
+      custom: hw.custom,
+      createdByAccount: hw.createdByAccount,
+      kidName: hw.kidName,
+      fromCache: true,
+    };
+
+    const existing = byKey.get(`${id}|${hw.createdByAccount}`);
+    if (existing) {
+      operations.push(
+        existing.prepareUpdate((record: Model) => {
+          Object.assign(record as Homework, fields);
+        })
       );
     } else {
-      const recordToUpdate = existing[0];
-      await safeWrite(
-        db,
-        async () => {
-          await recordToUpdate.update((record: Model) => {
-            const homework = record as Homework;
-            Object.assign(homework, {
-              subject: hw.subject,
-              content: hw.content,
-              dueDate: hw.dueDate.getTime(),
-              isDone: hw.isDone,
-              returnFormat: hw.returnFormat,
-              attachments: JSON.stringify(hw.attachments),
-              evaluation: hw.evaluation,
-              custom: hw.custom,
-              createdByAccount: hw.createdByAccount,
-              kidName: hw.kidName,
-              fromCache: true,
-            });
-          });
-        },
-        10000,
-        "updateHomeworkToDatabase"
+      operations.push(
+        db.get<Homework>("homework").prepareCreate((record: Model) => {
+          Object.assign(record as Homework, { homeworkId: id, ...fields });
+        })
       );
     }
   }
+
+  toDelete.forEach(record => {
+    // Un enregistrement mis à jour ne peut pas être aussi supprimé dans le même lot.
+    const index = operations.indexOf(record);
+    if (index === -1) operations.push(record.prepareMarkAsDeleted());
+  });
+
+  if (operations.length === 0) return;
+
+  // Un seul writer, un seul batch : une transaction par semaine au lieu d'une par devoir.
+  await safeWrite(
+    db,
+    async () => {
+      await db.batch(...operations);
+    },
+    15000,
+    "syncHomeworkWeek"
+  );
 }
 
 export async function addCustomHomeworkToDatabase(homework: SharedHomework) {

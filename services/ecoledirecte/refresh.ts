@@ -4,9 +4,12 @@ import { useAccountStore } from "@/stores/account";
 import { Auth } from "@/stores/account/types";
 import { preloadTauriFetch } from "@/utils/network/fetch";
 
-export async function refreshEDAccount(accountId: string, credentials: Auth): Promise<{auth: Auth, account: Client }> {
+export async function refreshEDAccount(accountId: string, credentials: Auth, existingClient?: Client): Promise<{auth: Auth, account: Client }> {
   await preloadTauriFetch();
-  const client = new Client();
+  // Le RESTManager de BlocksDirecte démarre un setInterval jamais arrêté à chaque
+  // `new Client()` : on réutilise donc le client existant pour éviter de cumuler
+  // un timer de plus à chaque synchronisation (source de ralentissements).
+  const client = existingClient ?? new Client();
   await client.auth.refreshToken(
     credentials.additionals!["username"] as string,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

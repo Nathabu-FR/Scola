@@ -1036,6 +1036,26 @@ function getUpcomingProfileSyncWeeks(): { weekNumber: number; date: Date }[] {
   });
 }
 
+/** Exécute `task` sur chaque élément avec au plus `limit` appels simultanés. */
+async function runWithConcurrency<T>(
+  items: T[],
+  limit: number,
+  task: (item: T, index: number) => Promise<void>
+): Promise<void> {
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const index = next++;
+      try {
+        await task(items[index], index);
+      } catch (taskError) {
+        warn(`Parallel sync task failed: ${String(taskError)}`, "runWithConcurrency");
+      }
+    }
+  });
+  await Promise.all(workers);
+}
+
 const getConfiguredSyncIntervalMs = () =>
   (useSettingsStore.getState().personalization.dataSyncIntervalMinutes ?? 30) * 60 * 1000;
 
@@ -1089,31 +1109,35 @@ export const syncAccountProfile = async (
 
       await runStage("timetable", async () => {
         if (manager.getAvailableClients(Capabilities.TIMETABLE).length === 0) return;
-        for (const [index, week] of weeks.entries()) {
+        let done = 0;
+        await runWithConcurrency(weeks, 3, async week => {
           if (!isActiveProfile()) return;
           await manager.getWeeklyTimetable(week.weekNumber, week.date);
-          reportProgress("timetable", (index + 1) / weeks.length);
-        }
+          reportProgress("timetable", ++done / weeks.length);
+        });
       });
 
       await runStage("homework", async () => {
         if (manager.getAvailableClients(Capabilities.HOMEWORK).length === 0) return;
-        for (const [index, week] of weeks.entries()) {
+        let done = 0;
+        await runWithConcurrency(weeks, 3, async week => {
           if (!isActiveProfile()) return;
           await manager.getHomeworks(week.weekNumber);
-          reportProgress("homework", (index + 1) / weeks.length);
-        }
+          reportProgress("homework", ++done / weeks.length);
+        });
       });
 
       await runStage("grades", async () => {
         if (manager.getAvailableClients(Capabilities.GRADES).length === 0) return;
         const periods = await manager.getGradesPeriods(true);
-        for (const [index, period] of periods.entries()) {
+        let done = 0;
+        await runWithConcurrency(periods, 2, async period => {
           if (!isActiveProfile()) return;
-          if (!manager.clientHasCapatibility(Capabilities.GRADES, period.createdByAccount)) continue;
-          await manager.getGradesForPeriod(period, period.createdByAccount, undefined, true);
-          reportProgress("grades", (index + 1) / Math.max(1, periods.length));
-        }
+          if (manager.clientHasCapatibility(Capabilities.GRADES, period.createdByAccount)) {
+            await manager.getGradesForPeriod(period, period.createdByAccount, undefined, true);
+          }
+          reportProgress("grades", ++done / Math.max(1, periods.length));
+        });
       });
 
       await runStage("extras", async () => {
@@ -1123,13 +1147,17 @@ export const syncAccountProfile = async (
         reportProgress("extras", 0.35);
         if (manager.getAvailableClients(Capabilities.CHAT_READ).length === 0) return;
         const chats = await manager.getChats();
-        for (const [index, chat] of chats.entries()) {
+        let done = 0;
+        await runWithConcurrency(chats, 3, async chat => {
           if (!isActiveProfile()) return;
-          if (!manager.clientHasCapatibility(Capabilities.CHAT_READ, chat.createdByAccount)) continue;
-          await manager.getChatRecipients(chat);
-          await manager.getChatMessages(chat);
-          reportProgress("extras", 0.35 + 0.65 * ((index + 1) / Math.max(1, chats.length)));
-        }
+          if (manager.clientHasCapatibility(Capabilities.CHAT_READ, chat.createdByAccount)) {
+            await Promise.all([
+              manager.getChatRecipients(chat),
+              manager.getChatMessages(chat),
+            ]);
+          }
+          reportProgress("extras", 0.35 + 0.65 * (++done / Math.max(1, chats.length)));
+        });
       });
 
       await runStage("magic", async () => {
